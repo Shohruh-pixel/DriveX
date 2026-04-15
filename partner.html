@@ -1,0 +1,128 @@
+﻿<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#0a0a0f" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <title>DRIVEX Partner</title>
+    <link rel="stylesheet" href="./drivex.css" />
+    <link rel="stylesheet" href="./app.css" />
+  </head>
+
+  <body class="min-h-screen" style="background: var(--drivex-black)">
+    <div
+      id="boot-screen"
+      class="min-h-screen max-w-[480px] mx-auto fixed inset-0 flex items-center justify-center px-6"
+      style="background: var(--drivex-black); max-width: 480px; margin: 0 auto; z-index: 9999;"
+    >
+      <div class="glass-card-light rounded-3xl p-6 w-full text-center" style="border: 1px solid rgba(6, 182, 212, 0.18);">
+        <p class="text-xs font-semibold" style="color: var(--drivex-neon-cyan); letter-spacing: 0.22em;">DRIVEX</p>
+        <h1 class="text-2xl font-bold mt-3" style="color: var(--drivex-white);">Загрузка приложения</h1>
+        <p id="boot-message" class="mt-3 text-sm" style="color: var(--drivex-silver);">
+          Подготавливаем Marketplace и CRM...
+        </p>
+      </div>
+    </div>
+
+    <div
+      id="root"
+      class="min-h-screen max-w-[480px] mx-auto relative"
+      style="background: var(--drivex-black); max-width: 480px; margin: 0 auto"
+    ></div>
+
+    <script>
+      (function () {
+        var bootScreen = document.getElementById("boot-screen");
+        var bootMessage = document.getElementById("boot-message");
+        var bootTimeout = window.setTimeout(function () {
+          if (bootMessage) {
+            bootMessage.textContent = "Загрузка дольше обычного. Обновите страницу, если экран не откроется.";
+          }
+        }, 5000);
+
+        function showBootError(message) {
+          if (!bootScreen || !bootMessage) return;
+          bootScreen.style.display = "flex";
+          bootMessage.textContent = message || "Не удалось загрузить DRIVEX.";
+          bootMessage.style.color = "var(--drivex-danger)";
+        }
+
+        window.__DRIVEX_BOOT__ = {
+          markReady: function () {
+            window.clearTimeout(bootTimeout);
+            if (bootScreen) bootScreen.style.display = "none";
+          },
+          showError: showBootError
+        };
+
+        window.addEventListener("error", function (event) {
+          if (event && event.message) {
+            showBootError("Ошибка загрузки: " + event.message);
+          } else {
+            showBootError("Ошибка загрузки приложения.");
+          }
+        });
+
+        window.addEventListener("unhandledrejection", function (event) {
+          var reason = event && event.reason;
+          var message = reason && reason.message ? reason.message : "Необработанная ошибка приложения.";
+          showBootError(message);
+        });
+      })();
+    </script>
+
+    <!-- React (UMD) + HTM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/htm@3.1.1/dist/htm.umd.js"></script>
+    <script crossorigin src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+
+    <script defer src="./supabase-config.js?v=20260328-seller-crm-26"></script>
+    <script defer src="./seller-backend.js?v=20260328-seller-crm-26"></script>
+    <script defer src="./storageService.js?v=20260328-seller-crm-26"></script>
+    <script defer src="./recommendationEngine.js?v=20260328-seller-crm-26"></script>
+    <script defer src="./reminderEngine.js?v=20260328-seller-crm-26"></script>
+    <script defer src="./analyticsEngine.js?v=20260328-seller-crm-26"></script>
+    <script defer src="./geoService.js?v=20260328-seller-crm-26"></script>
+    <script defer src="./partner-repository.js?v=20260329-partner-crm"></script>
+    <script defer src="./partnerService.js?v=20260328-seller-crm-26"></script>
+    <script defer src="./bookingService.js?v=20260328-seller-crm-26"></script>
+    <script defer src="./ai-config.js?v=20260411-ai-backend-1"></script>
+    <script defer src="./aiPrompts.js?v=20260411-ai-backend-1"></script>
+    <script defer src="./aiMapper.js?v=20260411-ai-backend-1"></script>
+    <script defer src="./aiProvider.js?v=20260411-ai-backend-1"></script>
+    <script defer src="./aiAssistService.js?v=20260411-ai-assist-1"></script>
+    <script>
+      // Гарантируем переход в партнёрский поток и не даём загрузиться seller-роутам
+      (function () {
+        var desired = "#/partner/login";
+        function enforcePartner() {
+          var hash = window.location.hash || "";
+          if (!hash || hash === "#/" || hash === "#/partner" || hash.startsWith("#/seller")) {
+            window.location.hash = desired;
+          }
+        }
+        function clearSellerState() {
+          try {
+            var ls = window.localStorage;
+            if (!ls) return;
+            Object.keys(ls).forEach(function (k) {
+              if (k.startsWith("drivex.seller")) ls.removeItem(k);
+            });
+          } catch (e) {}
+        }
+        window.addEventListener("DOMContentLoaded", function () {
+          clearSellerState();
+          enforcePartner();
+          window.__DRIVEX_HIDE_BOTTOM_NAV__ = true;
+        });
+        window.addEventListener("hashchange", enforcePartner);
+      })();
+    </script>
+    <script defer src="./partner-auth.js?v=20260328-seller-crm-26"></script>
+    <script defer src="./app.js?v=20260328-seller-crm-26"></script>
+  </body>
+</html>

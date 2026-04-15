@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#0a0a0f" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <title>DRIVEX</title>
+    <link rel="stylesheet" href="./drivex.css" />
+    <link rel="stylesheet" href="./app.css" />
+    <script defer src="./drivex.js"></script>
+  </head>
+  <body class="min-h-screen" style="background: var(--drivex-black)">
+    <div
+      id="app"
+      class="min-h-screen max-w-[480px] mx-auto relative"
+      style="background: var(--drivex-black)"
+    >
+      <main id="main" class="pb-20"></main>
+    </div>
+
+    <nav
+      id="bottom-nav"
+      class="fixed bottom-0 left-0 right-0 glass-card border-t z-50"
+      style="border-top-color: var(--glass-border); max-width: 480px; margin: 0 auto"
+    >
+      <div class="flex items-center justify-around h-20 px-2">
+        <a
+          class="nav-link flex flex-col items-center justify-center gap-1 px-3 py-2 rounded-xl transition-all duration-300 flex-1"
+          href="#/"
+          data-nav="/"
+        >
+          <span class="nav-icon" data-icon="home"></span>
+          <span class="text-xs font-medium">Главная</span>
+        </a>
+        <a
+          class="nav-link flex flex-col items-center justify-center gap-1 px-3 py-2 rounded-xl transition-all duration-300 flex-1"
+          href="#/map"
+          data-nav="/map"
+        >
+          <span class="nav-icon" data-icon="map"></span>
+          <span class="text-xs font-medium">Карта</span>
+        </a>
+        <a
+          class="nav-link flex flex-col items-center justify-center gap-1 px-3 py-2 rounded-xl transition-all duration-300 flex-1"
+          href="#/services"
+          data-nav="/services"
+        >
+          <span class="nav-icon" data-icon="wrench"></span>
+          <span class="text-xs font-medium">Сервисы</span>
+        </a>
+        <a
+          class="nav-link flex flex-col items-center justify-center gap-1 px-3 py-2 rounded-xl transition-all duration-300 flex-1"
+          href="#/market"
+          data-nav="/market"
+        >
+          <span class="nav-icon" data-icon="bag"></span>
+          <span class="text-xs font-medium">Маркет</span>
+        </a>
+        <a
+          class="nav-link flex flex-col items-center justify-center gap-1 px-3 py-2 rounded-xl transition-all duration-300 flex-1"
+          href="#/profile"
+          data-nav="/profile"
+        >
+          <span class="nav-icon" data-icon="user"></span>
+          <span class="text-xs font-medium">Профиль</span>
+        </a>
+      </div>
+    </nav>
+
+    <div
+      id="toast"
+      class="fixed top-4 left-0 right-0 z-50 pointer-events-none"
+      style="max-width: 480px; margin: 0 auto"
+      aria-live="polite"
+      aria-atomic="true"
+    ></div>
+  </body>
+</html>

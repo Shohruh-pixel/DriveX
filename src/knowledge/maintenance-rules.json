@@ -1,0 +1,12 @@
+[
+  { "item": "engine_oil", "label": "Масло двигателя", "keywords": ["масло", "замена масла"], "recommendedMileageInterval": 8000, "recommendedMonthsInterval": 6, "advice": "При активной эксплуатации лучше не затягивать с заменой масла.", "tags": ["oil", "engine"] },
+  { "item": "oil_filter", "label": "Масляный фильтр", "keywords": ["масляный фильтр", "фильтр масла"], "recommendedMileageInterval": 8000, "recommendedMonthsInterval": 6, "advice": "Обычно меняется вместе с маслом.", "tags": ["oil", "filter"] },
+  { "item": "air_filter", "label": "Воздушный фильтр", "keywords": ["воздушный фильтр", "фильтр"], "recommendedMileageInterval": 12000, "recommendedMonthsInterval": 12, "advice": "Грязный фильтр повышает расход и снижает тягу.", "tags": ["filter", "engine"] },
+  { "item": "cabin_filter", "label": "Салонный фильтр", "keywords": ["салонный фильтр", "кондиционер"], "recommendedMileageInterval": 12000, "recommendedMonthsInterval": 12, "advice": "Перед жарким сезоном лучше проверить салонный фильтр.", "tags": ["filter", "climate"] },
+  { "item": "brake_fluid", "label": "Тормозная жидкость", "keywords": ["тормозная жидкость", "тормоза"], "recommendedMileageInterval": 30000, "recommendedMonthsInterval": 24, "advice": "Старая жидкость ухудшает торможение.", "tags": ["brakes", "safety"] },
+  { "item": "brake_pads", "label": "Тормозные колодки", "keywords": ["колодки", "тормоза"], "recommendedMileageInterval": 25000, "recommendedMonthsInterval": 18, "advice": "Износ зависит от стиля езды и маршрутов.", "tags": ["brakes", "safety"] },
+  { "item": "spark_plugs", "label": "Свечи зажигания", "keywords": ["свечи", "зажигание"], "recommendedMileageInterval": 30000, "recommendedMonthsInterval": 24, "advice": "Свечи влияют на запуск, расход и ровность работы.", "tags": ["engine", "ignition"] },
+  { "item": "antifreeze", "label": "Антифриз", "keywords": ["антифриз", "охлаждение"], "recommendedMileageInterval": 50000, "recommendedMonthsInterval": 36, "advice": "Важно для защиты от перегрева.", "tags": ["cooling", "engine"] },
+  { "item": "inspection", "label": "Техосмотр", "keywords": ["техосмотр", "то"], "recommendedMileageInterval": 15000, "recommendedMonthsInterval": 12, "advice": "Плановая проверка снижает риск внезапного ремонта.", "tags": ["maintenance", "inspection"] },
+  { "item": "insurance", "label": "Страховка", "keywords": ["страховка", "осаго"], "recommendedMileageInterval": 0, "recommendedMonthsInterval": 12, "advice": "Проверь срок действия документов заранее.", "tags": ["documents"] }
+]

@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#0a0a0f" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <title>DRIVEX Seller Entry</title>
+    <link rel="stylesheet" href="./drivex.css" />
+    <link rel="stylesheet" href="./app.css" />
+  </head>
+
+  <body class="min-h-screen" style="background: var(--drivex-black); color: var(--drivex-white);">
+    <div
+      class="min-h-screen max-w-[480px] mx-auto px-6 flex items-center justify-center"
+      style="max-width: 480px; margin: 0 auto;"
+    >
+      <div class="glass-card-light rounded-3xl p-6 w-full text-center">
+        <h1 class="text-2xl font-bold">DRIVEX Seller</h1>
+        <p class="mt-3 text-sm" style="color: var(--drivex-silver);">
+          Opening the seller login flow inside the main `index.html` app.
+        </p>
+        <p class="mt-2 text-sm" style="color: var(--drivex-neon-cyan);">
+          If needed, open `index.html?v=20260328-seller-crm-26#/seller` manually.
+        </p>
+      </div>
+    </div>
+
+    <script>
+      (function () {
+        var params = new URLSearchParams(window.location.search || "");
+        var isInvite = params.get("invite") === "1" || params.get("register") === "1";
+        var target = isInvite
+          ? "./index.html?v=20260328-seller-crm-26#/partner/register?invite=1"
+          : "./index.html?v=20260328-seller-crm-26#/seller";
+        if (window.location.href !== target) {
+          window.location.replace(target);
+        }
+      })();
+    </script>
+  </body>
+</html>
