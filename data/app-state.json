@@ -2,8 +2,8 @@
   "drivex.seller.products.v1": {
     "value": [
       {
-        "id": "seller-500001",
-        "marketProductId": 500001,
+        "id": "seller-3000001",
+        "marketProductId": 3000001,
         "storeId": "auto-parts-khujand",
         "title": "Michelin Pilot Sport 4 225/45 R17",
         "slug": "michelin-pilot-sport-4-225-45-r17",
@@ -13,7 +13,7 @@
         "oldPrice": 2860,
         "rating": 4.9,
         "reviewsCount": 126,
-        "image": "https://images.unsplash.com/photo-1537041373298-55dbb0f2842f?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=900",
+        "image": "./assets/marketplace/tire-psf.png",
         "badge": "Хит продаж",
         "stockQty": 6,
         "stock": true,
@@ -21,13 +21,13 @@
         "popular": true,
         "discounted": true,
         "brand": "Michelin",
-        "sku": "AK-500001",
+        "sku": "AK-3000001",
         "deliveryAvailable": true,
-        "createdAt": -41423996599044
+        "createdAt": -257420304609309
       },
       {
-        "id": "seller-500002",
-        "marketProductId": 500002,
+        "id": "seller-3000002",
+        "marketProductId": 3000002,
         "storeId": "auto-parts-khujand",
         "title": "Triangle TH201 205/55 R16",
         "slug": "triangle-th201-205-55-r16",
@@ -37,7 +37,7 @@
         "oldPrice": 1120,
         "rating": 4.7,
         "reviewsCount": 88,
-        "image": "https://images.unsplash.com/photo-1571607388263-1044f9ea01dd?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=900",
+        "image": "./assets/marketplace/tire-brand-new.jpg",
         "badge": "Скидка -12%",
         "stockQty": 6,
         "stock": true,
@@ -45,13 +45,13 @@
         "popular": false,
         "discounted": true,
         "brand": "Triangle",
-        "sku": "AK-500002",
+        "sku": "AK-3000002",
         "deliveryAvailable": true,
-        "createdAt": -41424082999044
+        "createdAt": -257420391009309
       },
       {
-        "id": "seller-500003",
-        "marketProductId": 500003,
+        "id": "seller-3000003",
+        "marketProductId": 3000003,
         "storeId": "auto-parts-khujand",
         "title": "Brembo тормозные колодки передние",
         "slug": "brembo-тормозные-колодки-передние",
@@ -61,7 +61,7 @@
         "oldPrice": null,
         "rating": 4.8,
         "reviewsCount": 54,
-        "image": "https://images.unsplash.com/photo-1615906655593-ad0386982a0f?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=900",
+        "image": "./assets/marketplace/automobile-brake-pad.jpg",
         "badge": "Надёжный выбор",
         "stockQty": 6,
         "stock": true,
@@ -69,13 +69,13 @@
         "popular": false,
         "discounted": false,
         "brand": "Brembo",
-        "sku": "AK-500003",
+        "sku": "AK-3000003",
         "deliveryAvailable": true,
-        "createdAt": -41424169399044
+        "createdAt": -257420477409309
       },
       {
-        "id": "seller-500004",
-        "marketProductId": 500004,
+        "id": "seller-3000004",
+        "marketProductId": 3000004,
         "storeId": "auto-parts-khujand",
         "title": "Салонный фильтр Bosch",
         "slug": "салонный-фильтр-bosch",
@@ -85,7 +85,7 @@
         "oldPrice": null,
         "rating": 4.7,
         "reviewsCount": 39,
-        "image": "https://images.unsplash.com/photo-1581092580497-e0d23cbdf1dc?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=900",
+        "image": "./assets/marketplace/cabin-filter.jpg",
         "badge": "Быстрый заказ",
         "stockQty": 6,
         "stock": true,
@@ -93,13 +93,13 @@
         "popular": false,
         "discounted": false,
         "brand": "Салонный",
-        "sku": "AK-500004",
+        "sku": "AK-3000004",
         "deliveryAvailable": true,
-        "createdAt": -41424255799044
+        "createdAt": -257420563809309
       },
       {
-        "id": "seller-500005",
-        "marketProductId": 500005,
+        "id": "seller-3000005",
+        "marketProductId": 3000005,
         "storeId": "auto-parts-khujand",
         "title": "Амортизатор KYB Excel-G",
         "slug": "амортизатор-kyb-excel-g",
@@ -109,7 +109,7 @@
         "oldPrice": 690,
         "rating": 4.8,
         "reviewsCount": 47,
-        "image": "https://images.unsplash.com/photo-1486496572940-2bb2341fdbdf?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=900",
+        "image": "./assets/marketplace/shock-absorber.jpg",
         "badge": "Скидка",
         "stockQty": 6,
         "stock": true,
@@ -117,13 +117,13 @@
         "popular": false,
         "discounted": true,
         "brand": "Амортизатор",
-        "sku": "AK-500005",
+        "sku": "AK-3000005",
         "deliveryAvailable": true,
-        "createdAt": -41424342199044
+        "createdAt": -257420650209309
       },
       {
-        "id": "seller-500017",
-        "marketProductId": 500017,
+        "id": "seller-3000017",
+        "marketProductId": 3000017,
         "storeId": "auto-parts-khujand",
         "title": "Щётки стеклоочистителя Bosch AeroTwin",
         "slug": "щетки-стеклоочистителя-bosch-aerotwin",
@@ -133,7 +133,7 @@
         "oldPrice": 245,
         "rating": 4.8,
         "reviewsCount": 73,
-        "image": "https://images.unsplash.com/photo-1503376780353-7e6692767b70?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=900",
+        "image": "./assets/marketplace/bosch-aerotwin.jpg",
         "badge": "Скидка",
         "stockQty": 6,
         "stock": true,
@@ -141,19 +141,19 @@
         "popular": true,
         "discounted": true,
         "brand": "Щётки",
-        "sku": "AK-500017",
+        "sku": "AK-3000017",
         "deliveryAvailable": true,
-        "createdAt": -41425378999044
+        "createdAt": -257421687009309
       }
     ],
-    "updatedAt": "2026-04-13T15:16:13.455Z"
+    "updatedAt": "2026-05-26T10:20:53.008Z"
   },
   "drivex.market.catalog.v1": {
     "value": {
       "stores": [],
       "products": []
     },
-    "updatedAt": "2026-04-13T16:19:56.200Z"
+    "updatedAt": "2026-05-26T12:19:09.241Z"
   },
   "drivex.documents.v1": {
     "value": {
@@ -173,7 +173,7 @@
         }
       }
     },
-    "updatedAt": "2026-04-13T15:16:13.444Z"
+    "updatedAt": "2026-05-26T06:55:18.978Z"
   },
   "drivex.seller.store.v1": {
     "value": {
@@ -201,7 +201,7 @@
       "status": "new",
       "catalogInitialized": false
     },
-    "updatedAt": "2026-04-13T15:16:13.453Z"
+    "updatedAt": "2026-05-26T10:20:53.039Z"
   },
   "drivex.maintenance.v1": {
     "value": {
@@ -252,11 +252,11 @@
         }
       }
     },
-    "updatedAt": "2026-04-13T16:19:56.180Z"
+    "updatedAt": "2026-05-26T06:55:18.981Z"
   },
   "drivex.seller.orders.v1": {
     "value": [],
-    "updatedAt": "2026-04-13T15:16:13.459Z"
+    "updatedAt": "2026-05-26T10:20:52.998Z"
   },
   "drivex.service.profile.v1": {
     "value": {
@@ -268,11 +268,11 @@
       "position": "Владелец сервиса",
       "registrationCompleted": true
     },
-    "updatedAt": "2026-04-13T15:16:13.464Z"
+    "updatedAt": "2026-05-26T10:20:53.020Z"
   },
   "drivex.seller.notifications.v1": {
     "value": [],
-    "updatedAt": "2026-04-13T15:16:13.462Z"
+    "updatedAt": "2026-05-26T10:20:53.016Z"
   },
   "drivex.seller.profile.v1": {
     "value": {
@@ -283,7 +283,7 @@
       "password": "",
       "registrationCompleted": false
     },
-    "updatedAt": "2026-04-13T15:16:13.451Z"
+    "updatedAt": "2026-05-26T10:20:50.730Z"
   },
   "drivex.service.finance.v1": {
     "value": [
@@ -318,11 +318,11 @@
         "sourceOrderId": ""
       }
     ],
-    "updatedAt": "2026-04-13T16:19:56.192Z"
+    "updatedAt": "2026-05-26T12:19:09.230Z"
   },
   "drivex.service.inventory.v1": {
     "value": [],
-    "updatedAt": "2026-04-13T16:19:56.189Z"
+    "updatedAt": "2026-05-26T12:19:09.228Z"
   },
   "drivex.service.clients.v1": {
     "value": [
@@ -354,7 +354,7 @@
         ]
       }
     ],
-    "updatedAt": "2026-04-13T16:19:56.184Z"
+    "updatedAt": "2026-05-26T12:19:09.223Z"
   },
   "drivex.service.orders.v1": {
     "value": [
@@ -403,7 +403,7 @@
         "parts": []
       }
     ],
-    "updatedAt": "2026-04-13T16:19:56.187Z"
+    "updatedAt": "2026-05-26T12:19:09.226Z"
   },
   "drivex.service.appointments.v1": {
     "value": [
@@ -468,7 +468,7 @@
         "workLabel": "Электричка не могу найти ваш телефон"
       }
     ],
-    "updatedAt": "2026-04-13T16:19:56.195Z"
+    "updatedAt": "2026-05-26T12:19:09.232Z"
   },
   "drivex.service.center.v1": {
     "value": {
@@ -491,7 +491,7 @@
       "registrationCompleted": true,
       "status": "active"
     },
-    "updatedAt": "2026-04-13T16:19:56.182Z"
+    "updatedAt": "2026-05-26T12:19:09.219Z"
   },
   "drivex.service.requests.v1": {
     "value": [
@@ -596,7 +596,7 @@
         "total": 0
       }
     ],
-    "updatedAt": "2026-04-13T16:19:56.197Z"
+    "updatedAt": "2026-05-26T12:19:09.237Z"
   },
   "drivex.buyer.orders.v1": {
     "value": [
@@ -627,11 +627,11 @@
         "notes": "Оформлено через DRIVEX Marketplace"
       }
     ],
-    "updatedAt": "2026-04-13T15:16:13.434Z"
+    "updatedAt": "2026-05-26T06:55:19.030Z"
   },
   "drivex.order-chats.v1": {
     "value": {},
-    "updatedAt": "2026-04-13T15:16:13.436Z"
+    "updatedAt": "2026-05-26T06:55:19.032Z"
   },
   "drivex.seller.session.v1": {
     "value": {
@@ -641,18 +641,18 @@
       "role": "buyer",
       "sellerStoreId": "auto-parts-khujand"
     },
-    "updatedAt": "2026-04-13T15:16:13.449Z"
+    "updatedAt": "2026-05-26T10:20:50.727Z"
   },
   "drivex.service.auth.v1": {
     "value": {
       "authenticated": true,
       "lastLoginAt": "2026-04-12T12:51:08.503Z"
     },
-    "updatedAt": "2026-04-13T15:16:13.467Z"
+    "updatedAt": "2026-05-26T10:20:53.028Z"
   },
   "drivex.active-car.v1": {
     "value": "car-2",
-    "updatedAt": "2026-04-12T13:13:35.937Z"
+    "updatedAt": "2026-05-26T06:04:18.063Z"
   },
   "drivex.cart.v1": {
     "value": {
@@ -664,6 +664,15 @@
       "400017": 1,
       "500017": 1
     },
-    "updatedAt": "2026-04-13T15:16:13.442Z"
+    "updatedAt": "2026-05-26T06:55:18.973Z"
+  },
+  "drivex.profile.v1": {
+    "value": {
+      "name": "SHOHRUKH MAKHKAMOV",
+      "phone": "+992927125989",
+      "email": "shohruh15082006@gmail.com",
+      "avatar": ""
+    },
+    "updatedAt": "2026-05-26T06:55:18.976Z"
   }
 }

@@ -106,22 +106,8 @@
     }
   ];
 
-  const reminders = [
-    { task: "Замена масла", dueDate: "через 15 дней", urgent: false },
-    { task: "Техосмотр", dueDate: "через 30 дней", urgent: false }
-  ];
-
-  const garageCars = [
-    { id: "car-1", name: "BMW X5", plate: "A123BC 77", year: 2020, mileage: "54 200 км" },
-    { id: "car-2", name: "Toyota Camry", plate: "B777TT 99", year: 2018, mileage: "86 450 км" },
-    { id: "car-3", name: "Kia Rio", plate: "M512OP 77", year: 2016, mileage: "112 900 км" }
-  ];
-
-  const savedPlaces = [
-    { id: "home", title: "Дом", address: "ул. Пушкина, 10", icon: "user", color: "var(--drivex-neon-cyan)" },
-    { id: "work", title: "Работа", address: "пр-т Мира, 25", icon: "bag", color: "var(--drivex-electric-blue)" },
-    { id: "gas", title: "Любимая АЗС", address: "Ленинградское ш., 5", icon: "fuel", color: "var(--drivex-warning)" }
-  ];
+  let garageCars = [];
+  let savedPlaces = [];
 
   const vehicleDocumentKinds = [
     {
@@ -967,7 +953,12 @@
     maintenance: "drivex.maintenance.v1",
     cart: "drivex.cart.v1",
     buyerOrders: "drivex.buyer.orders.v1",
+    buyerSession: "drivex.buyer.session.v1",
+    buyerUsers: "drivex.buyer.users.v1",
+    buyerGarage: "drivex.buyer.garage.v1",
+    savedPlaces: "drivex.saved-places.v1",
     orderChats: "drivex.order-chats.v1",
+    buyerInvite: "drivex.buyer.invite.v1",
     marketplaceCatalog: "drivex.market.catalog.v1",
     sellerSession: "drivex.seller.session.v1",
     sellerProfile: "drivex.seller.profile.v1",
@@ -997,6 +988,18 @@
     drivexStorageKeys.serviceCenter,
     drivexStorageKeys.maintenance,
     drivexStorageKeys.marketplaceCatalog
+  ]);
+  const buyerPersonalStorageKeys = new Set([
+    drivexStorageKeys.profile,
+    drivexStorageKeys.activeCar,
+    drivexStorageKeys.buyerGarage,
+    drivexStorageKeys.documents,
+    drivexStorageKeys.maintenance,
+    drivexStorageKeys.cart,
+    drivexStorageKeys.buyerOrders,
+    drivexStorageKeys.orderChats,
+    drivexStorageKeys.savedPlaces,
+    drivexStorageKeys.buyerInvite
   ]);
   const drivexMediaDbName = "drivex.media.v1";
   const drivexMediaStoreName = "media";
@@ -1176,6 +1179,45 @@
       throw new Error(payload?.error || "App state save failed");
     }
     return response.json().catch(() => ({}));
+  }
+
+  async function fetchBuyerAppState(session) {
+    const safeSession = normalizeBuyerSession(session);
+    const client = getSupabaseClient();
+    if (!client || !safeSession.authenticated || !safeSession.id) return null;
+
+    const { data, error } = await client
+      .from("user_app_state")
+      .select("key,value,updated_at")
+      .eq("user_id", safeSession.id);
+    if (error) throw error;
+
+    return (Array.isArray(data) ? data : []).reduce((acc, row) => {
+      if (!row || typeof row.key !== "string") return acc;
+      acc[row.key] = {
+        value: row.value,
+        updatedAt: row.updated_at || ""
+      };
+      return acc;
+    }, {});
+  }
+
+  async function saveBuyerAppState(session, key, value) {
+    const safeSession = normalizeBuyerSession(session);
+    const client = getSupabaseClient();
+    if (!client || !safeSession.authenticated || !safeSession.id) return null;
+
+    const { error } = await client.from("user_app_state").upsert(
+      {
+        user_id: safeSession.id,
+        key,
+        value,
+        updated_at: new Date().toISOString()
+      },
+      { onConflict: "user_id,key" }
+    );
+    if (error) throw error;
+    return true;
   }
 
   const ToastContext = createContext({
@@ -2802,11 +2844,243 @@
 
   function createDefaultBuyerProfile() {
     return {
-      name: "Рустам Саидов",
-      phone: "+992 92 123 45 67",
-      email: "rustam.saidov@drivex.app",
+      name: "Пользователь DRIVEX",
+      phone: "",
+      email: "",
       avatar: ""
     };
+  }
+
+  function createEmptyBuyerSession() {
+    return {
+      id: "",
+      name: "",
+      phone: "",
+      email: "",
+      role: "buyer",
+      provider: "local",
+      authenticated: false
+    };
+  }
+
+  function normalizeBuyerSession(value) {
+    const fallback = createEmptyBuyerSession();
+    const source = value && typeof value === "object" ? value : {};
+    const id = typeof source.id === "string" && source.id.trim() ? source.id.trim() : "";
+    const email = typeof source.email === "string" ? source.email.trim().toLowerCase() : "";
+    const phone = typeof source.phone === "string" ? source.phone.trim() : "";
+    const name = typeof source.name === "string" ? source.name.trim() : "";
+
+    return {
+      id,
+      name,
+      phone,
+      email,
+      role: "buyer",
+      provider: source.provider === "supabase" ? "supabase" : "local",
+      authenticated: Boolean(source.authenticated && (id || email || phone))
+    };
+  }
+
+  function normalizeBuyerProfile(value) {
+    const fallback = createDefaultBuyerProfile();
+    const source = value && typeof value === "object" ? value : {};
+    const avatarRaw = typeof source.avatar === "string" ? source.avatar.trim() : "";
+
+    return {
+      name: String(source.name || fallback.name).trim() || fallback.name,
+      phone: String(source.phone || "").trim(),
+      email: String(source.email || "").trim().toLowerCase(),
+      avatar: avatarRaw && avatarRaw.startsWith("data:image/") && avatarRaw.length <= 500000 ? avatarRaw : ""
+    };
+  }
+
+  function buyerSessionToProfile(session, currentProfile) {
+    const safeSession = normalizeBuyerSession(session);
+    const safeProfile = normalizeBuyerProfile(currentProfile);
+
+    return normalizeBuyerProfile({
+      ...safeProfile,
+      name: safeSession.name || safeProfile.name,
+      phone: safeSession.phone || safeProfile.phone,
+      email: safeSession.email || safeProfile.email
+    });
+  }
+
+  function getSupabaseClient() {
+    if (!window.supabase || typeof window.supabase.createClient !== "function") return null;
+    const config = window.DRIVEX_SUPABASE_CONFIG || {};
+    if (!config.url || !config.anonKey) return null;
+
+    if (!window.__DRIVEX_SUPABASE_CLIENT__) {
+      window.__DRIVEX_SUPABASE_CLIENT__ = window.supabase.createClient(config.url, config.anonKey, {
+        auth: {
+          persistSession: true,
+          autoRefreshToken: true,
+          detectSessionInUrl: true
+        }
+      });
+    }
+
+    return window.__DRIVEX_SUPABASE_CLIENT__;
+  }
+
+  function getBuyerAuthStatus() {
+    return {
+      mode: getSupabaseClient() ? "supabase" : "local",
+      configured: Boolean(getSupabaseClient())
+    };
+  }
+
+  function getBuyerLocalStorageKey(key, session) {
+    const safeSession = normalizeBuyerSession(session);
+    if (safeSession.authenticated && safeSession.id) {
+      return `${key}#buyer:${safeSession.id}`;
+    }
+    return key;
+  }
+
+  function readBuyerLocalStorage(key, session) {
+    try {
+      const storageKey = getBuyerLocalStorageKey(key, session);
+      const raw = window.localStorage ? window.localStorage.getItem(storageKey) : null;
+      if (!raw) return null;
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+
+  function writeBuyerLocalStorage(key, value, session) {
+    try {
+      const storageKey = getBuyerLocalStorageKey(key, session);
+      if (value === null) {
+        window.localStorage.removeItem(storageKey);
+      } else {
+        window.localStorage.setItem(storageKey, JSON.stringify(value));
+      }
+    } catch {
+      // ignore storage errors
+    }
+  }
+
+  function clearBuyerLocalStorageForSession(session) {
+    try {
+      if (!window.localStorage) return;
+      const safeSession = normalizeBuyerSession(session);
+      if (!safeSession.authenticated || !safeSession.id) return;
+      for (const key of buyerPersonalStorageKeys) {
+        const storageKey = getBuyerLocalStorageKey(key, safeSession);
+        window.localStorage.removeItem(storageKey);
+      }
+    } catch {
+      // ignore cleanup errors
+    }
+  }
+
+  function readLocalBuyerUsers() {
+    try {
+      const raw = window.localStorage ? window.localStorage.getItem(drivexStorageKeys.buyerUsers) : null;
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed.filter((item) => item && typeof item === "object") : [];
+    } catch {
+      return [];
+    }
+  }
+
+  function writeLocalBuyerUsers(users) {
+    try {
+      window.localStorage &&
+        window.localStorage.setItem(drivexStorageKeys.buyerUsers, JSON.stringify(Array.isArray(users) ? users : []));
+    } catch {
+      // ignore local auth cache errors
+    }
+  }
+
+  function makeBuyerId(seed = Date.now()) {
+    return `buyer-${String(seed).replace(/\D/g, "").slice(-10) || "new"}`;
+  }
+
+  function makeBuyerSessionFromLocalUser(user) {
+    const safeUser = user && typeof user === "object" ? user : {};
+    return normalizeBuyerSession({
+      id: safeUser.id || makeBuyerId(),
+      name: safeUser.name || "",
+      phone: safeUser.phone || "",
+      email: safeUser.email || "",
+      role: "buyer",
+      provider: "local",
+      authenticated: true
+    });
+  }
+
+  function makeBuyerSessionFromSupabaseUser(user) {
+    const metadata = user?.user_metadata && typeof user.user_metadata === "object" ? user.user_metadata : {};
+    return normalizeBuyerSession({
+      id: user?.id || "",
+      name: metadata.full_name || metadata.name || "",
+      phone: metadata.phone || user?.phone || "",
+      email: user?.email || "",
+      role: "buyer",
+      provider: "supabase",
+      authenticated: Boolean(user?.id)
+    });
+  }
+
+  function normalizeGarageCar(value) {
+    if (!value || typeof value !== "object") return null;
+    const brand = typeof value.brand === "string" ? value.brand.trim() : "";
+    const model = typeof value.model === "string" ? value.model.trim() : "";
+    const nameRaw = typeof value.name === "string" ? value.name.trim() : "";
+    const name = nameRaw || [brand, model].filter(Boolean).join(" ").trim();
+    if (!name) return null;
+
+    const mileageNumber = Number(value.mileageValue ?? value.mileage);
+    const mileageValue = Number.isFinite(mileageNumber) && mileageNumber >= 0 ? Math.floor(mileageNumber) : 0;
+    const mileageText =
+      typeof value.mileage === "string" && value.mileage.trim()
+        ? value.mileage.trim()
+        : mileageValue
+          ? `${mileageValue.toLocaleString("ru-RU")} км`
+          : "";
+    const yearNumber = Number(value.year);
+
+    return {
+      id: typeof value.id === "string" && value.id.trim() ? value.id.trim() : genId("car"),
+      name,
+      brand: brand || name.split(/\s+/)[0] || "",
+      model: model || name.split(/\s+/).slice(1).join(" "),
+      plate: typeof value.plate === "string" ? value.plate.trim().toUpperCase() : "",
+      year: Number.isFinite(yearNumber) && yearNumber > 1900 ? Math.floor(yearNumber) : "",
+      mileage: mileageText,
+      mileageValue,
+      vin: typeof value.vin === "string" ? value.vin.trim().toUpperCase() : "",
+      createdAt: typeof value.createdAt === "string" ? value.createdAt : new Date().toISOString()
+    };
+  }
+
+  function normalizeGarageList(value) {
+    return (Array.isArray(value) ? value : []).map(normalizeGarageCar).filter(Boolean);
+  }
+
+  function normalizeSavedPlace(value) {
+    if (!value || typeof value !== "object") return null;
+    const title = typeof value.title === "string" ? value.title.trim() : "";
+    const address = typeof value.address === "string" ? value.address.trim() : "";
+    if (!title && !address) return null;
+
+    return {
+      id: typeof value.id === "string" && value.id.trim() ? value.id.trim() : genId("place"),
+      title: title || "Место",
+      address,
+      icon: typeof value.icon === "string" && value.icon.trim() ? value.icon.trim() : "map",
+      color: typeof value.color === "string" && value.color.trim() ? value.color.trim() : "var(--drivex-neon-cyan)",
+      createdAt: typeof value.createdAt === "string" ? value.createdAt : new Date().toISOString()
+    };
+  }
+
+  function normalizeSavedPlacesList(value) {
+    return (Array.isArray(value) ? value : []).map(normalizeSavedPlace).filter(Boolean);
   }
 
   function createSellerOrdersSeed(storeId = sellerPrimaryStoreId) {
@@ -4841,10 +5115,11 @@
     };
   }
 
-  function createEmptyDocumentsState() {
-    const cars = {};
-    for (const car of garageCars) {
-      cars[car.id] = {
+  function createEmptyDocumentsState(cars = garageCars) {
+    const nextCars = {};
+    for (const car of Array.isArray(cars) ? cars : []) {
+      if (!car || typeof car !== "object" || !car.id) continue;
+      nextCars[car.id] = {
         registration: null,
         inspection: null
       };
@@ -4852,7 +5127,7 @@
 
     return {
       license: null,
-      cars
+      cars: nextCars
     };
   }
 
@@ -4947,6 +5222,59 @@
     return Object.keys(maintenance.cars).reduce((sum, currentCarId) => {
       return sum + getMaintenanceSpentTotal(maintenance, currentCarId);
     }, 0);
+  }
+
+  function buildSmartCareTasks(maintenance, activeCarId = "") {
+    const tasks = [];
+    const cars = activeCarId ? [findGarageCar(activeCarId)].filter(Boolean) : garageCars;
+
+    for (const car of cars) {
+      const carState = getMaintenanceCarState(maintenance, car.id);
+      const inspectionDays = carState.inspection?.validUntil ? daysUntil(carState.inspection.validUntil) : null;
+      if (typeof inspectionDays === "number") {
+        if (inspectionDays < 0) {
+          tasks.push({
+            id: `${car.id}-inspection-overdue`,
+            task: "Техосмотр просрочен",
+            title: "Техосмотр просрочен",
+            dueDate: car.name,
+            subtitle: car.name,
+            urgent: true,
+            color: "var(--drivex-danger)"
+          });
+        } else if (inspectionDays <= 30) {
+          tasks.push({
+            id: `${car.id}-inspection`,
+            task: "Скоро техосмотр",
+            title: "Скоро техосмотр",
+            dueDate: `${car.name} · ${inspectionDays || "сегодня"} дн`,
+            subtitle: `${inspectionDays || "сегодня"} дн`,
+            urgent: inspectionDays <= 7,
+            color: inspectionDays <= 7 ? "var(--drivex-warning)" : "var(--drivex-neon-cyan)"
+          });
+        }
+      }
+
+      const mileage = Number(car.mileageValue || parseMileageLabel(car.mileage));
+      const records = Array.isArray(carState.records) ? carState.records : [];
+      const oilRecord = records.find((record) => record.type === "oil" || /масл/i.test(String(record.title || "")));
+      if (mileage && oilRecord?.mileage) {
+        const left = Number(oilRecord.mileage) + 10000 - mileage;
+        if (left <= 1500) {
+          tasks.push({
+            id: `${car.id}-oil`,
+            task: left <= 0 ? "Замена масла просрочена" : "Скоро замена масла",
+            title: left <= 0 ? "Замена масла просрочена" : "Скоро замена масла",
+            dueDate: `${car.name} · ${left <= 0 ? "сейчас" : `${left.toLocaleString("ru-RU")} км`}`,
+            subtitle: left <= 0 ? "сейчас" : `${left.toLocaleString("ru-RU")} км`,
+            urgent: left <= 0,
+            color: left <= 0 ? "var(--drivex-danger)" : "var(--drivex-electric-blue)"
+          });
+        }
+      }
+    }
+
+    return tasks.slice(0, 6);
   }
 
   function getHashPath() {
@@ -5064,18 +5392,63 @@
           ctx.fillRect(0, 0, outW, outH);
           ctx.drawImage(img, 0, 0, outW, outH);
 
-          let dataUrl = "";
-          try {
-            dataUrl = canvas.toDataURL("image/jpeg", quality);
-          } catch {
+          const serialize = (width, height, q) => {
+            const tempCanvas = document.createElement("canvas");
+            tempCanvas.width = width;
+            tempCanvas.height = height;
+            const tempCtx = tempCanvas.getContext("2d");
+            if (!tempCtx) return "";
+            tempCtx.fillStyle = "#0a0a0f";
+            tempCtx.fillRect(0, 0, width, height);
+            tempCtx.drawImage(img, 0, 0, width, height);
             try {
-              dataUrl = canvas.toDataURL();
+              return String(tempCanvas.toDataURL("image/jpeg", q));
             } catch {
-              dataUrl = "";
+              try {
+                return String(tempCanvas.toDataURL());
+              } catch {
+                return "";
+              }
+            }
+          };
+
+          const maxDataUrlLength = 1400000;
+          let dataUrl = serialize(outW, outH, quality);
+
+          if (dataUrl && dataUrl.length > maxDataUrlLength) {
+            for (const nextQuality of [0.75, 0.6, 0.45, 0.3]) {
+              const nextUrl = serialize(outW, outH, nextQuality);
+              if (nextUrl && nextUrl.length <= maxDataUrlLength) {
+                dataUrl = nextUrl;
+                break;
+              }
             }
           }
 
-          resolve(String(dataUrl || ""));
+          if (dataUrl && dataUrl.length > maxDataUrlLength) {
+            for (const nextMaxSize of [1200, 1000, 800, 600]) {
+              const nextScale = Math.min(1, nextMaxSize / longest);
+              const nextW = Math.max(1, Math.floor(w * nextScale));
+              const nextH = Math.max(1, Math.floor(h * nextScale));
+              const nextUrl = serialize(nextW, nextH, Math.min(quality, 0.86));
+              if (nextUrl && nextUrl.length <= maxDataUrlLength) {
+                dataUrl = nextUrl;
+                break;
+              }
+            }
+          }
+
+          if (!dataUrl) {
+            resolve("");
+            return;
+          }
+
+          if (dataUrl.length > maxDataUrlLength) {
+            reject(new Error("Image too large"));
+            return;
+          }
+
+          resolve(dataUrl);
         } catch (err) {
           reject(err);
         }
@@ -7035,6 +7408,7 @@
     const secondaryService =
       nearbyList.find((service) => String(service.id) !== String(featuredService?.id)) || personalizedServices[1] || nearbyList[1];
     const nearbyPreview = nearbyList.slice(0, 3);
+    const reminders = buildSmartCareTasks(maintenance, activeCarId);
 
     return html`
       <div className="home-redesign min-h-screen">
@@ -7190,8 +7564,8 @@
               </div>
 
               <div className="home-reminder-grid">
-                ${reminders.map(
-                  (reminder, idx) => html`
+                ${reminders.length
+                  ? reminders.map((reminder, idx) => html`
                     <div key=${idx} className="home-reminder-card">
                       <button type="button" aria-label="Скрыть">×</button>
                       <span className="home-reminder-icon">
@@ -7201,8 +7575,17 @@
                       <p>${reminder.dueDate}</p>
                       <a href="#/smart-care">${idx === 0 ? "Проверить сервис" : "Найти рядом"}</a>
                     </div>
-                  `
-                )}
+                  `)
+                  : html`
+                      <div className="home-reminder-card">
+                        <span className="home-reminder-icon">
+                          <${Icon} name="car" size=${18} />
+                        </span>
+                        <h3>${garageCars.length ? "Нет срочных задач" : "Добавьте автомобиль"}</h3>
+                        <p>${garageCars.length ? "Журнал обслуживания чистый" : "Умный уход начнёт работать после добавления машины"}</p>
+                        <a href="#/garage">${garageCars.length ? "Открыть гараж" : "Добавить авто"}</a>
+                      </div>
+                    `}
               </div>
             </section>
           </main>
@@ -8731,7 +9114,186 @@
     `;
   }
 
-  function ProfileScreen({ notificationsCount, profile, documents, documentsTotalCount, maintenance, ordersCount }) {
+  function BuyerAuthScreen({ mode = "register", authStatus, onLogin, onRegister }) {
+    const toast = useToast();
+    const isLogin = mode === "login";
+    const [fullName, setFullName] = useState("");
+    const [phone, setPhone] = useState("");
+    const [email, setEmail] = useState("");
+    const [password, setPassword] = useState("");
+    const [confirmPassword, setConfirmPassword] = useState("");
+    const [busy, setBusy] = useState(false);
+    const providerLabel = authStatus?.mode === "supabase" && authStatus?.configured ? "Supabase" : "Локальный режим";
+
+    const submit = useCallback(
+      async (event) => {
+        event.preventDefault();
+        if (busy) return;
+
+        const payload = {
+          name: String(fullName || "").trim(),
+          phone: String(phone || "").trim(),
+          email: String(email || "").trim().toLowerCase(),
+          password: String(password || "")
+        };
+
+        if (!payload.email) {
+          toast.push("Введите email");
+          return;
+        }
+        if (!payload.password || payload.password.length < 6) {
+          toast.push("Пароль должен быть от 6 символов");
+          return;
+        }
+        if (!isLogin && !payload.name) {
+          toast.push("Введите имя");
+          return;
+        }
+        if (!isLogin && payload.password !== confirmPassword) {
+          toast.push("Пароли не совпадают");
+          return;
+        }
+
+        setBusy(true);
+        try {
+          if (isLogin) {
+            await onLogin(payload);
+            toast.push("Вход выполнен");
+          } else {
+            await onRegister(payload);
+            toast.push("Регистрация завершена");
+          }
+        } catch (error) {
+          toast.push(error?.message || "Не удалось выполнить действие");
+        } finally {
+          setBusy(false);
+        }
+      },
+      [busy, confirmPassword, email, fullName, isLogin, onLogin, onRegister, password, phone, toast]
+    );
+
+    return html`
+      <div className="min-h-screen flex items-center px-6 py-10" style=${{ background: "var(--drivex-black)" }}>
+        <div className="w-full space-y-5">
+          <div className="text-center">
+            <p
+              className="text-xs font-semibold"
+              style=${{ color: "var(--drivex-neon-cyan)", letterSpacing: "0.18em" }}
+            >
+              DRIVEX USER
+            </p>
+            <h1 className="text-3xl font-bold mt-3" style=${{ color: "var(--drivex-white)" }}>
+              ${isLogin ? "Вход в аккаунт" : "Регистрация"}
+            </h1>
+            <p className="text-sm mt-3" style=${{ color: "var(--drivex-silver)" }}>
+              ${isLogin
+                ? "Введите данные, чтобы открыть свой профиль, гараж и заказы."
+                : "Создайте аккаунт пользователя. После регистрации откроется ваш DRIVEX-проект."}
+            </p>
+          </div>
+
+          <form className="glass-card-light rounded-3xl p-5 space-y-4" onSubmit=${submit}>
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-xs font-semibold" style=${{ color: "var(--drivex-silver)" }}>
+                Авторизация
+              </span>
+              <span
+                className="text-xs px-3 py-1 rounded-full"
+                style=${{
+                  color: "var(--drivex-neon-cyan)",
+                  background: "rgba(6, 182, 212, 0.12)",
+                  border: "1px solid rgba(6, 182, 212, 0.16)"
+                }}
+              >
+                ${providerLabel}
+              </span>
+            </div>
+
+            ${!isLogin
+              ? html`
+                  <label className="block">
+                    <span className="text-xs font-semibold" style=${{ color: "var(--drivex-silver)" }}>Имя</span>
+                    <input
+                      className="w-full mt-2 p-4 rounded-2xl dx-input"
+                      value=${fullName}
+                      onInput=${(e) => setFullName(e.target.value)}
+                      placeholder="Ваше имя"
+                      autocomplete="name"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-xs font-semibold" style=${{ color: "var(--drivex-silver)" }}>Телефон</span>
+                    <input
+                      className="w-full mt-2 p-4 rounded-2xl dx-input"
+                      value=${phone}
+                      onInput=${(e) => setPhone(e.target.value)}
+                      placeholder="+992 ..."
+                      autocomplete="tel"
+                    />
+                  </label>
+                `
+              : null}
+
+            <label className="block">
+              <span className="text-xs font-semibold" style=${{ color: "var(--drivex-silver)" }}>Email</span>
+              <input
+                type="email"
+                className="w-full mt-2 p-4 rounded-2xl dx-input"
+                value=${email}
+                onInput=${(e) => setEmail(e.target.value)}
+                placeholder="mail@example.com"
+                autocomplete="email"
+              />
+            </label>
+
+            <label className="block">
+              <span className="text-xs font-semibold" style=${{ color: "var(--drivex-silver)" }}>Пароль</span>
+              <input
+                type="password"
+                className="w-full mt-2 p-4 rounded-2xl dx-input"
+                value=${password}
+                onInput=${(e) => setPassword(e.target.value)}
+                placeholder="Минимум 6 символов"
+                autocomplete=${isLogin ? "current-password" : "new-password"}
+              />
+            </label>
+
+            ${!isLogin
+              ? html`
+                  <label className="block">
+                    <span className="text-xs font-semibold" style=${{ color: "var(--drivex-silver)" }}>
+                      Повторите пароль
+                    </span>
+                    <input
+                      type="password"
+                      className="w-full mt-2 p-4 rounded-2xl dx-input"
+                      value=${confirmPassword}
+                      onInput=${(e) => setConfirmPassword(e.target.value)}
+                      placeholder="Повторите пароль"
+                      autocomplete="new-password"
+                    />
+                  </label>
+                `
+              : null}
+
+            <button type="submit" className="w-full py-4 rounded-2xl font-bold dx-btn" disabled=${busy}>
+              ${busy ? "Подождите..." : isLogin ? "Войти" : "Зарегистрироваться"}
+            </button>
+
+            <a
+              className="block text-center text-sm font-semibold"
+              style=${{ color: "var(--drivex-neon-cyan)" }}
+              href=${isLogin ? "#/register" : "#/login"}
+            >
+              ${isLogin ? "Нет аккаунта? Зарегистрироваться" : "Уже есть аккаунт? Войти"}
+            </a>
+          </form>
+        </div>
+      </div>
+    `;
+  }
+
+  function ProfileScreen({ notificationsCount, profile, documents, documentsTotalCount, maintenance, ordersCount, onLogout }) {
     const fallbackProfile = createDefaultBuyerProfile();
     const name = profile?.name || fallbackProfile.name;
     const phone = profile?.phone || fallbackProfile.phone;
@@ -8745,6 +9307,7 @@
       return sum + (carDocs.registration ? 1 : 0) + (carDocs.inspection ? 1 : 0);
     }, 0);
     const maintenanceRecordsCount = countMaintenanceRecords(maintenance);
+    const smartCareTasks = buildSmartCareTasks(maintenance);
 
     const sections = [
       {
@@ -8763,7 +9326,7 @@
             path: "/maintenance",
             badge: maintenanceRecordsCount ? String(maintenanceRecordsCount) : null
           },
-          { icon: "scan", label: "Умный уход", path: "/smart-care", badge: String(reminders.length) }
+          { icon: "scan", label: "Умный уход", path: "/smart-care", badge: smartCareTasks.length ? String(smartCareTasks.length) : null }
         ]
       },
       {
@@ -8956,15 +9519,28 @@
               </div>
             `
           )}
+          ${onLogout
+            ? html`
+                <button
+                  type="button"
+                  className="w-full py-4 rounded-2xl font-bold"
+                  style=${{ background: "rgba(239, 68, 68, 0.14)", color: "var(--drivex-danger)" }}
+                  onClick=${onLogout}
+                >
+                  Выйти
+                </button>
+              `
+            : null}
         </div>
       </div>
     `;
   }
 
-  function DocumentsVaultScreen({ documents, totalCount }) {
+  function DocumentsVaultScreen({ documents, totalCount, authStatus }) {
     const docs = documents && typeof documents === "object" ? documents : {};
     const safeTotal = Number.isFinite(Number(totalCount)) ? Number(totalCount) : 0;
     const licenseReady = Boolean(docs.license);
+    const cloudEnabled = authStatus && authStatus.mode === "supabase";
 
     return html`
       <${SimplePage} title="Документы" backPath="/profile">
@@ -8977,7 +9553,9 @@
               ${safeTotal}
             </p>
             <p className="text-xs mt-1" style=${{ color: "var(--drivex-silver)" }}>
-              фото документов сохранено на этом устройстве
+                ${cloudEnabled
+                  ? "Документы сохраняются в облаке и доступны под вашей учётной записью."
+                  : "Фото документов сохранено на этом устройстве"}
             </p>
           </div>
 
@@ -9089,7 +9667,9 @@
 
           <div className="glass-card-light rounded-2xl p-4">
             <p className="text-xs" style=${{ color: "var(--drivex-silver)" }}>
-              Данные сохраняются локально. Если очистить данные браузера, документы нужно будет загрузить заново.
+              ${cloudEnabled
+                ? "Документы сохраняются в облаке через Supabase и привязаны к вашему аккаунту."
+                : "Данные сохраняются локально. Если очистить данные браузера, документы нужно будет загрузить заново."}
             </p>
           </div>
         </div>
@@ -9133,6 +9713,8 @@
         } catch (err) {
           if (String(err && err.message) === "File too large") {
             toast.push("Файл слишком большой (до 8 МБ)");
+          } else if (String(err && err.message) === "Image too large") {
+            toast.push("Изображение слишком большое после сжатия");
           } else {
             toast.push("Не удалось загрузить фото");
           }
@@ -13875,7 +14457,9 @@
                           ${formatTjsPrice(order.amount)}
                         </p>
                         <p className="text-xs mt-2" style=${{ color: "var(--drivex-silver)" }}>
-                          ${statusHint}
+                          ${cloudEnabled
+                            ? "Документы сохраняются в облаке и доступны под вашей учётной записью."
+                            : "Фото документов сохранено на этом устройстве"}
                         </p>
                       </div>
                       <div className="min-w-[180px] text-right">
@@ -17620,20 +18204,120 @@
 
   function InviteFriendsScreen() {
     const toast = useToast();
-    const code = "DRIVEX-2026";
+    const inviteStateKey = drivexStorageKeys.buyerInvite;
+
+    const inviteCode = useMemo(() => {
+      const safeId = String(buyerSession?.id || "guest");
+      const cleaned = safeId.replace(/[^a-z0-9]/gi, "").slice(-6).toUpperCase();
+      return `DRIVEX-${cleaned || "2026"}`;
+    }, [buyerSession?.id]);
+
+    const createDefaultInviteState = useCallback(
+      () => ({
+        code: inviteCode,
+        copiedCount: 0,
+        sharedCount: 0,
+        lastCopiedAt: null,
+        lastSharedAt: null,
+        createdAt: new Date().toISOString()
+      }),
+      [inviteCode]
+    );
+
+    const [inviteState, setInviteState] = useState(() => {
+      try {
+        const raw = readBuyerLocalStorage(inviteStateKey, buyerSession);
+        if (!raw) return createDefaultInviteState();
+        const parsed = raw;
+        if (!parsed || typeof parsed !== "object") return createDefaultInviteState();
+        return {
+          ...createDefaultInviteState(),
+          ...parsed,
+          code: String(parsed.code || inviteCode)
+        };
+      } catch {
+        return createDefaultInviteState();
+      }
+    });
+
+    useEffect(() => {
+      if (inviteState.code !== inviteCode) {
+        const nextState = { ...inviteState, code: inviteCode };
+        setInviteState(nextState);
+        pushBuyerState(inviteStateKey, nextState);
+      }
+    }, [inviteCode, inviteState, pushBuyerState, inviteStateKey]);
+
+    const persistInviteState = useCallback(
+      (nextState) => {
+        setInviteState(nextState);
+        pushBuyerState(inviteStateKey, nextState);
+      },
+      [inviteStateKey]
+    );
+
+    const formatTimestamp = useCallback((timestamp) => {
+      if (!timestamp) return "—";
+      try {
+        return new Date(timestamp).toLocaleString("ru-RU", {
+          dateStyle: "short",
+          timeStyle: "short"
+        });
+      } catch {
+        return String(timestamp);
+      }
+    }, []);
 
     const onCopy = useCallback(async () => {
       try {
         if (navigator.clipboard?.writeText) {
-          await navigator.clipboard.writeText(code);
+          await navigator.clipboard.writeText(inviteCode);
+          const nextState = {
+            ...inviteState,
+            code: inviteCode,
+            copiedCount: Number(inviteState.copiedCount || 0) + 1,
+            lastCopiedAt: new Date().toISOString()
+          };
+          persistInviteState(nextState);
           toast.push("Код скопирован");
         } else {
-          toast.push("Копирование недоступно (демо)");
+          toast.push("Копирование недоступно");
         }
       } catch {
-        toast.push("Не удалось скопировать (демо)");
+        toast.push("Не удалось скопировать код");
       }
-    }, [toast]);
+    }, [inviteCode, inviteState, persistInviteState, toast]);
+
+    const onShare = useCallback(async () => {
+      const shareText = `Присоединяйся к DRIVEX и используй код ${inviteCode} для бонусов!`;
+      const shareUrl = `${window.location.href.split("#")[0]}#/profile?invite=1`;
+
+      try {
+        if (navigator.share) {
+          await navigator.share({
+            title: "Приглашение в DRIVEX",
+            text: shareText,
+            url: shareUrl
+          });
+        } else if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(`${shareText}\n${shareUrl}`);
+        } else {
+          toast.push("Поделиться не поддерживается в этом браузере");
+          return;
+        }
+
+        const nextState = {
+          ...inviteState,
+          code: inviteCode,
+          sharedCount: Number(inviteState.sharedCount || 0) + 1,
+          lastSharedAt: new Date().toISOString()
+        };
+        persistInviteState(nextState);
+        toast.push("Приглашение отправлено");
+      } catch {
+        toast.push("Не удалось отправить приглашение");
+      }
+    }, [inviteCode, inviteState, persistInviteState, toast]);
 
     return html`
       <${SimplePage} title="Пригласить друзей" backPath="/profile">
@@ -17642,9 +18326,9 @@
             <p className="text-sm" style=${{ color: "var(--drivex-silver)" }}>
               Ваш реферальный код
             </p>
-            <div className="flex items-center justify-between gap-3 mt-2">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mt-2">
               <p className="text-3xl font-bold" style=${{ color: "var(--drivex-white)" }}>
-                ${code}
+                ${inviteCode}
               </p>
               <button
                 type="button"
@@ -17658,7 +18342,7 @@
             </div>
 
             <p className="text-sm mt-4" style=${{ color: "var(--drivex-silver)" }}>
-              Пригласите друга и получите бонусы после первой покупки (демо).
+              Пригласите друга и получите бонусы после первой покупки. Ваш статус сохраняется в Supabase.
             </p>
 
             <div className="grid grid-cols-2 gap-3 mt-5">
@@ -17673,10 +18357,36 @@
               <button
                 type="button"
                 className="py-3 rounded-2xl font-bold dx-btn"
-                onClick=${() => toast.push("Поделиться (демо)")}
+                onClick=${onShare}
               >
                 Поделиться
               </button>
+            </div>
+          </div>
+
+          <div className="glass-card-light rounded-2xl p-5">
+            <h2 className="text-lg font-bold mb-3" style=${{ color: "var(--drivex-white)" }}>
+              Статистика приглашений
+            </h2>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              ${[
+                { label: "Копий кода", value: inviteState.copiedCount || 0 },
+                { label: "Отправлено приглашений", value: inviteState.sharedCount || 0 },
+                {
+                  label: "Последнее действие",
+                  value:
+                    inviteState.lastSharedAt || inviteState.lastCopiedAt
+                      ? formatTimestamp(inviteState.lastSharedAt || inviteState.lastCopiedAt)
+                      : "—"
+                }
+              ].map(
+                (item) => html`
+                  <div key=${item.label} className="rounded-2xl p-4 bg-[#11151e]">
+                    <p className="text-sm text-silver">${item.label}</p>
+                    <p className="text-xl font-bold mt-2" style=${{ color: "var(--drivex-white)" }}>${item.value}</p>
+                  </div>
+                `
+              )}
             </div>
           </div>
 
@@ -18059,11 +18769,36 @@
     `;
   }
 
-  function GarageScreen({ activeCarId, onSelectCar }) {
+  function GarageScreen({ activeCarId, onSelectCar, onAddCar, onRemoveCar }) {
     const toast = useToast();
+    const [showForm, setShowForm] = useState(false);
+    const [name, setName] = useState("");
+    const [plate, setPlate] = useState("");
+    const [year, setYear] = useState("");
+    const [mileage, setMileage] = useState("");
 
     const cars = garageCars;
     const activeCar = findGarageCar(activeCarId) || cars[0];
+    const submitCar = useCallback(() => {
+      const nextCar = normalizeGarageCar({
+        name,
+        plate,
+        year,
+        mileageValue: mileage,
+        mileage: mileage ? `${Number(mileage).toLocaleString("ru-RU")} км` : ""
+      });
+      if (!nextCar) {
+        toast.push("Введите марку и модель");
+        return;
+      }
+      onAddCar && onAddCar(nextCar);
+      setName("");
+      setPlate("");
+      setYear("");
+      setMileage("");
+      setShowForm(false);
+      toast.push("Автомобиль добавлен");
+    }, [mileage, name, onAddCar, plate, toast, year]);
 
     return html`
       <${SimplePage} title="Мой гараж" backPath="/profile">
@@ -18101,15 +18836,53 @@
             <button
               type="button"
               className="px-4 py-2 rounded-xl text-sm font-medium dx-btn"
-              onClick=${() => toast.push("Добавление авто (демо)")}
+              onClick=${() => setShowForm((value) => !value)}
             >
               Добавить
             </button>
           </div>
 
+          ${showForm
+            ? html`
+                <div className="glass-card-light rounded-2xl p-4 space-y-3">
+                  <input
+                    className="w-full p-3 rounded-xl dx-input"
+                    value=${name}
+                    onInput=${(e) => setName(e.target.value)}
+                    placeholder="Марка и модель, например Toyota Camry"
+                  />
+                  <div className="grid grid-cols-2 gap-3">
+                    <input
+                      className="w-full p-3 rounded-xl dx-input"
+                      value=${plate}
+                      onInput=${(e) => setPlate(e.target.value)}
+                      placeholder="Госномер"
+                    />
+                    <input
+                      type="number"
+                      className="w-full p-3 rounded-xl dx-input"
+                      value=${year}
+                      onInput=${(e) => setYear(e.target.value)}
+                      placeholder="Год"
+                    />
+                  </div>
+                  <input
+                    type="number"
+                    className="w-full p-3 rounded-xl dx-input"
+                    value=${mileage}
+                    onInput=${(e) => setMileage(e.target.value)}
+                    placeholder="Пробег, км"
+                  />
+                  <button type="button" className="w-full py-3 rounded-2xl font-bold dx-btn" onClick=${submitCar}>
+                    Сохранить автомобиль
+                  </button>
+                </div>
+              `
+            : null}
+
           <div className="space-y-3">
-            ${cars.map(
-              (car) => html`
+            ${cars.length
+              ? cars.map((car) => html`
                 <button
                   key=${car.id}
                   type="button"
@@ -18142,23 +18915,39 @@
                   >
                     ${car.id === activeCar?.id ? "Активна" : "Выбрать"}
                   </span>
+                  <span
+                    role="button"
+                    className="px-3 py-1 rounded-xl text-xs font-bold"
+                    style=${{ background: "rgba(239, 68, 68, 0.12)", color: "var(--drivex-danger)" }}
+                    onClick=${(event) => {
+                      event.stopPropagation();
+                      onRemoveCar && onRemoveCar(car.id);
+                      toast.push("Автомобиль удалён");
+                    }}
+                  >
+                    Удалить
+                  </span>
                 </button>
-              `
-            )}
+              `)
+              : html`
+                  <div className="glass-card-light rounded-2xl p-5 text-center">
+                    <p className="font-bold" style=${{ color: "var(--drivex-white)" }}>Гараж пуст</p>
+                    <p className="text-sm mt-2" style=${{ color: "var(--drivex-silver)" }}>
+                      Добавьте свой автомобиль, и журнал, документы и умный уход будут работать именно под ним.
+                    </p>
+                  </div>
+                `}
           </div>
         </div>
       </${SimplePage}>
     `;
   }
 
-  function SmartCareScreen() {
+  function SmartCareScreen({ maintenance, activeCarId }) {
     const toast = useToast();
-
-    const tasks = [
-      { id: "t-1", title: "Замена масла", subtitle: "через 15 дней", color: "var(--drivex-electric-blue)" },
-      { id: "t-2", title: "Техосмотр", subtitle: "через 30 дней", color: "var(--drivex-warning)" },
-      { id: "t-3", title: "Проверка тормозов", subtitle: "через 45 дней", color: "var(--drivex-neon-cyan)" }
-    ];
+    const activeCar = findGarageCar(activeCarId) || garageCars[0] || null;
+    const tasks = buildSmartCareTasks(maintenance, activeCarId);
+    const nextTask = tasks[0] || null;
 
     return html`
       <${SimplePage} title="Умный уход" backPath="/profile">
@@ -18168,18 +18957,20 @@
               Следующее обслуживание
             </p>
             <p className="text-2xl font-bold" style=${{ color: "var(--drivex-white)" }}>
-              Замена масла
+              ${nextTask?.title || (activeCar ? "Всё спокойно" : "Добавьте автомобиль")}
             </p>
             <div className="mt-4 flex items-center justify-between">
               <p className="text-sm" style=${{ color: "var(--drivex-silver)" }}>
-                Рекомендация: 10 000 км / 12 месяцев
+                ${nextTask?.dueDate || (activeCar ? "Срочных задач нет. Добавляйте записи в журнал обслуживания." : "После добавления машины появятся персональные рекомендации.")}
               </p>
               <button
                 type="button"
                 className="px-4 py-2 rounded-xl text-sm font-medium dx-btn"
-                onClick=${() => toast.push("Запись на сервис (демо)")}
+                onClick=${() => {
+                  window.location.hash = activeCar ? "#/maintenance-add" : "#/garage";
+                }}
               >
-                Записаться
+                ${activeCar ? "Добавить запись" : "Добавить авто"}
               </button>
             </div>
           </div>
@@ -18192,15 +18983,17 @@
               type="button"
               className="text-sm font-medium"
               style=${{ color: "var(--drivex-neon-cyan)" }}
-              onClick=${() => toast.push("Добавить задачу (демо)")}
+              onClick=${() => {
+                window.location.hash = activeCar ? "#/maintenance-add" : "#/garage";
+              }}
             >
               Добавить
             </button>
           </div>
 
           <div className="space-y-3">
-            ${tasks.map(
-              (t) => html`
+            ${tasks.length
+              ? tasks.map((t) => html`
                 <div key=${t.id} className="glass-card-light rounded-2xl p-4 flex items-center gap-4">
                   <div
                     className="p-3 rounded-xl"
@@ -18220,13 +19013,26 @@
                     type="button"
                     className="px-3 py-2 rounded-xl text-xs font-bold"
                     style=${{ background: "var(--glass-bg)", color: "var(--drivex-white)" }}
-                    onClick=${() => toast.push("Подробнее (демо)")}
+                    onClick=${() => {
+                      window.location.hash = "#/maintenance";
+                    }}
                   >
                     Подробнее
                   </button>
                 </div>
-              `
-            )}
+              `)
+              : html`
+                  <div className="glass-card-light rounded-2xl p-5 text-center">
+                    <p className="font-bold" style=${{ color: "var(--drivex-white)" }}>
+                      ${activeCar ? "Нет задач" : "Нет автомобиля"}
+                    </p>
+                    <p className="text-sm mt-2" style=${{ color: "var(--drivex-silver)" }}>
+                      ${activeCar
+                        ? "Добавьте записи обслуживания или дату техосмотра, и DRIVEX начнёт считать рекомендации."
+                        : "Добавьте машину в гараж, чтобы включить умный уход."}
+                    </p>
+                  </div>
+                `}
           </div>
         </div>
       </${SimplePage}>
@@ -18909,20 +19715,51 @@
     `;
   }
 
-  function SavedLocationsScreen() {
+  function SavedLocationsScreen({ places = [], onAddPlace, onRemovePlace }) {
     const toast = useToast();
-
-    const places = savedPlaces;
+    const [title, setTitle] = useState("");
+    const [address, setAddress] = useState("");
+    const safePlaces = normalizeSavedPlacesList(places);
+    const addPlace = useCallback(() => {
+      const place = normalizeSavedPlace({ title, address });
+      if (!place) {
+        toast.push("Введите название или адрес");
+        return;
+      }
+      onAddPlace && onAddPlace(place);
+      setTitle("");
+      setAddress("");
+      toast.push("Место сохранено");
+    }, [address, onAddPlace, title, toast]);
 
     return html`
       <${SimplePage} title="Сохранённые места" backPath="/profile">
         <div className="px-6 py-6 space-y-3">
-          ${places.map((p) => html`
+          <div className="glass-card-light rounded-2xl p-4 space-y-3">
+            <input
+              className="w-full p-3 rounded-xl dx-input"
+              value=${title}
+              onInput=${(e) => setTitle(e.target.value)}
+              placeholder="Название: дом, работа, любимый сервис"
+            />
+            <input
+              className="w-full p-3 rounded-xl dx-input"
+              value=${address}
+              onInput=${(e) => setAddress(e.target.value)}
+              placeholder="Адрес"
+            />
+            <button type="button" className="w-full py-3 rounded-2xl font-bold dx-btn" onClick=${addPlace}>
+              Сохранить место
+            </button>
+          </div>
+
+          ${safePlaces.length
+            ? safePlaces.map((p) => html`
             <button
               key=${p.id}
               type="button"
               className="w-full glass-card-light rounded-2xl p-4 flex items-center gap-4 text-left"
-              onClick=${() => toast.push(`Открыть: ${p.title} (демо)`)}
+              onClick=${() => toast.push(`Сохранённое место: ${p.title}`)}
             >
               <div
                 className="w-12 h-12 rounded-xl flex items-center justify-center"
@@ -18938,9 +19775,27 @@
                   ${p.address}
                 </p>
               </div>
-              <span style=${{ color: "var(--drivex-silver)" }}>›</span>
+              <span
+                role="button"
+                style=${{ color: "var(--drivex-danger)" }}
+                onClick=${(event) => {
+                  event.stopPropagation();
+                  onRemovePlace && onRemovePlace(p.id);
+                  toast.push("Место удалено");
+                }}
+              >
+                ×
+              </span>
             </button>
-          `)}
+          `)
+            : html`
+                <div className="glass-card-light rounded-2xl p-5 text-center">
+                  <p className="font-bold" style=${{ color: "var(--drivex-white)" }}>Список пуст</p>
+                  <p className="text-sm mt-2" style=${{ color: "var(--drivex-silver)" }}>
+                    Сохраните свои адреса, чтобы быстро использовать их в заказах и маршрутах.
+                  </p>
+                </div>
+              `}
         </div>
       </${SimplePage}>
     `;
@@ -18952,17 +19807,25 @@
     const sellerSyncChannelRef = useRef(null);
     const sharedAppStateReadyRef = useRef(false);
     const sharedAppStateUpdatedAtRef = useRef({});
+    const buyerStateReadyRef = useRef(!getSupabaseClient());
+    const recentBuyerSavesRef = useRef({});
 
+    const [buyerSession, setBuyerSession] = useState(() => {
+      try {
+        const raw = window.localStorage ? window.localStorage.getItem(drivexStorageKeys.buyerSession) : null;
+        if (!raw) return createEmptyBuyerSession();
+        return normalizeBuyerSession(JSON.parse(raw));
+      } catch {
+        return createEmptyBuyerSession();
+      }
+    });
     const [cart, setCart] = useState(() => {
       const fallback = {};
 
       try {
-        const raw =
-          typeof window !== "undefined" && window.localStorage
-            ? window.localStorage.getItem(drivexStorageKeys.cart)
-            : null;
+        const raw = readBuyerLocalStorage(drivexStorageKeys.cart, buyerSession);
         if (!raw) return fallback;
-        const parsed = JSON.parse(raw);
+        const parsed = raw;
         if (!parsed || typeof parsed !== "object") return fallback;
 
         const normalizedCart = {};
@@ -18981,45 +19844,46 @@
       }
     });
     const baseNotificationsCount = 3;
+    const [userGarageCars, setUserGarageCars] = useState(() => {
+      try {
+        const raw = readBuyerLocalStorage(drivexStorageKeys.buyerGarage, buyerSession);
+        return normalizeGarageList(raw ? raw : []);
+      } catch {
+        return [];
+      }
+    });
+    garageCars = userGarageCars;
     const [activeCarId, setActiveCarId] = useState(() => {
       const fallback = garageCars[0] ? garageCars[0].id : "";
 
       try {
-        const raw =
-          typeof window !== "undefined" && window.localStorage
-            ? window.localStorage.getItem("drivex.active-car.v1")
-            : null;
+        const raw = readBuyerLocalStorage(drivexStorageKeys.activeCar, buyerSession);
         if (!raw) return fallback;
-        const parsed = JSON.parse(raw);
+        const parsed = raw;
         return ensureCarId(parsed);
       } catch {
         return fallback;
       }
     });
+    const [userSavedPlaces, setUserSavedPlaces] = useState(() => {
+      try {
+        const raw = readBuyerLocalStorage(drivexStorageKeys.savedPlaces, buyerSession);
+        return normalizeSavedPlacesList(raw ? raw : []);
+      } catch {
+        return [];
+      }
+    });
+    savedPlaces = userSavedPlaces;
+    const [buyerAuthStatus, setBuyerAuthStatus] = useState(() => getBuyerAuthStatus());
     const [profile, setProfile] = useState(() => {
       const fallback = createDefaultBuyerProfile();
 
       try {
-        const raw = window.localStorage ? window.localStorage.getItem("drivex.profile.v1") : null;
+        const raw = readBuyerLocalStorage(drivexStorageKeys.profile, buyerSession);
         if (!raw) return fallback;
-        const parsed = JSON.parse(raw);
+        const parsed = raw;
         if (!parsed || typeof parsed !== "object") return fallback;
-
-        const name = typeof parsed.name === "string" ? parsed.name : fallback.name;
-        const phone = typeof parsed.phone === "string" ? parsed.phone : fallback.phone;
-        const email = typeof parsed.email === "string" ? parsed.email : fallback.email;
-        const avatarRaw = typeof parsed.avatar === "string" ? parsed.avatar.trim() : "";
-        const avatar =
-          avatarRaw && avatarRaw.startsWith("data:image/") && avatarRaw.length <= 500000
-            ? avatarRaw
-            : "";
-
-        return {
-          name: name.trim() || fallback.name,
-          phone: phone.trim() || fallback.phone,
-          email: email.trim() || fallback.email,
-          avatar
-        };
+        return normalizeBuyerProfile(parsed);
       } catch {
         return fallback;
       }
@@ -19029,24 +19893,26 @@
       const fallback = createEmptyDocumentsState();
 
       try {
-        const raw = window.localStorage ? window.localStorage.getItem("drivex.documents.v1") : null;
+        const raw = readBuyerLocalStorage(drivexStorageKeys.documents, buyerSession);
         if (!raw) return fallback;
-        const parsed = JSON.parse(raw);
+        const parsed = raw;
         if (!parsed || typeof parsed !== "object") return fallback;
 
-        const next = createEmptyDocumentsState();
+        const next = createEmptyDocumentsState(garageCars);
 
         const rawLicense = Array.isArray(parsed.license) ? parsed.license[0] : parsed.license;
         next.license = normalizeDocumentItem(rawLicense, "Права");
 
         if (parsed.cars && typeof parsed.cars === "object") {
-          for (const car of garageCars) {
-            const carDocs = parsed.cars[car.id] && typeof parsed.cars[car.id] === "object"
-              ? parsed.cars[car.id]
-              : {};
-            next.cars[car.id] = {
-              registration: normalizeDocumentItem(carDocs.registration, `Техпаспорт ${car.name}`),
-              inspection: normalizeDocumentItem(carDocs.inspection, `Техосмотр ${car.name}`)
+          const carIds = new Set([...Object.keys(parsed.cars), ...garageCars.map((car) => car.id)]);
+          for (const carId of carIds) {
+            const car = garageCars.find((item) => item.id === carId);
+            const fallbackRegistrationName = car ? `Техпаспорт ${car.name}` : "Техпаспорт";
+            const fallbackInspectionName = car ? `Техосмотр ${car.name}` : "Техосмотр";
+            const carDocs = parsed.cars[carId] && typeof parsed.cars[carId] === "object" ? parsed.cars[carId] : {};
+            next.cars[carId] = {
+              registration: normalizeDocumentItem(carDocs.registration, fallbackRegistrationName),
+              inspection: normalizeDocumentItem(carDocs.inspection, fallbackInspectionName)
             };
           }
           return next;
@@ -19080,9 +19946,9 @@
       const fallback = createEmptyMaintenanceState();
 
       try {
-        const raw = window.localStorage ? window.localStorage.getItem("drivex.maintenance.v1") : null;
+        const raw = readBuyerLocalStorage(drivexStorageKeys.maintenance, buyerSession);
         if (!raw) return fallback;
-        const parsed = JSON.parse(raw);
+        const parsed = raw;
         if (!parsed || typeof parsed !== "object") return fallback;
 
         const next = createEmptyMaintenanceState();
@@ -19196,9 +20062,9 @@
     });
     const [buyerOrders, setBuyerOrders] = useState(() => {
       try {
-        const raw = window.localStorage ? window.localStorage.getItem(drivexStorageKeys.buyerOrders) : null;
+        const raw = readBuyerLocalStorage(drivexStorageKeys.buyerOrders, buyerSession);
         if (!raw) return [];
-        const parsed = JSON.parse(raw);
+        const parsed = raw;
         return normalizeBuyerOrdersList(parsed);
       } catch {
         return [];
@@ -19206,9 +20072,9 @@
     });
     const [orderChats, setOrderChats] = useState(() => {
       try {
-        const raw = window.localStorage ? window.localStorage.getItem(drivexStorageKeys.orderChats) : null;
+        const raw = readBuyerLocalStorage(drivexStorageKeys.orderChats, buyerSession);
         if (!raw) return {};
-        return normalizeOrderChatsMap(JSON.parse(raw));
+        return normalizeOrderChatsMap(raw);
       } catch {
         return {};
       }
@@ -19397,19 +20263,33 @@
           return;
         }
 
+        if (key === drivexStorageKeys.buyerGarage) {
+          setUserGarageCars(normalizeGarageList(nextValue));
+          return;
+        }
+
+        if (key === drivexStorageKeys.savedPlaces) {
+          setUserSavedPlaces(normalizeSavedPlacesList(nextValue));
+          return;
+        }
+
         if (key === drivexStorageKeys.documents) {
           const source = nextValue && typeof nextValue === "object" ? nextValue : createEmptyDocumentsState();
-          const next = createEmptyDocumentsState();
+          const next = createEmptyDocumentsState(garageCars);
           next.license = normalizeDocumentItem(source.license, "Права");
-          for (const car of garageCars) {
-            const carDocs = source.cars && source.cars[car.id] && typeof source.cars[car.id] === "object"
-              ? source.cars[car.id]
-              : {};
-            next.cars[car.id] = {
-              registration: normalizeDocumentItem(carDocs.registration, `Техпаспорт ${car.name}`),
-              inspection: normalizeDocumentItem(carDocs.inspection, `Техосмотр ${car.name}`)
+          const sourceCars = source.cars && typeof source.cars === "object" ? source.cars : {};
+          const carIds = new Set([...Object.keys(sourceCars), ...garageCars.map((car) => car.id)]);
+          for (const carId of carIds) {
+            const car = garageCars.find((item) => item.id === carId);
+            const fallbackRegistrationName = car ? `Техпаспорт ${car.name}` : "Техпаспорт";
+            const fallbackInspectionName = car ? `Техосмотр ${car.name}` : "Техосмотр";
+            const carDocs = sourceCars[carId] && typeof sourceCars[carId] === "object" ? sourceCars[carId] : {};
+            next.cars[carId] = {
+              registration: normalizeDocumentItem(carDocs.registration, fallbackRegistrationName),
+              inspection: normalizeDocumentItem(carDocs.inspection, fallbackInspectionName)
             };
           }
+          console.debug && console.debug("[applySharedStateSnapshot] apply documents", { keys: Object.keys(next.cars || {}), sourceKeys: Object.keys(sourceCars || {}) });
           setDocuments(next);
           return;
         }
@@ -19604,13 +20484,53 @@
       });
     }, []);
 
+    const pushBuyerState = useCallback(
+      (key, nextValue) => {
+        try {
+          recentBuyerSavesRef.current = recentBuyerSavesRef.current || {};
+          recentBuyerSavesRef.current[key] = Date.now();
+        } catch {
+          // ignore
+        }
+        try {
+          if (typeof window !== "undefined" && window.localStorage) {
+            console.debug && console.debug("[pushBuyerState]", { key, buyerId: buyerSession?.id || null });
+            if (buyerSession?.authenticated && buyerSession.id) {
+              if (nextValue === null) {
+                writeBuyerLocalStorage(key, null, buyerSession);
+              } else {
+                writeBuyerLocalStorage(key, nextValue, buyerSession);
+              }
+            } else {
+              if (nextValue === null) {
+                window.localStorage.removeItem(key);
+              } else {
+                window.localStorage.setItem(key, JSON.stringify(nextValue));
+              }
+            }
+          }
+        } catch {
+          // local cache is best effort
+        }
+
+        if (buyerSession?.authenticated && buyerStateReadyRef.current) {
+          saveBuyerAppState(buyerSession, key, nextValue).catch(() => {
+            // Supabase sync should not break the current in-memory session.
+          });
+        }
+      },
+      [buyerSession]
+    );
+
     const applySharedStateSnapshot = useCallback(
       (sharedState, options = {}) => {
         if (!sharedState || typeof sharedState !== "object") return;
         const onlyNewer = Boolean(options.onlyNewer);
         const onlyLiveKeys = Boolean(options.onlyLiveKeys);
+        const includeBuyerPersonal = Boolean(options.includeBuyerPersonal);
 
         for (const [key, entry] of Object.entries(sharedState)) {
+          if (!includeBuyerPersonal && buyerPersonalStorageKeys.has(key)) continue;
           if (onlyLiveKeys && !liveSharedAppStateKeys.has(key)) continue;
           const value = entry && typeof entry === "object" && Object.prototype.hasOwnProperty.call(entry, "value")
             ? entry.value
@@ -19633,10 +20553,22 @@
           if (updatedAt) {
             sharedAppStateUpdatedAtRef.current[key] = updatedAt;
           }
+
+          const recent = (recentBuyerSavesRef.current && recentBuyerSavesRef.current[key]) || 0;
+          const skipRecent = buyerPersonalStorageKeys.has(key) && Date.now() - recent < 5000; // 5s grace to avoid race with recent local save
+          if (skipRecent) {
+            console.debug && console.debug("[applySharedStateSnapshot] skip applying recent buyer key", { key });
+            continue;
+          }
+
           applySharedStateUpdate(key, value);
           try {
             if (typeof window !== "undefined" && window.localStorage) {
-              window.localStorage.setItem(key, JSON.stringify(value));
+                if (buyerPersonalStorageKeys.has(key)) {
+                  writeBuyerLocalStorage(key, value, buyerSession);
+                } else {
+                  window.localStorage.setItem(key, JSON.stringify(value));
+                }
             }
           } catch {
             // ignore local cache write failures
@@ -19761,45 +20693,139 @@
       };
     }, [applySharedStateSnapshot]);
 
-    useEffect(() => {
-      try {
-        window.localStorage &&
-          window.localStorage.setItem(drivexStorageKeys.profile, JSON.stringify(profile));
-      } catch {
-        // ignore
+    const applyBuyerSession = useCallback((session) => {
+      const nextSession = normalizeBuyerSession(session);
+      if (nextSession.authenticated && nextSession.id !== buyerSession?.id) {
+        buyerStateReadyRef.current = false;
+        setProfile(createDefaultBuyerProfile());
+        setUserGarageCars([]);
+        setActiveCarId("");
+        setUserSavedPlaces([]);
+        setDocuments(createEmptyDocumentsState());
+        setMaintenance(createEmptyMaintenanceState());
+        setBuyerOrders([]);
+        setOrderChats({});
+        setCart({});
       }
-      if (sharedAppStateReadyRef.current) saveSharedAppState(drivexStorageKeys.profile, profile).catch(() => {});
-    }, [profile]);
+      setBuyerSession(nextSession);
+      setProfile((prev) => buyerSessionToProfile(nextSession, prev));
+      return nextSession;
+    }, [buyerSession?.id]);
+
+    const applyBuyerAppState = useCallback(
+      (state) => {
+        if (!state || typeof state !== "object") return;
+        applySharedStateSnapshot(state, { includeBuyerPersonal: true });
+        buyerStateReadyRef.current = true;
+      },
+      [applySharedStateSnapshot]
+    );
+
+    useEffect(() => {
+      const client = getSupabaseClient();
+      setBuyerAuthStatus(getBuyerAuthStatus());
+      if (!client) return;
+
+      let cancelled = false;
+      client.auth
+        .getSession()
+        .then(({ data }) => {
+          if (cancelled || !data?.session?.user) return;
+          const session = applyBuyerSession(makeBuyerSessionFromSupabaseUser(data.session.user));
+          fetchBuyerAppState(session).then((state) => !cancelled && applyBuyerAppState(state)).catch(() => {});
+        })
+        .catch(() => {});
+
+      const subscription = client.auth.onAuthStateChange((_event, session) => {
+        if (cancelled) return;
+        if (session?.user) {
+          const nextSession = applyBuyerSession(makeBuyerSessionFromSupabaseUser(session.user));
+          fetchBuyerAppState(nextSession).then((state) => !cancelled && applyBuyerAppState(state)).catch(() => {});
+        } else {
+          buyerStateReadyRef.current = !getSupabaseClient();
+          setBuyerSession(createEmptyBuyerSession());
+        }
+      });
+
+      return () => {
+        cancelled = true;
+        const sub = subscription?.data?.subscription || subscription?.subscription;
+        if (sub && typeof sub.unsubscribe === "function") sub.unsubscribe();
+      };
+    }, [applyBuyerAppState, applyBuyerSession]);
 
     useEffect(() => {
       try {
-        window.localStorage &&
-          window.localStorage.setItem(drivexStorageKeys.activeCar, JSON.stringify(activeCarId));
+        if (window.localStorage) {
+          if (buyerSession?.authenticated) {
+            window.localStorage.setItem(drivexStorageKeys.buyerSession, JSON.stringify(buyerSession));
+          } else {
+            window.localStorage.removeItem(drivexStorageKeys.buyerSession);
+          }
+        }
       } catch {
-        // ignore
+        // ignore buyer session persistence errors
       }
-      if (sharedAppStateReadyRef.current) saveSharedAppState(drivexStorageKeys.activeCar, activeCarId).catch(() => {});
-    }, [activeCarId]);
+    }, [buyerSession]);
 
     useEffect(() => {
-      try {
-        window.localStorage &&
-          window.localStorage.setItem(drivexStorageKeys.documents, JSON.stringify(documents));
-      } catch {
-        toast.push("Не удалось сохранить документы");
-      }
-      if (sharedAppStateReadyRef.current) saveSharedAppState(drivexStorageKeys.documents, documents).catch(() => {});
-    }, [documents, toast]);
+      pushBuyerState(drivexStorageKeys.profile, profile);
+    }, [profile, pushBuyerState]);
 
     useEffect(() => {
-      try {
-        window.localStorage &&
-          window.localStorage.setItem(drivexStorageKeys.maintenance, JSON.stringify(maintenance));
-      } catch {
-        toast.push("Не удалось сохранить журнал обслуживания");
+      pushBuyerState(drivexStorageKeys.buyerGarage, userGarageCars);
+    }, [pushBuyerState, userGarageCars]);
+
+    useEffect(() => {
+      const currentExists = userGarageCars.some((car) => car.id === activeCarId);
+      if (!currentExists) {
+        setActiveCarId(userGarageCars[0]?.id || "");
       }
-      if (sharedAppStateReadyRef.current) saveSharedAppState(drivexStorageKeys.maintenance, maintenance).catch(() => {});
-    }, [maintenance, toast]);
+
+      setDocuments((prev) => {
+        const current = prev && typeof prev === "object" ? prev : createEmptyDocumentsState();
+        const nextCars = {};
+        for (const car of userGarageCars) {
+          const carDocs = current.cars && current.cars[car.id] ? current.cars[car.id] : {};
+          nextCars[car.id] = {
+            registration: normalizeDocumentItem(carDocs.registration, `Техпаспорт ${car.name}`),
+            inspection: normalizeDocumentItem(carDocs.inspection, `Техосмотр ${car.name}`)
+          };
+        }
+        return { license: normalizeDocumentItem(current.license, "Права"), cars: nextCars };
+      });
+
+      setMaintenance((prev) => {
+        const current = prev && typeof prev === "object" ? prev : createEmptyMaintenanceState();
+        const nextCars = {};
+        for (const car of userGarageCars) {
+          const carState = current.cars && current.cars[car.id] ? current.cars[car.id] : {};
+          nextCars[car.id] = {
+            records: (Array.isArray(carState.records) ? carState.records : [])
+              .map((item) => normalizeMaintenanceRecord(item))
+              .filter(Boolean),
+            inspection: normalizeInspection(carState.inspection)
+          };
+        }
+        return { cars: nextCars };
+      });
+    }, [activeCarId, userGarageCars]);
+
+    useEffect(() => {
+      pushBuyerState(drivexStorageKeys.savedPlaces, userSavedPlaces);
+    }, [pushBuyerState, userSavedPlaces]);
+
+    useEffect(() => {
+      pushBuyerState(drivexStorageKeys.activeCar, activeCarId);
+    }, [activeCarId, pushBuyerState]);
+
+    useEffect(() => {
+      pushBuyerState(drivexStorageKeys.documents, documents);
+    }, [documents, pushBuyerState]);
+
+    useEffect(() => {
+      pushBuyerState(drivexStorageKeys.maintenance, maintenance);
+    }, [maintenance, pushBuyerState]);
 
     useEffect(() => {
       try {
@@ -20056,24 +21082,12 @@
     }, [serviceCenter, serviceSession.serviceCenterId]);
 
     useEffect(() => {
-      try {
-        window.localStorage &&
-          window.localStorage.setItem(drivexStorageKeys.buyerOrders, JSON.stringify(buyerOrders));
-      } catch {
-        toast.push("Не удалось сохранить историю заказов");
-      }
-      if (sharedAppStateReadyRef.current) saveSharedAppState(drivexStorageKeys.buyerOrders, buyerOrders).catch(() => {});
-    }, [buyerOrders, toast]);
+      pushBuyerState(drivexStorageKeys.buyerOrders, buyerOrders);
+    }, [buyerOrders, pushBuyerState]);
 
     useEffect(() => {
-      try {
-        window.localStorage &&
-          window.localStorage.setItem(drivexStorageKeys.orderChats, JSON.stringify(orderChats));
-      } catch {
-        toast.push("Не удалось сохранить чат заказов");
-      }
-      if (sharedAppStateReadyRef.current) saveSharedAppState(drivexStorageKeys.orderChats, orderChats).catch(() => {});
-    }, [orderChats, toast]);
+      pushBuyerState(drivexStorageKeys.orderChats, orderChats);
+    }, [orderChats, pushBuyerState]);
 
     useEffect(() => {
       const normalizedCatalog = normalizeMarketplacePartnerCatalog(marketplacePartnerCatalog);
@@ -20184,14 +21198,18 @@
             : avatarRaw.startsWith("data:image/") && avatarRaw.length <= 500000
               ? avatarRaw
               : prev.avatar;
-        return {
+
+        const nextProfile = {
           name: String(name || "").trim() || prev.name,
           phone: String(phone || "").trim() || prev.phone,
           email: String(email || "").trim() || prev.email,
           avatar
         };
+
+        pushBuyerState(drivexStorageKeys.profile, nextProfile);
+        return nextProfile;
       });
-    }, []);
+    }, [pushBuyerState]);
 
     const documentsTotalCount = useMemo(() => {
       return countDocumentsState(documents);
@@ -20199,6 +21217,33 @@
 
     const selectActiveCar = useCallback((carId) => {
       setActiveCarId(ensureCarId(carId));
+    }, []);
+
+    const addGarageCar = useCallback((car) => {
+      const normalized = normalizeGarageCar(car);
+      if (!normalized) return;
+      setUserGarageCars((prev) => {
+        const current = normalizeGarageList(prev);
+        return [normalized, ...current.filter((item) => item.id !== normalized.id)];
+      });
+      setActiveCarId(normalized.id);
+    }, []);
+
+    const removeGarageCar = useCallback((carId) => {
+      const safeId = String(carId || "");
+      if (!safeId) return;
+      setUserGarageCars((prev) => normalizeGarageList(prev).filter((car) => car.id !== safeId));
+    }, []);
+
+    const addSavedPlace = useCallback((place) => {
+      const normalized = normalizeSavedPlace(place);
+      if (!normalized) return;
+      setUserSavedPlaces((prev) => [normalized, ...normalizeSavedPlacesList(prev).filter((item) => item.id !== normalized.id)]);
+    }, []);
+
+    const removeSavedPlace = useCallback((placeId) => {
+      const safeId = String(placeId || "");
+      setUserSavedPlaces((prev) => normalizeSavedPlacesList(prev).filter((place) => place.id !== safeId));
     }, []);
 
     const setLicenseDocument = useCallback((doc) => {
@@ -20209,23 +21254,31 @@
         const nextDoc = normalizeDocumentItem(doc, "Права");
         if (!nextDoc) return prev;
 
-        return {
+        const nextState = {
           ...current,
           license: nextDoc
         };
+
+        console.debug && console.debug("[setLicenseDocument] saving license", { docId: nextDoc && nextDoc.id });
+        pushBuyerState(drivexStorageKeys.documents, nextState);
+        return nextState;
       });
-    }, []);
+    }, [pushBuyerState]);
 
     const removeLicenseDocument = useCallback(() => {
       setDocuments((prev) => {
         const current = prev && typeof prev === "object" ? prev : createEmptyDocumentsState();
         if (!current.license) return prev;
-        return {
+
+        const nextState = {
           ...current,
           license: null
         };
+
+        pushBuyerState(drivexStorageKeys.documents, nextState);
+        return nextState;
       });
-    }, []);
+    }, [pushBuyerState]);
 
     const setCarDocument = useCallback((carId, kind, doc) => {
       if (!carId || !kind) return;
@@ -20241,7 +21294,7 @@
         );
         if (!nextDoc) return prev;
 
-        return {
+        const nextState = {
           ...current,
           cars: {
             ...(current.cars || {}),
@@ -20251,8 +21304,12 @@
             }
           }
         };
+
+        console.debug && console.debug("[setCarDocument] saving", { carId, kind, docId: nextDoc && nextDoc.id });
+        pushBuyerState(drivexStorageKeys.documents, nextState);
+        return nextState;
       });
-    }, []);
+    }, [pushBuyerState]);
 
     const removeCarDocument = useCallback((carId, kind) => {
       if (!carId || !kind) return;
@@ -20263,7 +21320,7 @@
         const carDocs = current.cars && current.cars[carId] ? current.cars[carId] : null;
         if (!carDocs || !carDocs[kind]) return prev;
 
-        return {
+        const nextState = {
           ...current,
           cars: {
             ...(current.cars || {}),
@@ -20273,8 +21330,11 @@
             }
           }
         };
+
+        pushBuyerState(drivexStorageKeys.documents, nextState);
+        return nextState;
       });
-    }, []);
+    }, [pushBuyerState]);
 
     const maintenanceSpentTotal = useMemo(() => {
       return getMaintenanceSpentTotal(maintenance);
@@ -20384,6 +21444,120 @@
         };
       });
     }, []);
+
+    const registerBuyer = useCallback(
+      async (payload) => {
+        const email = String(payload?.email || "").trim().toLowerCase();
+        const password = String(payload?.password || "");
+        const name = String(payload?.name || "").trim();
+        const phone = String(payload?.phone || "").trim();
+        if (!email || !password || !name) throw new Error("Заполните имя, email и пароль");
+
+        const client = getSupabaseClient();
+        if (client) {
+          const { data, error } = await client.auth.signUp({
+            email,
+            password,
+            options: {
+              data: {
+                role: "buyer",
+                full_name: name,
+                phone
+              }
+            }
+          });
+          if (error) throw error;
+          const session = makeBuyerSessionFromSupabaseUser(data?.user);
+          applyBuyerSession(session);
+          buyerStateReadyRef.current = true;
+          navigateToHash("/profile");
+          return session;
+        }
+
+        const users = readLocalBuyerUsers();
+        const existing = users.find((user) => String(user.email || "").toLowerCase() === email);
+        if (existing) throw new Error("Пользователь с таким email уже есть");
+
+        const user = {
+          id: makeBuyerId(),
+          name,
+          phone,
+          email,
+          password,
+          role: "buyer",
+          createdAt: new Date().toISOString()
+        };
+        writeLocalBuyerUsers([user, ...users]);
+        const session = makeBuyerSessionFromLocalUser(user);
+        applyBuyerSession(session);
+        navigateToHash("/profile");
+        return session;
+      },
+      [applyBuyerSession]
+    );
+
+    const loginBuyer = useCallback(
+      async (payload) => {
+        const email = String(payload?.email || "").trim().toLowerCase();
+        const password = String(payload?.password || "");
+        if (!email || !password) throw new Error("Введите email и пароль");
+
+        const client = getSupabaseClient();
+        if (client) {
+          const { data, error } = await client.auth.signInWithPassword({ email, password });
+          if (error) throw error;
+          const session = makeBuyerSessionFromSupabaseUser(data?.user);
+          applyBuyerSession(session);
+          const state = await fetchBuyerAppState(session).catch(() => null);
+          if (state) {
+            applyBuyerAppState(state);
+          } else {
+            buyerStateReadyRef.current = true;
+          }
+          navigateToHash("/profile");
+          return session;
+        }
+
+        const user = readLocalBuyerUsers().find(
+          (entry) => String(entry.email || "").toLowerCase() === email && String(entry.password || "") === password
+        );
+        if (!user) throw new Error("Неверный email или пароль");
+
+        const session = makeBuyerSessionFromLocalUser(user);
+        applyBuyerSession(session);
+        navigateToHash("/profile");
+        return session;
+      },
+      [applyBuyerAppState, applyBuyerSession]
+    );
+
+    const logoutBuyer = useCallback(async () => {
+      const client = getSupabaseClient();
+      if (client) {
+        await client.auth.signOut().catch(() => {});
+      }
+      clearBuyerLocalStorageForSession(buyerSession);
+      try {
+        if (window.localStorage) {
+          window.localStorage.removeItem(drivexStorageKeys.buyerSession);
+        }
+      } catch {
+        // ignore
+      }
+      setBuyerSession(createEmptyBuyerSession());
+      buyerStateReadyRef.current = !getSupabaseClient();
+      setProfile(createDefaultBuyerProfile());
+      setUserGarageCars([]);
+      setUserSavedPlaces([]);
+      setActiveCarId("");
+      setDocuments({ license: null, cars: {} });
+      setMaintenance({ cars: {} });
+      setBuyerOrders([]);
+      setOrderChats({});
+      setCart({});
+      navigateToHash("/login");
+      toast.push("Вы вышли из аккаунта");
+    }, [buyerSession, toast]);
 
     const registerSeller = useCallback(
       async (payload) => {
@@ -21328,13 +22502,8 @@
     }, [buyerOrders]);
 
     useEffect(() => {
-      try {
-        window.localStorage && window.localStorage.setItem(drivexStorageKeys.cart, JSON.stringify(cart));
-      } catch {
-        // ignore
-      }
-      if (sharedAppStateReadyRef.current) saveSharedAppState(drivexStorageKeys.cart, cart).catch(() => {});
-    }, [cart]);
+      pushBuyerState(drivexStorageKeys.cart, cart);
+    }, [cart, pushBuyerState]);
 
     const setCartQty = useCallback((productOrCartKey, qty, fallbackStoreId = "") => {
       const parsedKey = parseMarketCartKey(productOrCartKey);
@@ -21535,6 +22704,8 @@
     const isPartnerRoute = normalized === "/partner/login" || normalized === "/partner/register";
     const isSellerRoute = normalized === "/seller" || normalized.startsWith("/seller/");
     const isServiceCrmRoute = normalized === "/service-crm" || normalized.startsWith("/service-crm/");
+    const isBuyerAuthRoute = normalized === "/login" || normalized === "/register";
+    const buyerIsAuthenticated = Boolean(buyerSession?.authenticated);
     const sellerCurrentProfile = normalizeSellerProfile(effectiveSellerProfile, effectiveSellerSession);
     const sellerCurrentStore = normalizeSellerStore(
       effectiveSellerStore,
@@ -21595,7 +22766,33 @@
 
     // Оставляем партнёрский логин внутри partner.html, не редиректим в seller
 
-    if (isPartnerRoute) {
+    if (isBuyerAuthRoute) {
+      activePath = "/profile";
+      content = buyerIsAuthenticated
+        ? html`<${ProfileScreen}
+            notificationsCount=${notificationsCount}
+            profile=${profile}
+            documents=${documents}
+            documentsTotalCount=${documentsTotalCount}
+            maintenance=${maintenance}
+            ordersCount=${buyerActiveOrdersCount || buyerOrders.length}
+            onLogout=${logoutBuyer}
+          />`
+        : html`<${BuyerAuthScreen}
+            mode=${normalized === "/login" ? "login" : "register"}
+            authStatus=${buyerAuthStatus}
+            onLogin=${loginBuyer}
+            onRegister=${registerBuyer}
+          />`;
+    } else if (!buyerIsAuthenticated && !isPartnerRoute && !isSellerRoute && !isServiceCrmRoute) {
+      activePath = "/profile";
+      content = html`<${BuyerAuthScreen}
+        mode="register"
+        authStatus=${buyerAuthStatus}
+        onLogin=${loginBuyer}
+        onRegister=${registerBuyer}
+      />`;
+    } else if (isPartnerRoute) {
       activePath = "/partner";
 
       if (normalized === "/partner/register") {
@@ -21904,6 +23101,7 @@
         documentsTotalCount=${documentsTotalCount}
         maintenance=${maintenance}
         ordersCount=${buyerActiveOrdersCount || buyerOrders.length}
+        onLogout=${logoutBuyer}
       />`;
     } else {
       const serviceBookingMatch = normalized.match(/^\/service\/([^/]+)\/book$/);
@@ -21953,7 +23151,11 @@
         />`;
       } else if (normalized === "/documents") {
         activePath = "/profile";
-        content = html`<${DocumentsVaultScreen} documents=${documents} totalCount=${documentsTotalCount} />`;
+        content = html`<${DocumentsVaultScreen}
+          documents=${documents}
+          totalCount=${documentsTotalCount}
+          authStatus=${buyerAuthStatus}
+        />`;
       } else if (normalized === "/documents/license") {
         activePath = "/profile";
         content = html`<${LicenseDocumentScreen}
@@ -22006,10 +23208,15 @@
         />`;
       } else if (normalized === "/garage") {
         activePath = "/profile";
-        content = html`<${GarageScreen} activeCarId=${activeCarId} onSelectCar=${selectActiveCar} />`;
+        content = html`<${GarageScreen}
+          activeCarId=${activeCarId}
+          onSelectCar=${selectActiveCar}
+          onAddCar=${addGarageCar}
+          onRemoveCar=${removeGarageCar}
+        />`;
       } else if (normalized === "/smart-care") {
         activePath = "/profile";
-        content = html`<${SmartCareScreen} />`;
+        content = html`<${SmartCareScreen} maintenance=${maintenance} activeCarId=${activeCarId} />`;
       } else if (normalized === "/ai-assistant") {
         activePath = "/";
         content = html`<${AIAssistantScreen}
@@ -22049,7 +23256,11 @@
         content = html`<${TripsScreen} />`;
       } else if (normalized === "/saved-locations") {
         activePath = "/profile";
-        content = html`<${SavedLocationsScreen} />`;
+        content = html`<${SavedLocationsScreen}
+          places=${userSavedPlaces}
+          onAddPlace=${addSavedPlace}
+          onRemovePlace=${removeSavedPlace}
+        />`;
       } else if (normalized === "/settings") {
         activePath = "/profile";
         content = html`<${SettingsScreen} />`;
