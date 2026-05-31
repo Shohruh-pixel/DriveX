@@ -1,0 +1,577 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>DRIVEX — Превью дизайна</title>
+<style>
+  :root{
+    --black:#0a0a0f;--white:#f0f4ff;--silver:#94a3b8;
+    --cyan:#06b6d4;--blue:#0ea5e9;--success:#10b981;
+    --warn:#f59e0b;--danger:#ef4444;--purple:#8b5cf6;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#1a1a2e;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+       display:flex;gap:32px;justify-content:center;padding:32px 16px;flex-wrap:wrap;min-height:100vh}
+
+  /* ─── Телефон-обёртка ─── */
+  .phone{
+    width:375px;min-height:812px;background:var(--black);border-radius:44px;
+    overflow:hidden;position:relative;box-shadow:0 40px 120px rgba(0,0,0,0.8),
+    inset 0 0 0 2px rgba(255,255,255,0.08);flex-shrink:0
+  }
+  .phone-label{color:#94a3b8;font-size:13px;font-weight:700;text-align:center;
+               letter-spacing:.15em;margin-bottom:16px;opacity:.7}
+
+  /* ─── Glass ─── */
+  .glass{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.09);border-radius:24px}
+  .glass-cyan{background:rgba(6,182,212,.08);border:1px solid rgba(6,182,212,.22);border-radius:24px}
+
+  /* ─── Scrollable content ─── */
+  .screen{height:812px;overflow-y:auto;scrollbar-width:none}
+  .screen::-webkit-scrollbar{display:none}
+  .content{padding:16px;display:flex;flex-direction:column;gap:14px;padding-bottom:90px}
+
+  /* ─── Header ─── */
+  .header{
+    position:sticky;top:0;z-index:50;
+    background:rgba(10,10,15,.95);backdrop-filter:blur(20px);
+    border-bottom:1px solid rgba(255,255,255,.07);
+    padding:14px 16px;display:flex;align-items:center;justify-content:space-between
+  }
+  .logo{font-size:20px;font-weight:900;color:var(--white);letter-spacing:-.02em}
+  .logo span{color:var(--cyan)}
+  .header-right{display:flex;align-items:center;gap:8px}
+
+  /* ─── Язык switcher ─── */
+  .lang-btn{
+    display:flex;align-items:center;gap:6px;
+    padding:6px 12px;border-radius:20px;
+    background:rgba(6,182,212,.1);border:1px solid rgba(6,182,212,.25);
+    color:var(--cyan);font-size:13px;font-weight:700;cursor:pointer;
+    position:relative
+  }
+  .lang-dropdown{
+    position:absolute;top:calc(100% + 8px);right:0;
+    background:#111827;border:1px solid rgba(255,255,255,.1);border-radius:16px;
+    overflow:hidden;z-index:100;min-width:140px;display:none
+  }
+  .lang-btn:hover .lang-dropdown{display:block}
+  .lang-item{display:flex;align-items:center;gap:10px;padding:12px 14px;
+             color:var(--silver);font-size:14px;cursor:pointer;transition:.15s}
+  .lang-item:hover{background:rgba(6,182,212,.1);color:var(--white)}
+  .lang-item.active{color:var(--cyan);font-weight:700}
+  .flag{font-size:18px}
+
+  /* ─── Bell ─── */
+  .bell{position:relative;width:36px;height:36px;border-radius:12px;
+        background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08);
+        display:flex;align-items:center;justify-content:center;font-size:18px;cursor:pointer}
+  .bell-badge{position:absolute;top:-3px;right:-3px;width:16px;height:16px;
+              background:var(--danger);border-radius:50%;font-size:10px;font-weight:700;
+              color:#fff;display:flex;align-items:center;justify-content:center}
+
+  /* ─── Smart Dashboard ─── */
+  .smart-card{
+    background:linear-gradient(135deg,rgba(6,182,212,.15),rgba(14,165,233,.1));
+    border:1px solid rgba(6,182,212,.25);border-radius:24px;padding:18px;
+    position:relative;overflow:hidden
+  }
+  .smart-card::before{
+    content:'';position:absolute;top:-40px;right:-40px;width:140px;height:140px;
+    background:radial-gradient(circle,rgba(6,182,212,.15),transparent 70%);pointer-events:none
+  }
+  .smart-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+  .smart-badge{display:flex;align-items:center;gap:8px}
+  .smart-icon{width:36px;height:36px;border-radius:12px;
+              background:rgba(6,182,212,.2);display:flex;align-items:center;justify-content:center;font-size:18px}
+  .smart-title{font-size:11px;font-weight:700;color:var(--cyan);letter-spacing:.12em}
+  .smart-sub{font-size:10px;color:var(--silver)}
+  .advice-btn{padding:6px 14px;border-radius:20px;
+              background:linear-gradient(135deg,var(--cyan),var(--blue));
+              color:#000;font-size:12px;font-weight:800;border:none;cursor:pointer;white-space:nowrap}
+  .smart-desc{font-size:13px;color:rgba(240,244,255,.7);margin-bottom:12px}
+  .temp-row{display:flex;align-items:flex-end;gap:16px;margin-bottom:12px}
+  .temp{font-size:36px;font-weight:800;color:var(--white)}
+  .live-badge{display:flex;align-items:center;gap:4px;padding:3px 8px;border-radius:20px;
+              background:rgba(16,185,129,.15);border:1px solid rgba(16,185,129,.25)}
+  .live-dot{width:6px;height:6px;border-radius:50%;background:var(--success);
+            animation:pulse 1.5s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+  .live-text{font-size:10px;font-weight:700;color:var(--success)}
+  .live-desc{font-size:12px;color:var(--silver);flex:1}
+  .health-row{display:flex;justify-content:space-between;margin-bottom:6px}
+  .health-label{font-size:11px;color:var(--silver)}
+  .health-pct{font-size:11px;font-weight:700;color:var(--cyan)}
+  .health-bar{height:5px;background:rgba(255,255,255,.1);border-radius:10px;overflow:hidden;margin-bottom:10px}
+  .health-fill{height:100%;background:linear-gradient(90deg,var(--cyan),var(--blue));border-radius:10px;width:100%}
+  .swipe-hint{font-size:11px;color:rgba(255,255,255,.3);display:flex;align-items:center;justify-content:space-between}
+  .dots{display:flex;gap:4px}
+  .dot{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.2)}
+  .dot.active{background:var(--cyan);width:16px;border-radius:4px}
+
+  /* ─── Quick Actions ─── */
+  .section-title{font-size:13px;font-weight:700;color:var(--silver);letter-spacing:.04em}
+  .quick-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .quick-card{
+    background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);
+    border-radius:20px;padding:16px;display:flex;align-items:center;gap:12px;cursor:pointer;
+    transition:.2s
+  }
+  .quick-card:hover{background:rgba(255,255,255,.08);transform:scale(1.02)}
+  .quick-icon{width:42px;height:42px;border-radius:14px;
+              display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0}
+  .quick-label{color:var(--white);font-weight:600;font-size:14px}
+
+  /* ─── Services ─── */
+  .section-header{display:flex;align-items:center;justify-content:space-between}
+  .see-all{color:var(--cyan);font-size:13px;font-weight:700;cursor:pointer;background:none;border:none}
+  .service-card{
+    background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);
+    border-radius:20px;overflow:hidden;cursor:pointer
+  }
+  .service-img{width:100%;height:140px;object-fit:cover;background:rgba(255,255,255,.05);
+               display:flex;align-items:center;justify-content:center;font-size:48px}
+  .service-body{padding:14px}
+  .service-tag{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;
+               font-weight:700;margin-bottom:8px}
+  .service-name{font-size:16px;font-weight:800;color:var(--white);margin-bottom:4px}
+  .service-meta{font-size:12px;color:var(--silver);display:flex;align-items:center;gap:8px;margin-bottom:10px}
+  .rating{color:#fbbf24;font-weight:700}
+  .service-chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+  .chip{padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600;
+        background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);color:var(--silver)}
+  .chip.cyan{background:rgba(6,182,212,.1);border-color:rgba(6,182,212,.2);color:var(--cyan)}
+  .service-bottom{display:flex;align-items:center;justify-content:space-between}
+  .open-now{font-size:12px;color:var(--success);font-weight:600}
+  .book-btn{padding:8px 18px;border-radius:16px;
+            background:linear-gradient(135deg,var(--cyan),var(--blue));
+            color:#000;font-weight:800;font-size:13px;border:none;cursor:pointer}
+  .best-label{
+    position:absolute;top:10px;left:10px;
+    background:#fbbf24;color:#000;font-size:10px;font-weight:800;
+    padding:4px 10px;border-radius:20px
+  }
+
+  /* ─── Market preview ─── */
+  .market-banner{
+    background:linear-gradient(135deg,rgba(6,182,212,.1),rgba(14,165,233,.15));
+    border:1px solid rgba(6,182,212,.2);border-radius:24px;padding:18px;cursor:pointer
+  }
+  .market-title{font-size:16px;font-weight:800;color:var(--white);margin-bottom:6px}
+  .market-sub{font-size:13px;color:var(--silver)}
+  .market-badges{display:flex;gap:6px;margin-top:12px;flex-wrap:wrap}
+  .m-badge{padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;
+           background:rgba(255,255,255,.07);color:var(--silver)}
+
+  /* ─── Bottom nav ─── */
+  .bottom-nav{
+    position:absolute;bottom:0;left:0;right:0;
+    background:rgba(10,10,15,.95);backdrop-filter:blur(20px);
+    border-top:1px solid rgba(255,255,255,.07);
+    display:flex;padding:10px 0 20px
+  }
+  .nav-item{flex:1;display:flex;flex-direction:column;align-items:center;
+            gap:4px;cursor:pointer;transition:.2s}
+  .nav-icon{font-size:24px;line-height:1}
+  .nav-label{font-size:10px;font-weight:600;color:var(--silver)}
+  .nav-item.active .nav-label{color:var(--cyan)}
+  .nav-item.active .nav-icon{filter:drop-shadow(0 0 8px rgba(6,182,212,.6))}
+
+  /* ─── Кнопки ─── */
+  .btn-primary{
+    display:inline-flex;align-items:center;justify-content:center;gap:8px;
+    padding:14px 20px;border-radius:20px;width:100%;
+    background:linear-gradient(135deg,var(--cyan),var(--blue));
+    color:#000;font-weight:800;font-size:15px;border:none;cursor:pointer
+  }
+  .btn-secondary{
+    display:inline-flex;align-items:center;justify-content:center;gap:8px;
+    padding:14px 20px;border-radius:20px;
+    background:rgba(6,182,212,.12);border:1px solid rgba(6,182,212,.25);
+    color:var(--cyan);font-weight:700;font-size:14px;cursor:pointer
+  }
+
+  /* ─── Заголовок страницы превью ─── */
+  .page-title{
+    color:#fff;font-size:28px;font-weight:900;text-align:center;
+    width:100%;letter-spacing:-.02em;margin-bottom:8px
+  }
+  .page-sub{color:#94a3b8;font-size:15px;text-align:center;width:100%;margin-bottom:32px}
+  .screens-row{display:flex;gap:32px;justify-content:center;flex-wrap:wrap;width:100%}
+
+  /* ─── Маркер «тот же» / «новое» ─── */
+  .same-badge{background:rgba(16,185,129,.15);border:1px solid rgba(16,185,129,.3);
+              color:#10b981;font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;
+              display:inline-block;margin-bottom:8px}
+  .new-badge{background:rgba(251,191,36,.15);border:1px solid rgba(251,191,36,.3);
+             color:#fbbf24;font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;
+             display:inline-block;margin-bottom:8px}
+
+  /* ─── Info panel ─── */
+  .info-panel{
+    background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);
+    border-radius:24px;padding:24px;max-width:360px;
+    display:flex;flex-direction:column;gap:14px
+  }
+  .info-title{color:#fff;font-size:18px;font-weight:800}
+  .info-row{display:flex;align-items:flex-start;gap:12px}
+  .info-icon{font-size:24px;flex-shrink:0;margin-top:2px}
+  .info-text{color:#94a3b8;font-size:14px;line-height:1.5}
+  .info-text strong{color:#f0f4ff}
+
+  /* Адаптив */
+  @media(max-width:600px){
+    body{padding:16px 8px;gap:20px}
+    .phone{width:100%;max-width:375px}
+  }
+</style>
+</head>
+<body>
+
+<div class="page-title">🎨 DRIVEX — Дизайн после разбивки кода</div>
+<div class="page-sub">Дизайн, иконки, кнопки — ВСЁ то же самое. Добавляется только переключатель языка.</div>
+
+<div class="screens-row">
+
+<!-- ══════════════════════════════════
+     ЭКРАН 1 — Главная (Гость)
+═══════════════════════════════════ -->
+<div>
+  <div class="phone-label">📱 Главная — Гость</div>
+  <div class="phone">
+    <div class="screen">
+
+      <!-- Header -->
+      <div class="header">
+        <div class="logo">DRIVE<span>X</span></div>
+        <div class="header-right">
+          <!-- НОВЫЙ: переключатель языка -->
+          <div class="lang-btn">
+            <span class="flag">🇷🇺</span> RU ▾
+            <div class="lang-dropdown">
+              <div class="lang-item active"><span class="flag">🇷🇺</span> Русский</div>
+              <div class="lang-item"><span class="flag">🇹🇯</span> Тоҷикӣ</div>
+              <div class="lang-item"><span class="flag">🇬🇧</span> English</div>
+            </div>
+          </div>
+          <div class="bell">🔔<div class="bell-badge">3</div></div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div style="color:var(--silver);font-size:14px">Привет, Гость 👋</div>
+        <div style="color:var(--white);font-size:26px;font-weight:900;margin-top:-8px">DRIVEX</div>
+
+        <!-- Smart Dashboard -->
+        <div class="smart-card">
+          <div class="smart-top">
+            <div class="smart-badge">
+              <div class="smart-icon">☀️</div>
+              <div>
+                <div class="smart-title">SMART DASHBOARD</div>
+                <div class="smart-sub">Status: Weather</div>
+              </div>
+            </div>
+            <button class="advice-btn">Советы по вождению</button>
+          </div>
+          <div class="smart-desc">Погода спокойная. Дорожные условия без критических рисков.</div>
+          <div class="temp-row">
+            <div class="temp">22°C</div>
+            <div>
+              <div class="live-badge"><div class="live-dot"></div><div class="live-text">LIVE</div></div>
+              <div class="live-desc" style="margin-top:4px">Осадков нет. Обычный погодный сценарий.</div>
+            </div>
+          </div>
+          <div class="health-row"><div class="health-label">Health Bar</div><div class="health-pct">100%</div></div>
+          <div class="health-bar"><div class="health-fill"></div></div>
+          <div class="swipe-hint">
+            <span>Свайп влево или вправо</span>
+            <div class="dots"><div class="dot"></div><div class="dot active"></div><div class="dot"></div></div>
+          </div>
+        </div>
+
+        <!-- Быстрые действия -->
+        <div class="section-title">Быстрые действия</div>
+        <div class="quick-grid">
+          <div class="quick-card">
+            <div class="quick-icon" style="background:rgba(14,165,233,.15)">🔧</div>
+            <div class="quick-label">Ремонт</div>
+          </div>
+          <div class="quick-card">
+            <div class="quick-icon" style="background:rgba(6,182,212,.15)">🚗</div>
+            <div class="quick-label">Мой гараж</div>
+          </div>
+          <div class="quick-card">
+            <div class="quick-icon" style="background:rgba(239,68,68,.15)">🆘</div>
+            <div class="quick-label">SOS помощь</div>
+          </div>
+          <div class="quick-card">
+            <div class="quick-icon" style="background:rgba(245,158,11,.15)">🤖</div>
+            <div class="quick-label">AI помощник</div>
+          </div>
+        </div>
+
+        <!-- Сервисы -->
+        <div class="section-header">
+          <div class="section-title">Для твоей машины</div>
+          <button class="see-all">Все сервисы →</button>
+        </div>
+
+        <!-- Service card -->
+        <div class="service-card" style="position:relative">
+          <div class="service-img" style="background:linear-gradient(135deg,rgba(14,165,233,.2),rgba(6,182,212,.1))">
+            <span style="font-size:56px">🔧</span>
+          </div>
+          <div class="best-label">Лучший вариант рядом</div>
+          <div class="service-body">
+            <div class="service-tag" style="background:rgba(14,165,233,.15);color:var(--blue)">Электрика</div>
+            <div class="service-name">АвтоМастер Премиум</div>
+            <div class="service-meta">
+              Tajikistan • Автовокзал
+              <span class="rating">⭐ 4.8</span> 20 отзывов
+            </div>
+            <div class="service-chips">
+              <div class="chip cyan">Подходит для вашего авто</div>
+              <div class="chip">Новый сервис DRIVEX</div>
+            </div>
+            <div class="service-bottom">
+              <div class="open-now">Открыто сейчас · Ответ за 5 минут</div>
+              <button class="book-btn">Записаться</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Маркет -->
+        <div class="section-header">
+          <div class="section-title">Маркетплейс</div>
+          <button class="see-all">Открыть →</button>
+        </div>
+        <div class="market-banner">
+          <div class="market-title">🛍️ Автозапчасти и аксессуары</div>
+          <div class="market-sub">Масла, фильтры, шины — с доставкой по Худжанду</div>
+          <div class="market-badges">
+            <div class="m-badge">🛢️ Масла</div>
+            <div class="m-badge">🔘 Фильтры</div>
+            <div class="m-badge">⭕ Шины</div>
+            <div class="m-badge">🔋 АКБ</div>
+          </div>
+        </div>
+
+      </div><!-- /content -->
+
+      <!-- Bottom Nav -->
+      <div class="bottom-nav">
+        <div class="nav-item active"><div class="nav-icon">🏠</div><div class="nav-label">Главная</div></div>
+        <div class="nav-item"><div class="nav-icon">🗺️</div><div class="nav-label">Карта</div></div>
+        <div class="nav-item"><div class="nav-icon">🔧</div><div class="nav-label">Сервисы</div></div>
+        <div class="nav-item"><div class="nav-icon">🛍️</div><div class="nav-label">Маркет</div></div>
+        <div class="nav-item"><div class="nav-icon">👤</div><div class="nav-label">Профиль</div></div>
+      </div>
+    </div><!-- /screen -->
+  </div><!-- /phone -->
+  <div style="margin-top:16px;display:flex;flex-direction:column;gap:8px">
+    <div><span class="same-badge">✓ Тот же дизайн</span></div>
+    <div style="color:#94a3b8;font-size:13px">Smart Dashboard, карточки, кнопки — без изменений</div>
+    <div><span class="new-badge">★ Новое</span></div>
+    <div style="color:#94a3b8;font-size:13px">Переключатель языка в шапке (RU / TJ / EN)</div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════
+     ЭКРАН 2 — Таджикский язык
+═══════════════════════════════════ -->
+<div>
+  <div class="phone-label">📱 Тот же экран — Таджикский язык</div>
+  <div class="phone">
+    <div class="screen">
+      <div class="header">
+        <div class="logo">DRIVE<span>X</span></div>
+        <div class="header-right">
+          <div class="lang-btn" style="background:rgba(245,158,11,.1);border-color:rgba(245,158,11,.25);color:#fbbf24">
+            <span class="flag">🇹🇯</span> TJ ▾
+          </div>
+          <div class="bell">🔔<div class="bell-badge">3</div></div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div style="color:var(--silver);font-size:14px">Салом, Меҳмон 👋</div>
+        <div style="color:var(--white);font-size:26px;font-weight:900;margin-top:-8px">DRIVEX</div>
+
+        <div class="smart-card">
+          <div class="smart-top">
+            <div class="smart-badge">
+              <div class="smart-icon">☀️</div>
+              <div>
+                <div class="smart-title">SMART DASHBOARD</div>
+                <div class="smart-sub">Ҳолат: Обу ҳаво</div>
+              </div>
+            </div>
+            <button class="advice-btn">Маслиҳатҳо</button>
+          </div>
+          <div class="smart-desc">Ҳаво ором аст. Шароити роҳ хатари ҷиддӣ надорад.</div>
+          <div class="temp-row">
+            <div class="temp">22°C</div>
+            <div>
+              <div class="live-badge"><div class="live-dot"></div><div class="live-text">LIVE</div></div>
+              <div class="live-desc" style="margin-top:4px">Борон нест. Ҳавои муқаррарӣ.</div>
+            </div>
+          </div>
+          <div class="health-row"><div class="health-label">Health Bar</div><div class="health-pct">100%</div></div>
+          <div class="health-bar"><div class="health-fill"></div></div>
+          <div class="swipe-hint">
+            <span>Ба чап ё рост кашед</span>
+            <div class="dots"><div class="dot"></div><div class="dot active"></div><div class="dot"></div></div>
+          </div>
+        </div>
+
+        <div class="section-title">Амалҳои зуд</div>
+        <div class="quick-grid">
+          <div class="quick-card">
+            <div class="quick-icon" style="background:rgba(14,165,233,.15)">🔧</div>
+            <div class="quick-label">Таъмир</div>
+          </div>
+          <div class="quick-card">
+            <div class="quick-icon" style="background:rgba(6,182,212,.15)">🚗</div>
+            <div class="quick-label">Гаражи ман</div>
+          </div>
+          <div class="quick-card">
+            <div class="quick-icon" style="background:rgba(239,68,68,.15)">🆘</div>
+            <div class="quick-label">Ёрдами SOS</div>
+          </div>
+          <div class="quick-card">
+            <div class="quick-icon" style="background:rgba(245,158,11,.15)">🤖</div>
+            <div class="quick-label">Ёрдамчии AI</div>
+          </div>
+        </div>
+
+        <div class="section-header">
+          <div class="section-title">Барои мошини шумо</div>
+          <button class="see-all">Ҳама хизматҳо →</button>
+        </div>
+
+        <div class="service-card" style="position:relative">
+          <div class="service-img" style="background:linear-gradient(135deg,rgba(14,165,233,.2),rgba(6,182,212,.1))">
+            <span style="font-size:56px">🔧</span>
+          </div>
+          <div class="best-label">Беҳтарин вариант</div>
+          <div class="service-body">
+            <div class="service-tag" style="background:rgba(14,165,233,.15);color:var(--blue)">Барқ</div>
+            <div class="service-name">АвтоМастер Премиум</div>
+            <div class="service-meta">Тоҷикистон <span class="rating">⭐ 4.8</span> 20 шарҳ</div>
+            <div class="service-chips">
+              <div class="chip cyan">Мувофиқи мошини шумо</div>
+              <div class="chip">Хизмати нав</div>
+            </div>
+            <div class="service-bottom">
+              <div class="open-now">Ҳоло кушода · Ҷавоб дар 5 дақиқа</div>
+              <button class="book-btn">Сабт шудан</button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="bottom-nav">
+        <div class="nav-item active"><div class="nav-icon">🏠</div><div class="nav-label" style="color:var(--cyan)">Асосӣ</div></div>
+        <div class="nav-item"><div class="nav-icon">🗺️</div><div class="nav-label">Харита</div></div>
+        <div class="nav-item"><div class="nav-icon">🔧</div><div class="nav-label">Хизматҳо</div></div>
+        <div class="nav-item"><div class="nav-icon">🛍️</div><div class="nav-label">Бозор</div></div>
+        <div class="nav-item"><div class="nav-icon">👤</div><div class="nav-label">Профил</div></div>
+      </div>
+    </div>
+  </div>
+  <div style="margin-top:16px;display:flex;flex-direction:column;gap:8px">
+    <div><span class="same-badge">✓ Тот же дизайн</span></div>
+    <div style="color:#94a3b8;font-size:13px">Glassmorphism, цвета, иконки — не меняются</div>
+    <div><span class="new-badge">★ Переключено на TJ</span></div>
+    <div style="color:#94a3b8;font-size:13px">Весь текст на таджикском. Один клик в шапке.</div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════
+     ПАНЕЛЬ ИНФОРМАЦИИ
+═══════════════════════════════════ -->
+<div style="display:flex;flex-direction:column;gap:16px;max-width:320px;padding-top:40px">
+
+  <div class="info-panel">
+    <div class="info-title">📁 Структура кода</div>
+    <div class="info-row">
+      <div class="info-icon">📄</div>
+      <div class="info-text"><strong>app/core/</strong><br>Константы, утилиты, роутер, localStorage</div>
+    </div>
+    <div class="info-row">
+      <div class="info-icon">🌐</div>
+      <div class="info-text"><strong>app/i18n/</strong><br>ru.js, tj.js, en.js — переводы</div>
+    </div>
+    <div class="info-row">
+      <div class="info-icon">🎨</div>
+      <div class="info-text"><strong>app/shared/</strong><br>Кнопки, карточки, иконки — тот же код</div>
+    </div>
+    <div class="info-row">
+      <div class="info-icon">🔐</div>
+      <div class="info-text"><strong>app/auth/</strong><br>Вход, регистрация, OTP</div>
+    </div>
+    <div class="info-row">
+      <div class="info-icon">🚗</div>
+      <div class="info-text"><strong>app/garage/</strong><br>Машины, документы, ТО</div>
+    </div>
+    <div class="info-row">
+      <div class="info-icon">🛍️</div>
+      <div class="info-text"><strong>app/marketplace/</strong><br>Товары, корзина, заказы</div>
+    </div>
+    <div class="info-row">
+      <div class="info-icon">🏪</div>
+      <div class="info-text"><strong>app/seller-crm/</strong><br>Seller кабинет</div>
+    </div>
+    <div class="info-row">
+      <div class="info-icon">🔧</div>
+      <div class="info-text"><strong>app/partner-crm/</strong><br>Partner кабинет (СТО)</div>
+    </div>
+  </div>
+
+  <div class="info-panel">
+    <div class="info-title">🌐 Языки</div>
+    <div class="info-row">
+      <span class="flag" style="font-size:24px;flex-shrink:0">🇷🇺</span>
+      <div class="info-text"><strong>Русский</strong> — полный перевод (уже есть)</div>
+    </div>
+    <div class="info-row">
+      <span class="flag" style="font-size:24px;flex-shrink:0">🇹🇯</span>
+      <div class="info-text"><strong>Тоҷикӣ</strong> — полный перевод (новое)</div>
+    </div>
+    <div class="info-row">
+      <span class="flag" style="font-size:24px;flex-shrink:0">🇬🇧</span>
+      <div class="info-text"><strong>English</strong> — полный перевод (новое)</div>
+    </div>
+    <div style="background:rgba(6,182,212,.08);border:1px solid rgba(6,182,212,.2);border-radius:12px;padding:12px">
+      <div style="color:var(--cyan);font-size:13px;font-weight:700;margin-bottom:6px">Как переключить:</div>
+      <div style="color:var(--silver);font-size:13px">Нажать 🇷🇺 RU в шапке → выбрать язык → весь текст меняется мгновенно</div>
+    </div>
+  </div>
+
+  <div class="info-panel">
+    <div class="info-title">✅ Что НЕ меняется</div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div style="display:flex;gap:8px;align-items:center"><span style="color:var(--success);font-size:16px">✓</span><span style="color:var(--silver);font-size:14px">Glassmorphism дизайн</span></div>
+      <div style="display:flex;gap:8px;align-items:center"><span style="color:var(--success);font-size:16px">✓</span><span style="color:var(--silver);font-size:14px">Smart Dashboard / погода</span></div>
+      <div style="display:flex;gap:8px;align-items:center"><span style="color:var(--success);font-size:16px">✓</span><span style="color:var(--silver);font-size:14px">Все иконки и кнопки</span></div>
+      <div style="display:flex;gap:8px;align-items:center"><span style="color:var(--success);font-size:16px">✓</span><span style="color:var(--silver);font-size:14px">Seller CRM / Partner CRM</span></div>
+      <div style="display:flex;gap:8px;align-items:center"><span style="color:var(--success);font-size:16px">✓</span><span style="color:var(--silver);font-size:14px">Карта, маркет, AI</span></div>
+      <div style="display:flex;gap:8px;align-items:center"><span style="color:var(--success);font-size:16px">✓</span><span style="color:var(--silver);font-size:14px">Supabase, OTP, Firebase</span></div>
+      <div style="display:flex;gap:8px;align-items:center"><span style="color:var(--success);font-size:16px">✓</span><span style="color:var(--silver);font-size:14px">Все цвета и анимации</span></div>
+    </div>
+  </div>
+
+  <div style="background:linear-gradient(135deg,rgba(6,182,212,.1),rgba(14,165,233,.15));border:1px solid rgba(6,182,212,.25);border-radius:20px;padding:20px;text-align:center">
+    <div style="font-size:32px;margin-bottom:10px">👍</div>
+    <div style="color:var(--white);font-weight:800;font-size:16px;margin-bottom:8px">Всё одобряешь?</div>
+    <div style="color:var(--silver);font-size:13px">Если да — начинаю разбивать app.js на ~20 файлов + добавляю RU/TJ/EN переводы</div>
+  </div>
+
+</div>
+
+</div><!-- /screens-row -->
+</body>
+</html>

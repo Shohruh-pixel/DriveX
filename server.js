@@ -1,8 +1,10 @@
 "use strict";
 
 const http = require("http");
+const https = require("https");
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 const { handleAiRoute } = require("./src/ai/ai.router");
 
 const rootDir = __dirname;
@@ -484,6 +486,205 @@ function serveStatic(req, res) {
   });
 }
 
+// ─────────────────────────────────────────────────────
+// Telegram Bot OTP  (Phone → Telegram → OTP → Login)
+// Настройка:
+//   TELEGRAM_BOT_TOKEN=<токен от @BotFather>
+//   OTP_SECRET=<любая случайная строка>
+// Webhook: POST https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://yoursite.com/api/otp/telegram-webhook
+// ─────────────────────────────────────────────────────
+
+// otpStore: Map<phone, { code, expiresAt, used, telegramUserId? }>
+const otpStore = new Map();
+// phoneToTelegram: Map<phone, telegramUserId> — после того как пользователь написал боту
+const phoneToTelegram = new Map();
+
+// Telegram токен: только из .env (TELEGRAM_BOT_TOKEN=...)
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
+const TELEGRAM_BOT_NAME = process.env.TELEGRAM_BOT_NAME || "DriiiveX_Bot";
+const OTP_SECRET = process.env.OTP_SECRET || "drivex-otp-secret";
+const OTP_DEV_MODE = !TELEGRAM_BOT_TOKEN; // в dev-режиме возвращаем код напрямую
+
+function generateOtp() {
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
+
+function otpKey(phone) {
+  return phone.replace(/\D/g, "");
+}
+
+async function sendTelegramMessage(chatId, text) {
+  if (!TELEGRAM_BOT_TOKEN) return false;
+  return new Promise((resolve) => {
+    const body = JSON.stringify({ chat_id: chatId, text, parse_mode: "HTML" });
+    const options = {
+      hostname: "api.telegram.org",
+      path: `/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) }
+    };
+    const req = https.request(options, (res) => {
+      res.resume();
+      resolve(res.statusCode === 200);
+    });
+    req.on("error", () => resolve(false));
+    req.write(body);
+    req.end();
+  });
+}
+
+async function handleOtpSend(req, res) {
+  if (req.method !== "POST") { sendJson(res, 405, { error: "Method not allowed" }); return; }
+  let body;
+  try { body = await readJsonBody(req); } catch { sendJson(res, 400, { error: "Invalid JSON" }); return; }
+
+  const phone = cleanString(body.phone || "", 20).replace(/\s/g, "");
+  const digits = phone.replace(/\D/g, "");
+  if (digits.length < 9) { sendJson(res, 400, { error: "Неверный номер телефона" }); return; }
+
+  const code = generateOtp();
+  const expiresAt = Date.now() + 10 * 60 * 1000;
+  const key = otpKey(phone);
+  otpStore.set(key, { code, expiresAt, used: false });
+
+  const telegramUserId = phoneToTelegram.get(key);
+  let sent = false;
+  if (telegramUserId) {
+    sent = await sendTelegramMessage(
+      telegramUserId,
+      `🔐 <b>DRIVEX</b>\n\nВаш код входа: <code>${code}</code>\n\nДействует 10 минут. Никому не передавайте.`
+    );
+  }
+
+  if (OTP_DEV_MODE) {
+    // В dev-режиме код виден в ответе и в консоли сервера
+    console.info(`[OTP] dev-mode phone=${phone} code=${code}`);
+    sendJson(res, 200, { ok: true, testCode: code, dev: true, message: "DEV: код в ответе (для разработки)" });
+    return;
+  }
+
+  if (!sent) {
+    sendJson(res, 200, {
+      ok: true,
+      needTelegram: true,
+      botName: TELEGRAM_BOT_NAME,
+      message: `Напишите боту @${TELEGRAM_BOT_NAME} свой номер: ${phone} — он пришлёт код.`
+    });
+    return;
+  }
+
+  sendJson(res, 200, { ok: true, message: "Код отправлен в Telegram" });
+}
+
+async function handleOtpVerify(req, res) {
+  if (req.method !== "POST") { sendJson(res, 405, { error: "Method not allowed" }); return; }
+  let body;
+  try { body = await readJsonBody(req); } catch { sendJson(res, 400, { error: "Invalid JSON" }); return; }
+
+  const phone = cleanString(body.phone || "", 20);
+  const code = cleanString(body.code || "", 10);
+  const key = otpKey(phone);
+  const record = otpStore.get(key);
+
+  if (!record) { sendJson(res, 400, { error: "Код не найден или истёк. Запросите новый." }); return; }
+  if (record.used) { sendJson(res, 400, { error: "Код уже использован" }); return; }
+  if (Date.now() > record.expiresAt) {
+    otpStore.delete(key);
+    sendJson(res, 400, { error: "Код истёк. Запросите новый." });
+    return;
+  }
+  if (record.code !== code) { sendJson(res, 400, { error: "Неверный код" }); return; }
+
+  record.used = true;
+  otpStore.set(key, record);
+
+  // Опционально: если настроен Supabase service-role — создаём/возвращаем пользователя
+  const supabaseSession = await createOrSignInSupabaseUser(phone).catch(() => null);
+  sendJson(res, 200, {
+    ok: true,
+    phone,
+    ...(supabaseSession || {})
+  });
+}
+
+async function createOrSignInSupabaseUser(phone) {
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+  const supabaseUrl = process.env.SUPABASE_URL || "";
+  if (!serviceRoleKey || !supabaseUrl) return null;
+
+  // Используем Supabase Admin API для создания/получения пользователя
+  const adminRes = await new Promise((resolve) => {
+    const body = JSON.stringify({ phone, phone_confirm: true });
+    const url = new URL(`${supabaseUrl}/auth/v1/admin/users`);
+    const options = {
+      hostname: url.hostname,
+      path: url.pathname + url.search,
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: serviceRoleKey,
+        Authorization: `Bearer ${serviceRoleKey}`
+      }
+    };
+    const req = https.request(options, (res) => {
+      const chunks = [];
+      res.on("data", (c) => chunks.push(c));
+      res.on("end", () => {
+        try { resolve({ status: res.statusCode, data: JSON.parse(Buffer.concat(chunks).toString()) }); }
+        catch { resolve({ status: res.statusCode, data: {} }); }
+      });
+    });
+    req.on("error", () => resolve(null));
+    req.write(body);
+    req.end();
+  });
+
+  if (!adminRes) return null;
+  // Возвращаем userId (session токены выдаются через отдельный sign-in)
+  return { userId: adminRes.data?.id || adminRes.data?.user?.id };
+}
+
+// Обработка сообщений от Telegram бота
+// Когда пользователь пишет боту свой номер — бот запоминает его telegram_id
+async function handleTelegramWebhook(req, res) {
+  if (req.method !== "POST") { res.writeHead(405); res.end(); return; }
+  let body;
+  try { body = await readJsonBody(req); } catch { res.writeHead(400); res.end(); return; }
+
+  const message = body.message;
+  if (!message) { sendJson(res, 200, { ok: true }); return; }
+
+  const chatId = message.chat?.id;
+  const text = (message.text || "").trim();
+  const digits = text.replace(/\D/g, "");
+
+  // Пользователь прислал номер телефона
+  if (digits.length >= 9) {
+    const key = otpKey(text);
+    phoneToTelegram.set(key, chatId);
+
+    const record = otpStore.get(key);
+    if (record && !record.used && Date.now() <= record.expiresAt) {
+      await sendTelegramMessage(
+        chatId,
+        `🔐 <b>DRIVEX</b>\n\nВаш код входа: <code>${record.code}</code>\n\nДействует до истечения 10 минут.`
+      );
+    } else {
+      await sendTelegramMessage(
+        chatId,
+        "✅ Номер привязан!\n\nКогда запросите код в приложении — пришлю его сюда."
+      );
+    }
+  } else if (text === "/start" || text.startsWith("/start")) {
+    await sendTelegramMessage(
+      chatId,
+      "👋 Привет!\n\nЯ бот <b>DRIVEX</b>.\n\nОтправьте мне свой номер телефона в формате <code>+992XXXXXXXXX</code>, чтобы привязать его и получать коды входа."
+    );
+  }
+
+  sendJson(res, 200, { ok: true });
+}
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
 
@@ -514,6 +715,21 @@ const server = http.createServer(async (req, res) => {
 
   if (url.pathname === "/api/app-state") {
     await handleAppStateRoute(req, res);
+    return;
+  }
+
+  if (url.pathname === "/api/otp/send") {
+    await handleOtpSend(req, res);
+    return;
+  }
+
+  if (url.pathname === "/api/otp/verify") {
+    await handleOtpVerify(req, res);
+    return;
+  }
+
+  if (url.pathname === "/api/otp/telegram-webhook") {
+    await handleTelegramWebhook(req, res);
     return;
   }
 

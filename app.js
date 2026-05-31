@@ -109,6 +109,11 @@
   let garageCars = [];
   let savedPlaces = [];
 
+  // Живые данные из Supabase (перезаписываются после загрузки)
+  let _liveNearbyServices = null;      // service_centers из Supabase
+  let _liveRecommendedServices = null; // top-3 из service_centers
+  let _liveMarketProducts = null;      // products из Supabase
+
   const vehicleDocumentKinds = [
     {
       id: "registration",
@@ -2871,12 +2876,18 @@
     const phone = typeof source.phone === "string" ? source.phone.trim() : "";
     const name = typeof source.name === "string" ? source.name.trim() : "";
 
+    // Сохраняем роль если это seller/partner/admin, иначе buyer
+    const rawRole = typeof source.role === "string" ? source.role.trim() : "";
+    const role = (rawRole === "seller" || rawRole === "partner" || rawRole === "admin")
+      ? rawRole
+      : "buyer";
+
     return {
       id,
       name,
       phone,
       email,
-      role: "buyer",
+      role,
       provider: source.provider === "supabase" ? "supabase" : "local",
       authenticated: Boolean(source.authenticated && (id || email || phone))
     };
@@ -2917,7 +2928,8 @@
         auth: {
           persistSession: true,
           autoRefreshToken: true,
-          detectSessionInUrl: true
+          detectSessionInUrl: true,
+          storageKey: "drivex-auth"  // единый ключ — предотвращает Lock conflicts
         }
       });
     }
@@ -3008,7 +3020,7 @@
       name: safeUser.name || "",
       phone: safeUser.phone || "",
       email: safeUser.email || "",
-      role: "buyer",
+      role: safeUser.role || "buyer",  // сохраняем роль пользователя
       provider: "local",
       authenticated: true
     });
@@ -3016,12 +3028,17 @@
 
   function makeBuyerSessionFromSupabaseUser(user) {
     const metadata = user?.user_metadata && typeof user.user_metadata === "object" ? user.user_metadata : {};
+    // Читаем роль из user_metadata — продавец/партнёр не должны получать роль buyer
+    const metaRole = metadata.role || "";
+    const role = (metaRole === "seller" || metaRole === "partner" || metaRole === "admin")
+      ? metaRole
+      : "buyer";
     return normalizeBuyerSession({
       id: user?.id || "",
       name: metadata.full_name || metadata.name || "",
       phone: metadata.phone || user?.phone || "",
       email: user?.email || "",
-      role: "buyer",
+      role,
       provider: "supabase",
       authenticated: Boolean(user?.id)
     });
@@ -4832,11 +4849,12 @@
       catalogService,
       ...sharedCatalogServices
     ].filter(Boolean));
+    const effectiveRecommended = _liveRecommendedServices || recommendedServices;
     const featuredServices = catalogService
-      ? dedupeServicesById([...catalogServices, ...recommendedServices]).map((item) => decorateServiceRecord(item))
+      ? dedupeServicesById([...catalogServices, ...effectiveRecommended]).map((item) => decorateServiceRecord(item))
       : sharedCatalogServices.length
-        ? dedupeServicesById([...sharedCatalogServices, ...recommendedServices]).map((item) => decorateServiceRecord(item))
-        : recommendedServices.map((item) => decorateServiceRecord(item));
+        ? dedupeServicesById([...sharedCatalogServices, ...effectiveRecommended]).map((item) => decorateServiceRecord(item))
+        : effectiveRecommended.map((item) => decorateServiceRecord(item));
     const nearbyCatalogCards = catalogServices.map((item) => ({
       id: item.id,
       name: item.name,
@@ -4852,9 +4870,10 @@
       description: item.description,
       image: item.image
     }));
+    const effectiveNearby = _liveNearbyServices || nearbyServices;
     const nearbyRuntimeServices = nearbyCatalogCards.length
-      ? dedupeServicesById([...nearbyCatalogCards, ...nearbyServices]).map((item) => decorateServiceRecord(item))
-      : nearbyServices.map((item) => decorateServiceRecord(item));
+      ? dedupeServicesById([...nearbyCatalogCards, ...effectiveNearby]).map((item) => decorateServiceRecord(item))
+      : effectiveNearby.map((item) => decorateServiceRecord(item));
     const runtimeMapCatalogPoints = catalogServices.map((item) => ({
       id: item.id,
       type: "service",
@@ -9114,184 +9133,435 @@
     `;
   }
 
-  function BuyerAuthScreen({ mode = "register", authStatus, onLogin, onRegister }) {
+  // ─────────────────────────────────────────────────────────────────────
+  // BuyerAuthScreen — многошаговый вход/регистрация
+  // Шаги: role → phone → otp → profile → car
+  function BuyerAuthScreen({ mode = "register", authStatus, onLogin, onRegister, onPhoneAuth, onGuest }) {
     const toast = useToast();
-    const isLogin = mode === "login";
-    const [fullName, setFullName] = useState("");
+    const phoneAuth = window.DrivexPhoneAuth;
+    const botName = (phoneAuth && phoneAuth.BOT_NAME) || "DriiiveX_Bot";
+
+    // step: "role" | "phone" | "otp" | "profile" | "car"
+    const [step, setStep] = useState("role");
     const [phone, setPhone] = useState("");
-    const [email, setEmail] = useState("");
-    const [password, setPassword] = useState("");
-    const [confirmPassword, setConfirmPassword] = useState("");
+    const [otp, setOtp] = useState("");
+    const [otpMethod, setOtpMethod] = useState("server");
+    const [otpTestCode, setOtpTestCode] = useState("");
+    const [needTelegram, setNeedTelegram] = useState(false);
+    const [botNameState, setBotNameState] = useState(botName);
+    const [fullName, setFullName] = useState("");
+    const [carMake, setCarMake] = useState("");
+    const [carModel, setCarModel] = useState("");
+    const [carYear, setCarYear] = useState("");
     const [busy, setBusy] = useState(false);
-    const providerLabel = authStatus?.mode === "supabase" && authStatus?.configured ? "Supabase" : "Локальный режим";
+    const [verifiedPhone, setVerifiedPhone] = useState("");
+    const [verifiedUserId, setVerifiedUserId] = useState("");
 
-    const submit = useCallback(
-      async (event) => {
-        event.preventDefault();
-        if (busy) return;
+    const carOptions = [
+      { make: "Toyota",  models: ["Camry", "Corolla", "RAV4", "Prius", "Land Cruiser"] },
+      { make: "Chevrolet", models: ["Nexia", "Cobalt", "Lacetti", "Captiva"] },
+      { make: "Hyundai", models: ["Elantra", "Tucson", "Santa Fe", "Accent", "Sonata"] },
+      { make: "Kia",     models: ["Rio", "Sportage", "Ceed", "Optima"] },
+      { make: "Daewoo",  models: ["Matiz", "Nexia", "Lacetti"] },
+      { make: "BMW",     models: ["3 Series", "5 Series", "7 Series", "X5"] },
+      { make: "Mercedes",models: ["C-Class", "E-Class", "S-Class", "GLE"] },
+      { make: "Другое",  models: ["Другая модель"] }
+    ];
 
-        const payload = {
-          name: String(fullName || "").trim(),
-          phone: String(phone || "").trim(),
-          email: String(email || "").trim().toLowerCase(),
-          password: String(password || "")
-        };
+    const selectedMakeModels = (carOptions.find((o) => o.make === carMake) || carOptions[0]).models;
 
-        if (!payload.email) {
-          toast.push("Введите email");
-          return;
-        }
-        if (!payload.password || payload.password.length < 6) {
-          toast.push("Пароль должен быть от 6 символов");
-          return;
-        }
-        if (!isLogin && !payload.name) {
-          toast.push("Введите имя");
-          return;
-        }
-        if (!isLogin && payload.password !== confirmPassword) {
-          toast.push("Пароли не совпадают");
-          return;
-        }
+    const handleSendOtp = useCallback(async (e) => {
+      e.preventDefault();
+      if (busy) return;
+      const cleanPhone = String(phone || "").trim();
+      if (!cleanPhone || cleanPhone.replace(/\D/g, "").length < 9) {
+        toast.push("Введите корректный номер");
+        return;
+      }
+      setBusy(true);
+      try {
+        const result = phoneAuth
+          ? await phoneAuth.sendOtp(cleanPhone)
+          : await fetch("/api/otp/send", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ phone: cleanPhone })
+            }).then((r) => r.json());
 
-        setBusy(true);
-        try {
-          if (isLogin) {
-            await onLogin(payload);
-            toast.push("Вход выполнен");
-          } else {
-            await onRegister(payload);
-            toast.push("Регистрация завершена");
+        if (result.needTelegram) {
+          setNeedTelegram(true);
+          setBotNameState(result.botName || botName);
+        }
+        if (result.testCode) {
+          setOtpTestCode(result.testCode);
+          toast.push(`DEV: код ${result.testCode}`);
+        }
+        setOtpMethod(result.method || "server");
+        setStep("otp");
+      } catch (err) {
+        toast.push(err?.message || "Не удалось отправить код");
+      } finally {
+        setBusy(false);
+      }
+    }, [busy, phone, phoneAuth, toast]);
+
+    const handleVerifyOtp = useCallback(async (e) => {
+      e.preventDefault();
+      if (busy) return;
+      const code = String(otp || "").trim();
+      if (code.length !== 6) { toast.push("Введите 6-значный код"); return; }
+      setBusy(true);
+      try {
+        const result = phoneAuth
+          ? await phoneAuth.verifyOtp(phone, code, otpMethod)
+          : await fetch("/api/otp/verify", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ phone, code })
+            }).then((r) => r.json().then((d) => { if (!r.ok) throw new Error(d.error); return d; }));
+
+        setVerifiedPhone(phone);
+        setVerifiedUserId(result.userId || "");
+
+        // Если Supabase вернул сессию — применяем через loginBuyer-callback
+        if (result.session || result.access_token) {
+          const client = getSupabaseClient();
+          if (client && result.session) {
+            const { data } = await client.auth.setSession({
+              access_token: result.session.access_token,
+              refresh_token: result.session.refresh_token
+            });
+            const session = makeBuyerSessionFromSupabaseUser(data?.user);
+            if (onLogin) await onLogin({ _supabaseSession: session }).catch(() => {});
+            navigateToHash("/");
+            return;
           }
-        } catch (error) {
-          toast.push(error?.message || "Не удалось выполнить действие");
-        } finally {
-          setBusy(false);
         }
-      },
-      [busy, confirmPassword, email, fullName, isLogin, onLogin, onRegister, password, phone, toast]
-    );
+        setStep("profile");
+      } catch (err) {
+        toast.push(err?.message || "Неверный код");
+      } finally {
+        setBusy(false);
+      }
+    }, [busy, otp, otpMethod, phone, phoneAuth, onLogin, toast]);
+
+    const handleSaveProfile = useCallback(async (e) => {
+      e.preventDefault();
+      if (busy) return;
+      const name = String(fullName || "").trim();
+      if (!name) { toast.push("Введите ваше имя"); return; }
+      setBusy(true);
+      try {
+        if (onPhoneAuth) {
+          const res = await onPhoneAuth({ phone: verifiedPhone, name, userId: verifiedUserId });
+          // Если onPhoneAuth выполнил вход и вернул сессию/идентификатор — не продолжаем шаги
+          if (res && (res._supabaseSession || res.session || res.userId || res.user?.id)) {
+            return;
+          }
+        } else if (onRegister) {
+          await onRegister({ phone: verifiedPhone, name, email: "", password: "", role: "buyer" });
+        }
+        setStep("car");
+      } catch (err) {
+        toast.push(err?.message || "Не удалось сохранить профиль");
+      } finally {
+        setBusy(false);
+      }
+    }, [busy, fullName, onPhoneAuth, onRegister, verifiedPhone, verifiedUserId, toast]);
+
+    const handleSkipCar = useCallback(() => navigateToHash("/"), []);
+
+    const handleAddCar = useCallback(async (e) => {
+      e.preventDefault();
+      if (busy) return;
+      if (!carMake || !carModel) { toast.push("Выберите марку и модель"); return; }
+      setBusy(true);
+      try {
+        if (onPhoneAuth) {
+          const res = await onPhoneAuth({
+            phone: verifiedPhone,
+            name: fullName,
+            userId: verifiedUserId,
+            car: { make: carMake, model: carModel, year: carYear }
+          });
+          // Если вход произошёл внутри onPhoneAuth — не выполняем дополнительную навигацию
+          if (res && (res._supabaseSession || res.session || res.userId || res.user?.id)) {
+            return;
+          }
+        }
+        navigateToHash("/garage");
+      } catch (err) {
+        toast.push(err?.message || "Не удалось добавить авто");
+      } finally {
+        setBusy(false);
+      }
+    }, [busy, carMake, carModel, carYear, fullName, onPhoneAuth, verifiedPhone, verifiedUserId, toast]);
+
+    const stepDots = ["role", "phone", "otp", "profile", "car"];
+    const stepIndex = stepDots.indexOf(step);
 
     return html`
       <div className="min-h-screen flex items-center px-6 py-10" style=${{ background: "var(--drivex-black)" }}>
         <div className="w-full space-y-5">
+          <!-- Header -->
           <div className="text-center">
-            <p
-              className="text-xs font-semibold"
-              style=${{ color: "var(--drivex-neon-cyan)", letterSpacing: "0.18em" }}
-            >
-              DRIVEX USER
+            <p className="text-xs font-semibold" style=${{ color: "var(--drivex-neon-cyan)", letterSpacing: "0.18em" }}>
+              DRIVEX
             </p>
             <h1 className="text-3xl font-bold mt-3" style=${{ color: "var(--drivex-white)" }}>
-              ${isLogin ? "Вход в аккаунт" : "Регистрация"}
+              ${step === "role"    ? "Добро пожаловать"
+                : step === "phone" ? "Вход по телефону"
+                : step === "otp" ? "Введите код"
+                : step === "profile" ? "Ваш профиль"
+                : "Добавить авто"}
             </h1>
-            <p className="text-sm mt-3" style=${{ color: "var(--drivex-silver)" }}>
-              ${isLogin
-                ? "Введите данные, чтобы открыть свой профиль, гараж и заказы."
-                : "Создайте аккаунт пользователя. После регистрации откроется ваш DRIVEX-проект."}
+            <p className="text-sm mt-2" style=${{ color: "var(--drivex-silver)" }}>
+              ${step === "role"    ? "Выберите как вы хотите продолжить"
+                : step === "phone" ? "Введите номер — получите код в @DriiiveX_Bot"
+                : step === "otp"   ? `Код отправлен на ${phone}`
+                : step === "profile" ? "Как вас зовут?"
+                : "Укажите ваш автомобиль (или пропустите)"}
             </p>
+            <!-- Stepper dots -->
+            <div className="flex justify-center gap-2 mt-4">
+              ${stepDots.map((s, i) => html`
+                <div key=${s} style=${{
+                  width: i === stepIndex ? "24px" : "8px",
+                  height: "8px",
+                  borderRadius: "4px",
+                  background: i <= stepIndex ? "var(--drivex-neon-cyan)" : "rgba(255,255,255,0.15)",
+                  transition: "all 0.3s"
+                }} />
+              `)}
+            </div>
           </div>
 
-          <form className="glass-card-light rounded-3xl p-5 space-y-4" onSubmit=${submit}>
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-xs font-semibold" style=${{ color: "var(--drivex-silver)" }}>
-                Авторизация
-              </span>
-              <span
-                className="text-xs px-3 py-1 rounded-full"
-                style=${{
-                  color: "var(--drivex-neon-cyan)",
-                  background: "rgba(6, 182, 212, 0.12)",
-                  border: "1px solid rgba(6, 182, 212, 0.16)"
+          <!-- Step: Role — выбор роли + гость -->
+          ${step === "role" ? html`
+            <div className="glass-card-light rounded-3xl p-5 space-y-3">
+              <!-- Войти как пользователь -->
+              <button
+                type="button"
+                className="w-full p-4 rounded-2xl text-left flex items-center gap-4 transition-all"
+                style=${{ background: "rgba(6,182,212,0.1)", border: "1px solid rgba(6,182,212,0.25)" }}
+                onClick=${() => setStep("phone")}
+              >
+                <span style=${{ fontSize: "28px" }}>🚗</span>
+                <div>
+                  <p className="font-bold" style=${{ color: "var(--drivex-white)" }}>Я автовладелец</p>
+                  <p className="text-xs mt-1" style=${{ color: "var(--drivex-silver)" }}>
+                    Маркетплейс, сервисы, гараж, документы
+                  </p>
+                </div>
+              </button>
+
+              <!-- Войти как продавец -->
+              <button
+                type="button"
+                className="w-full p-4 rounded-2xl text-left flex items-center gap-4 transition-all"
+                style=${{ background: "rgba(14,165,233,0.08)", border: "1px solid rgba(14,165,233,0.2)" }}
+                onClick=${() => navigateToHash("/partner/register")}
+              >
+                <span style=${{ fontSize: "28px" }}>🏪</span>
+                <div>
+                  <p className="font-bold" style=${{ color: "var(--drivex-white)" }}>Я продавец</p>
+                  <p className="text-xs mt-1" style=${{ color: "var(--drivex-silver)" }}>
+                    Открыть магазин в маркетплейсе DRIVEX
+                  </p>
+                </div>
+              </button>
+
+              <!-- Войти как сервисный центр -->
+              <button
+                type="button"
+                className="w-full p-4 rounded-2xl text-left flex items-center gap-4 transition-all"
+                style=${{ background: "rgba(139,92,246,0.08)", border: "1px solid rgba(139,92,246,0.2)" }}
+                onClick=${() => navigateToHash("/partner/login")}
+              >
+                <span style=${{ fontSize: "28px" }}>🔧</span>
+                <div>
+                  <p className="font-bold" style=${{ color: "var(--drivex-white)" }}>Я сервисный центр</p>
+                  <p className="text-xs mt-1" style=${{ color: "var(--drivex-silver)" }}>
+                    СТО, мойка, детейлинг — партнёрский кабинет
+                  </p>
+                </div>
+              </button>
+
+              <!-- Гость -->
+              <button
+                type="button"
+                className="w-full py-3 rounded-2xl text-sm font-semibold"
+                style=${{ color: "var(--drivex-silver)", background: "transparent", border: "1px solid rgba(255,255,255,0.08)" }}
+                onClick=${() => {
+                  if (onGuest) onGuest();
+                  else navigateToHash("/");
                 }}
               >
-                ${providerLabel}
-              </span>
+                Войти как гость →
+              </button>
+
+              <p className="text-center text-xs pt-1" style=${{ color: "var(--drivex-silver)", opacity: 0.6 }}>
+                Гость может смотреть каталог и сервисы. Регистрация нужна для заказов и гаража.
+              </p>
             </div>
+          ` : null}
 
-            ${!isLogin
-              ? html`
-                  <label className="block">
-                    <span className="text-xs font-semibold" style=${{ color: "var(--drivex-silver)" }}>Имя</span>
-                    <input
-                      className="w-full mt-2 p-4 rounded-2xl dx-input"
-                      value=${fullName}
-                      onInput=${(e) => setFullName(e.target.value)}
-                      placeholder="Ваше имя"
-                      autocomplete="name"
-                    />
-                  </label>
-                  <label className="block">
-                    <span className="text-xs font-semibold" style=${{ color: "var(--drivex-silver)" }}>Телефон</span>
-                    <input
-                      className="w-full mt-2 p-4 rounded-2xl dx-input"
-                      value=${phone}
-                      onInput=${(e) => setPhone(e.target.value)}
-                      placeholder="+992 ..."
-                      autocomplete="tel"
-                    />
-                  </label>
-                `
-              : null}
+          <!-- Step: Phone -->
+          ${step === "phone" ? html`
+            <form className="glass-card-light rounded-3xl p-5 space-y-4" onSubmit=${handleSendOtp}>
+              <label className="block">
+                <span className="text-xs font-semibold" style=${{ color: "var(--drivex-silver)" }}>Номер телефона</span>
+                <input
+                  type="tel"
+                  className="w-full mt-2 p-4 rounded-2xl dx-input text-xl tracking-wider"
+                  value=${phone}
+                  onInput=${(e) => setPhone(e.target.value)}
+                  placeholder="+992 XX XXX XXXX"
+                  autocomplete="tel"
+                  autofocus
+                />
+              </label>
+              <div className="flex items-center gap-3 px-1">
+                <span style=${{ fontSize: "22px" }}>✈️</span>
+                <p className="text-xs" style=${{ color: "var(--drivex-silver)" }}>
+                  Код придёт в <strong style=${{ color: "var(--drivex-neon-cyan)" }}>Telegram</strong> —
+                  напишите боту <strong>@${botNameState}</strong> свой номер заранее
+                </p>
+              </div>
+              <button type="submit" className="w-full py-4 rounded-2xl font-bold dx-btn" disabled=${busy}>
+                ${busy ? "Отправляем..." : "Получить код"}
+              </button>
+            </form>
+          ` : null}
 
-            <label className="block">
-              <span className="text-xs font-semibold" style=${{ color: "var(--drivex-silver)" }}>Email</span>
-              <input
-                type="email"
-                className="w-full mt-2 p-4 rounded-2xl dx-input"
-                value=${email}
-                onInput=${(e) => setEmail(e.target.value)}
-                placeholder="mail@example.com"
-                autocomplete="email"
-              />
-            </label>
+          <!-- Step: OTP -->
+          ${step === "otp" ? html`
+            <form className="glass-card-light rounded-3xl p-5 space-y-4" onSubmit=${handleVerifyOtp}>
+              ${needTelegram ? html`
+                <div className="rounded-2xl p-4" style=${{ background: "rgba(6,182,212,0.08)", border: "1px solid rgba(6,182,212,0.2)" }}>
+                  <p className="text-sm font-semibold" style=${{ color: "var(--drivex-neon-cyan)" }}>
+                    Напишите @${botNameState} в Telegram
+                  </p>
+                  <p className="text-xs mt-1" style=${{ color: "var(--drivex-silver)" }}>
+                    Отправьте боту номер <strong>${phone}</strong> — он пришлёт код сюда.
+                  </p>
+                </div>
+              ` : null}
+              ${otpTestCode ? html`
+                <div className="rounded-2xl p-3 text-center" style=${{ background: "rgba(251,191,36,0.1)", border: "1px solid rgba(251,191,36,0.25)" }}>
+                  <p className="text-xs" style=${{ color: "#fbbf24" }}>DEV-режим: код <strong>${otpTestCode}</strong></p>
+                </div>
+              ` : null}
+              <label className="block">
+                <span className="text-xs font-semibold" style=${{ color: "var(--drivex-silver)" }}>6-значный код</span>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]{6}"
+                  maxLength="6"
+                  className="w-full mt-2 p-4 rounded-2xl dx-input text-3xl text-center tracking-[0.5em] font-bold"
+                  value=${otp}
+                  onInput=${(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  placeholder="000000"
+                  autofocus
+                />
+              </label>
+              <button type="submit" className="w-full py-4 rounded-2xl font-bold dx-btn" disabled=${busy || otp.length < 6}>
+                ${busy ? "Проверяем..." : "Подтвердить"}
+              </button>
+              <button type="button"
+                className="w-full py-3 rounded-2xl text-sm font-semibold"
+                style=${{ color: "var(--drivex-silver)", background: "transparent" }}
+                onClick=${() => { setStep("phone"); setOtp(""); setOtpTestCode(""); setNeedTelegram(false); }}
+              >
+                ← Изменить номер
+              </button>
+            </form>
+          ` : null}
 
-            <label className="block">
-              <span className="text-xs font-semibold" style=${{ color: "var(--drivex-silver)" }}>Пароль</span>
-              <input
-                type="password"
-                className="w-full mt-2 p-4 rounded-2xl dx-input"
-                value=${password}
-                onInput=${(e) => setPassword(e.target.value)}
-                placeholder="Минимум 6 символов"
-                autocomplete=${isLogin ? "current-password" : "new-password"}
-              />
-            </label>
+          <!-- Step: Profile -->
+          ${step === "profile" ? html`
+            <form className="glass-card-light rounded-3xl p-5 space-y-4" onSubmit=${handleSaveProfile}>
+              <label className="block">
+                <span className="text-xs font-semibold" style=${{ color: "var(--drivex-silver)" }}>Ваше имя</span>
+                <input
+                  type="text"
+                  className="w-full mt-2 p-4 rounded-2xl dx-input"
+                  value=${fullName}
+                  onInput=${(e) => setFullName(e.target.value)}
+                  placeholder="Имя и фамилия"
+                  autocomplete="name"
+                  autofocus
+                />
+              </label>
+              <p className="text-xs px-1" style=${{ color: "var(--drivex-silver)" }}>
+                Телефон: <strong style=${{ color: "var(--drivex-white)" }}>${verifiedPhone}</strong> подтверждён ✓
+              </p>
+              <button type="submit" className="w-full py-4 rounded-2xl font-bold dx-btn" disabled=${busy || !fullName.trim()}>
+                ${busy ? "Сохраняем..." : "Продолжить →"}
+              </button>
+            </form>
+          ` : null}
 
-            ${!isLogin
-              ? html`
-                  <label className="block">
-                    <span className="text-xs font-semibold" style=${{ color: "var(--drivex-silver)" }}>
-                      Повторите пароль
-                    </span>
-                    <input
-                      type="password"
-                      className="w-full mt-2 p-4 rounded-2xl dx-input"
-                      value=${confirmPassword}
-                      onInput=${(e) => setConfirmPassword(e.target.value)}
-                      placeholder="Повторите пароль"
-                      autocomplete="new-password"
-                    />
-                  </label>
-                `
-              : null}
-
-            <button type="submit" className="w-full py-4 rounded-2xl font-bold dx-btn" disabled=${busy}>
-              ${busy ? "Подождите..." : isLogin ? "Войти" : "Зарегистрироваться"}
-            </button>
-
-            <a
-              className="block text-center text-sm font-semibold"
-              style=${{ color: "var(--drivex-neon-cyan)" }}
-              href=${isLogin ? "#/register" : "#/login"}
-            >
-              ${isLogin ? "Нет аккаунта? Зарегистрироваться" : "Уже есть аккаунт? Войти"}
-            </a>
-          </form>
+          <!-- Step: Car -->
+          ${step === "car" ? html`
+            <form className="glass-card-light rounded-3xl p-5 space-y-4" onSubmit=${handleAddCar}>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block">
+                  <span className="text-xs font-semibold" style=${{ color: "var(--drivex-silver)" }}>Марка</span>
+                  <select
+                    className="w-full mt-2 p-4 rounded-2xl dx-input"
+                    value=${carMake}
+                    onChange=${(e) => { setCarMake(e.target.value); setCarModel(""); }}
+                  >
+                    <option value="">Выбрать...</option>
+                    ${carOptions.map((o) => html`<option key=${o.make} value=${o.make}>${o.make}</option>`)}
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="text-xs font-semibold" style=${{ color: "var(--drivex-silver)" }}>Модель</span>
+                  <select
+                    className="w-full mt-2 p-4 rounded-2xl dx-input"
+                    value=${carModel}
+                    onChange=${(e) => setCarModel(e.target.value)}
+                    disabled=${!carMake}
+                  >
+                    <option value="">Выбрать...</option>
+                    ${selectedMakeModels.map((m) => html`<option key=${m} value=${m}>${m}</option>`)}
+                  </select>
+                </label>
+              </div>
+              <label className="block">
+                <span className="text-xs font-semibold" style=${{ color: "var(--drivex-silver)" }}>Год выпуска</span>
+                <input
+                  type="number"
+                  className="w-full mt-2 p-4 rounded-2xl dx-input"
+                  value=${carYear}
+                  onInput=${(e) => setCarYear(e.target.value)}
+                  placeholder="2018"
+                  min="1990"
+                  max=${new Date().getFullYear()}
+                />
+              </label>
+              <button type="submit" className="w-full py-4 rounded-2xl font-bold dx-btn" disabled=${busy || !carMake || !carModel}>
+                ${busy ? "Добавляем..." : "Добавить авто"}
+              </button>
+              <button type="button"
+                className="w-full py-3 rounded-2xl text-sm font-semibold"
+                style=${{ color: "var(--drivex-silver)", background: "transparent" }}
+                onClick=${handleSkipCar}
+              >
+                Пропустить →
+              </button>
+            </form>
+          ` : null}
         </div>
       </div>
     `;
   }
+
+  // Псевдоним для совместимости с кодом где используется BuyerPhoneAuthScreen
+  const BuyerPhoneAuthScreen = BuyerAuthScreen;
 
   function ProfileScreen({ notificationsCount, profile, documents, documentsTotalCount, maintenance, ordersCount, onLogout }) {
     const fallbackProfile = createDefaultBuyerProfile();
@@ -9695,18 +9965,45 @@
 
         setBusy(true);
         try {
-          const image = await prepareDocumentDataUrl(file, { maxSize: 1400, quality: 0.86 });
-          if (!image) {
-            toast.push("Не удалось загрузить фото");
-            setBusy(false);
-            return;
+          let fileUrl = "";
+          // Пробуем загрузить в Supabase Storage → documents
+          const client = getSupabaseClient();
+          const cfg = window.DRIVEX_SUPABASE_CONFIG || {};
+          const bucket = (cfg.buckets && cfg.buckets.documents) || "documents";
+          if (client) {
+            const { data: { user } } = await client.auth.getUser().catch(() => ({ data: {} }));
+            if (user) {
+              const ext = file.name.split(".").pop() || "jpg";
+              const filePath = `${user.id}/license/${Date.now()}.${ext}`;
+              const { error: uploadErr } = await client.storage.from(bucket).upload(filePath, file, { upsert: true, contentType: file.type });
+              if (!uploadErr) {
+                const { data: urlData } = client.storage.from(bucket).getPublicUrl(filePath);
+                fileUrl = urlData.publicUrl;
+                // Сохраняем в таблицу documents
+                await client.from("documents").insert({
+                  user_id: user.id,
+                  doc_type: "license",
+                  file_url: fileUrl,
+                  file_name: file.name,
+                  mime_type: file.type
+                }).catch(() => {});
+              }
+            }
+          }
+
+          // Fallback: dataURL
+          if (!fileUrl) {
+            const image = await prepareDocumentDataUrl(file, { maxSize: 1400, quality: 0.86 });
+            if (!image) { toast.push("Не удалось загрузить фото"); setBusy(false); return; }
+            fileUrl = image;
           }
 
           onSave &&
             onSave({
               id: genId("doc"),
               name: String(file.name || "Права"),
-              image,
+              image: fileUrl,
+              fileUrl,
               addedAt: Date.now()
             });
           toast.push("Права сохранены");
@@ -9858,18 +10155,44 @@
 
         setBusyKind(kind);
         try {
-          const image = await prepareDocumentDataUrl(file, { maxSize: 1400, quality: 0.86 });
-          if (!image) {
-            toast.push("Не удалось загрузить фото");
-            setBusyKind("");
-            return;
+          let fileUrl = "";
+          const client = getSupabaseClient();
+          const cfg = window.DRIVEX_SUPABASE_CONFIG || {};
+          const bucket = (cfg.buckets && cfg.buckets.documents) || "documents";
+
+          if (client) {
+            const { data: { user } } = await client.auth.getUser().catch(() => ({ data: {} }));
+            if (user) {
+              const ext = file.name.split(".").pop() || "jpg";
+              const filePath = `${user.id}/${car.id}/${kind}/${Date.now()}.${ext}`;
+              const { error: uploadErr } = await client.storage.from(bucket).upload(filePath, file, { upsert: true, contentType: file.type });
+              if (!uploadErr) {
+                const { data: urlData } = client.storage.from(bucket).getPublicUrl(filePath);
+                fileUrl = urlData.publicUrl;
+                await client.from("documents").insert({
+                  user_id: user.id,
+                  car_id: car.id,
+                  doc_type: kind,
+                  file_url: fileUrl,
+                  file_name: file.name,
+                  mime_type: file.type
+                }).catch(() => {});
+              }
+            }
+          }
+
+          if (!fileUrl) {
+            const image = await prepareDocumentDataUrl(file, { maxSize: 1400, quality: 0.86 });
+            if (!image) { toast.push("Не удалось загрузить фото"); setBusyKind(""); return; }
+            fileUrl = image;
           }
 
           onSaveDocument &&
             onSaveDocument(car.id, kind, {
               id: genId("doc"),
               name: String(file.name || `${kind}-${car.name}`),
-              image,
+              image: fileUrl,
+              fileUrl,
               addedAt: Date.now()
             });
           toast.push("Документ сохранён");
@@ -13536,18 +13859,33 @@
         if (!file) return;
 
         try {
-          const dataUrl = await prepareDocumentDataUrl(file, { maxSize: 1200, quality: 0.88 });
-          if (!dataUrl) {
-            toast.push("Не удалось обработать изображение");
-            return;
+          // Попытка загрузить в Supabase Storage → product-images
+          const client = getSupabaseClient();
+          const cfg = window.DRIVEX_SUPABASE_CONFIG || {};
+          const bucket = (cfg.buckets && cfg.buckets.productImages) || "product-images";
+          if (client) {
+            const storeId = store?.id || "unknown-store";
+            const ext = file.name.split(".").pop() || "jpg";
+            const filePath = `${storeId}/${Date.now()}.${ext}`;
+            const { error } = await client.storage.from(bucket).upload(filePath, file, { upsert: true, contentType: file.type });
+            if (!error) {
+              const { data: urlData } = client.storage.from(bucket).getPublicUrl(filePath);
+              updateField("image", urlData.publicUrl);
+              updateField("imageUrl", urlData.publicUrl);
+              toast.push("Фото загружено в облако");
+              return;
+            }
           }
+          // Fallback: dataURL (локальный предпросмотр)
+          const dataUrl = await prepareDocumentDataUrl(file, { maxSize: 1200, quality: 0.88 });
+          if (!dataUrl) { toast.push("Не удалось обработать изображение"); return; }
           updateField("image", dataUrl);
-          toast.push("Изображение загружено");
+          toast.push("Изображение загружено (локально)");
         } catch {
           toast.push("Файл не подходит");
         }
       },
-      [toast, updateField]
+      [store?.id, toast, updateField]
     );
 
     const handleSubmit = useCallback(
@@ -20693,6 +21031,35 @@
       };
     }, [applySharedStateSnapshot]);
 
+    // ─── Загрузка живых данных из Supabase ───────────────────────────────
+    useEffect(() => {
+      const supa = window.DrivexSupabaseData;
+      if (!supa) return;
+      let cancelled = false;
+
+      // Загружаем сервисные центры
+      supa.loadServiceCenters({ limit: 60 }).then((services) => {
+        if (cancelled || !services) return;
+        _liveNearbyServices = services;
+        _liveRecommendedServices = services.slice(0, 3);
+      }).catch(() => {});
+
+      // Загружаем товары маркетплейса
+      supa.loadProducts({ pageSize: 48 }).then((prods) => {
+        if (cancelled || !prods || !prods.length) return;
+        _liveMarketProducts = prods;
+        // Обновляем runtime так чтобы маркетплейс сразу показал живые товары
+        if (typeof setMarketplaceRuntime === "function") {
+          const liveStores = [];
+          const storeIds = new Set();
+          prods.forEach((p) => { if (p.storeId && !storeIds.has(p.storeId)) { storeIds.add(p.storeId); liveStores.push({ id: p.storeId, storeId: p.storeId, name: p.storeId }); } });
+          setMarketplaceRuntime({ products: [...prods, ...marketplaceData.products.filter((p) => !storeIds.has(p.storeId))], stores: liveStores.length ? liveStores : undefined });
+        }
+      }).catch(() => {});
+
+      return () => { cancelled = true; };
+    }, []);
+
     const applyBuyerSession = useCallback((session) => {
       const nextSession = normalizeBuyerSession(session);
       if (nextSession.authenticated && nextSession.id !== buyerSession?.id) {
@@ -21445,12 +21812,129 @@
       });
     }, []);
 
+    // Phone-based auth: после OTP-верификации сохраняем профиль и машину
+    const loginByPhone = useCallback(
+      async ({ phone, name, userId, car, _supabaseSession }) => {
+        // Если передан готовый Supabase-session — просто применяем
+        if (_supabaseSession) {
+          applyBuyerSession(_supabaseSession);
+          buyerStateReadyRef.current = true;
+          navigateToHash("/");
+          return _supabaseSession;
+        }
+
+        const client = getSupabaseClient();
+
+        // Пробуем найти/создать пользователя в Supabase через phone OTP
+        if (client) {
+          // После verifyOtp сессия уже установлена — синхронизируем
+          const { data } = await client.auth.getUser().catch(() => ({ data: {} }));
+          const user = data?.user;
+
+          // Загружаем актуальную роль из public.users (не из auth metadata!)
+          let actualRole = "buyer";
+          if (user?.id) {
+            const { data: userRow } = await client.from("users").select("role,full_name,cars,active_car_id").eq("id", user.id).maybeSingle().catch(() => ({ data: null }));
+            if (userRow?.role) actualRole = userRow.role;
+            // Загружаем машины если они уже есть
+            if (Array.isArray(userRow?.cars) && userRow.cars.length > 0) {
+              setUserGarageCars(normalizeGarageList(userRow.cars));
+              if (userRow.active_car_id) setActiveCarId(userRow.active_car_id);
+            }
+          }
+
+          const session = user
+            ? { ...makeBuyerSessionFromSupabaseUser(user), role: actualRole }
+            : normalizeBuyerSession({
+                id: userId || `phone-${phone.replace(/\D/g, "")}`,
+                name: name || "",
+                phone,
+                role: actualRole,
+                provider: "supabase",
+                authenticated: true
+              });
+
+          // Сохраняем профиль в Supabase (только если role = buyer — не перезаписываем seller/partner)
+          const supa = window.DrivexSupabaseData;
+          if (supa && session.id && actualRole === "buyer") {
+            await supa.upsertUserProfile(session.id, {
+              full_name: name || session.name || "",
+              phone,
+              role: "buyer",
+              cars: car ? [{ id: `car-${Date.now()}`, make: car.make, model: car.model, year: car.year }] : []
+            }).catch(() => {});
+          }
+
+          applyBuyerSession(session);
+          buyerStateReadyRef.current = true;
+
+          // Добавляем машину в локальный гараж
+          if (car && (car.make || car.model)) {
+            const newCar = {
+              id: `car-${Date.now()}`,
+              make: car.make || "",
+              model: car.model || "",
+              year: String(car.year || ""),
+              color: "",
+              plate: "",
+              addedAt: new Date().toISOString()
+            };
+            setUserGarageCars((prev) => [newCar, ...prev.filter((c) => c.id !== newCar.id)]);
+            setActiveCarId(newCar.id);
+          }
+
+          // Запрашиваем разрешение на push-уведомления
+          const push = window.DrivexPush;
+          if (push && session.id) {
+            push.registerTokenForUser(session.id).catch(() => {});
+          }
+
+          toast.push(`Добро пожаловать, ${name || session.name || "водитель"}!`);
+
+          // Перенаправляем по роли
+          if (actualRole === "seller") {
+            navigateToHash("/seller");
+          } else if (actualRole === "partner") {
+            navigateToHash("/partner/login");
+          } else {
+            navigateToHash("/");
+          }
+          return session;
+        }
+
+        // Локальный fallback
+        const localUser = {
+          id: userId || `phone-${phone.replace(/\D/g, "")}`,
+          name: name || "",
+          phone,
+          email: "",
+          password: "",
+          role: "buyer",
+          createdAt: new Date().toISOString()
+        };
+        const localUsers = readLocalBuyerUsers();
+        if (!localUsers.find((u) => u.id === localUser.id)) {
+          writeLocalBuyerUsers([localUser, ...localUsers]);
+        }
+        const session = makeBuyerSessionFromLocalUser(localUser);
+        applyBuyerSession(session);
+        navigateToHash("/");
+        return session;
+      },
+      [applyBuyerSession, toast]
+    );
+
     const registerBuyer = useCallback(
       async (payload) => {
         const email = String(payload?.email || "").trim().toLowerCase();
         const password = String(payload?.password || "");
         const name = String(payload?.name || "").trim();
         const phone = String(payload?.phone || "").trim();
+
+        // Phone auth без пароля — делегируем loginByPhone
+        if (phone && !email) {
+          return loginByPhone({ phone, name, userId: payload.userId, role: "buyer" });
+        }
         if (!email || !password || !name) throw new Error("Заполните имя, email и пароль");
 
         const client = getSupabaseClient();
@@ -21460,7 +21944,7 @@
             password,
             options: {
               data: {
-                role: "buyer",
+                role: payload.role || "buyer",
                 full_name: name,
                 phone
               }
@@ -21468,8 +21952,19 @@
           });
           if (error) throw error;
           const session = makeBuyerSessionFromSupabaseUser(data?.user);
+          // Создаём запись в public.users
+          await client.from("users").upsert({
+            id: data?.user?.id,
+            full_name: name,
+            phone,
+            email,
+            role: payload.role || "buyer"
+          }, { onConflict: "id" }).catch(() => {});
           applyBuyerSession(session);
           buyerStateReadyRef.current = true;
+          // Push токен
+          const push = window.DrivexPush;
+          if (push && session.id) push.registerTokenForUser(session.id).catch(() => {});
           navigateToHash("/profile");
           return session;
         }
@@ -21484,7 +21979,7 @@
           phone,
           email,
           password,
-          role: "buyer",
+          role: payload.role || "buyer",
           createdAt: new Date().toISOString()
         };
         writeLocalBuyerUsers([user, ...users]);
@@ -21493,11 +21988,16 @@
         navigateToHash("/profile");
         return session;
       },
-      [applyBuyerSession]
+      [applyBuyerSession, loginByPhone]
     );
 
     const loginBuyer = useCallback(
       async (payload) => {
+        // Если это phone-based session из OTP — просто применяем
+        if (payload?._supabaseSession) {
+          return loginByPhone(payload);
+        }
+
         const email = String(payload?.email || "").trim().toLowerCase();
         const password = String(payload?.password || "");
         if (!email || !password) throw new Error("Введите email и пароль");
@@ -21507,6 +22007,34 @@
           const { data, error } = await client.auth.signInWithPassword({ email, password });
           if (error) throw error;
           const session = makeBuyerSessionFromSupabaseUser(data?.user);
+
+          // Загружаем полный профиль из Supabase
+          const supa = window.DrivexSupabaseData;
+          if (supa && session.id) {
+            const [userProfile, orders, docs] = await Promise.all([
+              supa.loadUserProfile(session.id).catch(() => null),
+              supa.loadBuyerOrders(session.id).catch(() => null),
+              supa.loadDocuments(session.id).catch(() => null)
+            ]);
+            if (userProfile) {
+              // Применяем имя, телефон из профиля
+              session.name = userProfile.full_name || session.name;
+              session.phone = userProfile.phone || session.phone;
+              // Загружаем машины
+              if (Array.isArray(userProfile.cars) && userProfile.cars.length) {
+                setUserGarageCars(normalizeGarageList(userProfile.cars));
+                if (userProfile.active_car_id) setActiveCarId(userProfile.active_car_id);
+              }
+            }
+            if (orders) {
+              setBuyerOrders(orders.map((o) => ({
+                id: o.id, storeId: o.store_id, amount: Number(o.total_amount) || 0,
+                status: o.status, date: String(o.created_at || "").slice(0, 10),
+                items: Array.isArray(o.items) ? o.items : []
+              })));
+            }
+          }
+
           applyBuyerSession(session);
           const state = await fetchBuyerAppState(session).catch(() => null);
           if (state) {
@@ -21514,7 +22042,10 @@
           } else {
             buyerStateReadyRef.current = true;
           }
-          navigateToHash("/profile");
+          // Push токен
+          const push = window.DrivexPush;
+          if (push && session.id) push.registerTokenForUser(session.id).catch(() => {});
+          navigateToHash("/");
           return session;
         }
 
@@ -21525,10 +22056,10 @@
 
         const session = makeBuyerSessionFromLocalUser(user);
         applyBuyerSession(session);
-        navigateToHash("/profile");
+        navigateToHash("/");
         return session;
       },
-      [applyBuyerAppState, applyBuyerSession]
+      [applyBuyerAppState, applyBuyerSession, loginByPhone]
     );
 
     const logoutBuyer = useCallback(async () => {
@@ -22706,6 +23237,20 @@
     const isServiceCrmRoute = normalized === "/service-crm" || normalized.startsWith("/service-crm/");
     const isBuyerAuthRoute = normalized === "/login" || normalized === "/register";
     const buyerIsAuthenticated = Boolean(buyerSession?.authenticated);
+
+    // Маршруты, доступные без входа (гостевой режим)
+    const isGuestAllowedRoute = [
+      "/", "/market", "/services", "/map", "/emergency"
+    ].includes(normalized) ||
+      normalized.startsWith("/market/") ||
+      normalized.startsWith("/services/") ||
+      normalized.startsWith("/map/");
+
+    // Маршруты, требующие авторизации
+    const isAuthRequiredRoute = [
+      "/profile", "/garage", "/documents", "/maintenance",
+      "/orders", "/checkout", "/ai-assistant", "/notifications"
+    ].some((r) => normalized === r || normalized.startsWith(r + "/"));
     const sellerCurrentProfile = normalizeSellerProfile(effectiveSellerProfile, effectiveSellerSession);
     const sellerCurrentStore = normalizeSellerStore(
       effectiveSellerStore,
@@ -22783,14 +23328,19 @@
             authStatus=${buyerAuthStatus}
             onLogin=${loginBuyer}
             onRegister=${registerBuyer}
+            onPhoneAuth=${loginByPhone}
+            onGuest=${() => navigateToHash("/")}
           />`;
-    } else if (!buyerIsAuthenticated && !isPartnerRoute && !isSellerRoute && !isServiceCrmRoute) {
+    } else if (!buyerIsAuthenticated && !isPartnerRoute && !isSellerRoute && !isServiceCrmRoute && isAuthRequiredRoute) {
+      // Требует авторизации — показываем экран входа
       activePath = "/profile";
       content = html`<${BuyerAuthScreen}
         mode="register"
         authStatus=${buyerAuthStatus}
         onLogin=${loginBuyer}
         onRegister=${registerBuyer}
+        onPhoneAuth=${loginByPhone}
+        onGuest=${() => navigateToHash("/")}
       />`;
     } else if (isPartnerRoute) {
       activePath = "/partner";
@@ -23056,7 +23606,7 @@
       } else {
         content = html`<${ServiceNotFoundScreen} currentUser=${serviceCurrentSession} center=${serviceCurrentCenter} />`;
       }
-    } else if (normalized === "/") {
+    } else if (normalized === "/" || normalized === "/home") {
       activePath = "/";
       content = html`<${DashboardScreen}
         notificationsCount=${notificationsCount}

@@ -220,12 +220,16 @@
     const config = getConfig();
     if (!config.url || !config.anonKey) return null;
     if (!window.supabase || typeof window.supabase.createClient !== "function") return null;
-    return window.supabase.createClient(config.url, config.anonKey, {
+    // ВАЖНО: используем единый shared клиент чтобы избежать Lock "auth-token" conflicts
+    if (window.__DRIVEX_SUPABASE_CLIENT__) return window.__DRIVEX_SUPABASE_CLIENT__;
+    window.__DRIVEX_SUPABASE_CLIENT__ = window.supabase.createClient(config.url, config.anonKey, {
       auth: {
         persistSession: true,
-        autoRefreshToken: true
+        autoRefreshToken: true,
+        storageKey: "drivex-auth"  // единый ключ для всех клиентов
       }
     });
+    return window.__DRIVEX_SUPABASE_CLIENT__;
   }
 
   function getBackendMode() {
@@ -1314,7 +1318,7 @@
       ? await (async () => {
           const userId = session.user.id;
           const [{ data: profileRow }, { data: storeRow }] = await Promise.all([
-            client.from("profiles").select("*").eq("id", userId).maybeSingle(),
+            client.from("users").select("*").eq("id", userId).maybeSingle(),
             client.from("stores").select("*").eq("owner_user_id", userId).maybeSingle()
           ]);
           if (!storeRow) return null;
@@ -1421,7 +1425,7 @@
     storeRow.onboarding_completed = Boolean(payload.store?.profileCompleted);
     storeRow.status = payload.store?.profileCompleted ? "active" : "pending_review";
 
-    const { error: profileError } = await client.from("profiles").upsert(profileRow);
+    const { error: profileError } = await client.from("users").upsert(profileRow, { onConflict: "id" });
     if (profileError) throw profileError;
     const { error: storeError } = await client.from("stores").upsert(storeRow);
     if (storeError) throw storeError;
@@ -1518,12 +1522,12 @@
     const { error: storeError } = await client.from("stores").upsert(storeRow);
     if (storeError) throw storeError;
 
-    await client.from("profiles").upsert({
+    await client.from("users").upsert({
       id: userId,
       full_name: payload.ownerName || "",
       phone: payload.phone || "",
       role: "seller"
-    });
+    }, { onConflict: "id" });
 
     await client.from("seller_notifications").insert({
       store_id: storeRow.id,
