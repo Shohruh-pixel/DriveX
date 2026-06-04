@@ -123,16 +123,28 @@
     <script src="./vendor/htm.umd.js?v=20260411-local-vendor-2"></script>
 
     <script src="./vendor/supabase.min.js?v=20260411-local-vendor-2"></script>
-    <!-- Firebase SDK (FCM push notifications) -->
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"></script>
+    <!-- Firebase SDK (загружается асинхронно — не блокирует основной код) -->
+    <script>
+      (function() {
+        var s1 = document.createElement('script');
+        s1.src = 'https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js';
+        s1.async = true;
+        s1.onerror = function() { console.warn('[Firebase] firebase-app-compat не загружен'); };
+        var s2 = document.createElement('script');
+        s2.src = 'https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js';
+        s2.async = true;
+        s2.onerror = function() { console.warn('[Firebase] firebase-messaging-compat не загружен'); };
+        document.head.appendChild(s1);
+        document.head.appendChild(s2);
+      })();
+    </script>
     <script defer src="./supabase-config.js?v=20260530-full-auth-2"></script>
     <script defer src="./partner-repository.js?v=20260530-full-auth-1"></script>
     <script defer src="./supabase-data.js?v=20260530-full-auth-1"></script>
     <script defer src="./auth-phone.js?v=20260530-full-auth-1"></script>
     <script defer src="./firebase-push.js?v=20260530-full-auth-1"></script>
     <script defer src="./payment-service.js?v=20260530-full-auth-1"></script>
-    <script defer src="./seller-backend.js?v=20260530-full-auth-1"></script>
+    <script defer src="./seller-backend.js?v=20260601-order-fix"></script>
     <script defer src="./storageService.js?v=20260530-full-auth-1"></script>
     <script defer src="./recommendationEngine.js?v=20260328-seller-crm-26"></script>
     <script defer src="./reminderEngine.js?v=20260328-seller-crm-26"></script>
@@ -145,12 +157,40 @@
     <script defer src="./aiMapper.js?v=20260411-ai-backend-1"></script>
     <script defer src="./aiProvider.js?v=20260411-ai-backend-1"></script>
     <script defer src="./aiAssistService.js?v=20260411-ai-assist-1"></script>
+    <script defer src="./aiHistoryService.js?v=20260603-ai-history-1"></script>
     <script
       defer
       src="./vendor/leaflet.js?v=20260411-local-vendor-1"
     ></script>
     <script defer src="./map/map.js?v=20260411-fuel-7"></script>
     <script defer src="./map/add-place.js?v=20260411-add-place-6"></script>
-    <script defer src="./app.js?v=20260530-bugfix-3"></script>
+
+    <!-- ═══════════════════════════════════════════════════
+         DRIVEX — Цепочка модулей (каждый файл знает свою задачу)
+         Порядок: globals → data → utils → ui → screens → app-main
+         Каждый следующий файл ЧИТАЕТ из DX то что добавил предыдущий
+    ═══════════════════════════════════════════════════ -->
+
+    <!-- Шаг 1: DX namespace — React + htm + hooks -->
+    <script defer src="./app/globals.js?v=20260601-v12"></script>
+    <!-- Шаг 2: Данные — товары, сервисы, категории -->
+    <script defer src="./app/data.js?v=20260601-v12"></script>
+    <!-- Шаг 3: Утилиты и модели — normalizeX, decorateX, buildX -->
+    <script defer src="./app/utils-models.js?v=20260604-supabase-sync-2"></script>
+    <!-- Шаг 3b: Shim — делает DX функции доступными как глобальные имена в screen файлах -->
+    <script defer src="./app/utils-shim.js?v=20260604-docs-sided-1"></script>
+    <!-- Шаг 4: Общие UI — Icon, Toast, BottomNav, SimplePage -->
+    <script defer src="./app/shared-ui.js?v=20260601-v12"></script>
+    <!-- Шаг 5: Экраны — каждый файл добавляет свои компоненты в DX.screens -->
+    <script defer src="./app/screens/dashboard.js?v=20260601-v12"></script>
+    <script defer src="./app/screens/services.js?v=20260601-v12"></script>
+    <script defer src="./app/screens/marketplace.js?v=20260601-v12"></script>
+    <script defer src="./app/screens/seller-crm.js?v=20260601-v12"></script>
+    <script defer src="./app/screens/service-crm.js?v=20260601-v12"></script>
+    <script defer src="./app/screens/misc.js?v=20260603-profile-sync-1"></script>
+    <script defer src="./app/screens/garage.js?v=20260601-v12"></script>
+    <script defer src="./app/screens/documents.js?v=20260604-storage-fix-1"></script>
+    <!-- Шаг 6: App-main — App() + роутинг + ReactDOM.render (ПОСЛЕДНИЙ) -->
+    <script defer src="./app/app-main.js?v=20260604-loop-fix-4"></script>
   </body>
 </html>

@@ -5,7 +5,7 @@ const https = require("https");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
-const { handleAiRoute } = require("./src/ai/ai.router");
+const { handleAiRoute, handleAiHistoryRoute } = require("./src/ai/ai.router");
 
 const rootDir = __dirname;
 const dataDir = path.join(rootDir, "data");
@@ -698,8 +698,41 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (url.pathname === "/api/ai/debug") {
+    const { getProvider } = require("./src/ai/ai.llm");
+    sendJson(res, 200, {
+      provider: getProvider(),
+      hasAnthropicKey: !!(process.env.ANTHROPIC_API_KEY && process.env.ANTHROPIC_API_KEY !== "your_anthropic_api_key_here"),
+      keyPrefix: process.env.ANTHROPIC_API_KEY ? process.env.ANTHROPIC_API_KEY.slice(0, 20) + "..." : "NOT SET",
+      AI_PROVIDER: process.env.AI_PROVIDER || "NOT SET",
+      AI_MODE: process.env.AI_MODE || "NOT SET"
+    });
+    return;
+  }
+
+  if (url.pathname === "/api/ai/test-claude") {
+    const { askClaudeDriveX } = require("./src/ai/ai.claude");
+    try {
+      const result = await askClaudeDriveX({
+        input: { userMessage: "Стучит в подвеске — что это?" },
+        vehicle: { make: "Mercedes", model: "W210", year: 2001, mileage: 185000 }
+      });
+      sendJson(res, 200, { ok: true, result });
+    } catch(err) {
+      sendJson(res, 200, { ok: false, error: err.message, stack: err.stack?.split("\n").slice(0,5) });
+    }
+    return;
+  }
+
   if (url.pathname === "/api/ai/assistant") {
     await handleAiRoute(req, res);
+    return;
+  }
+
+  // История чатов: /api/ai/chats и /api/ai/chats/:chatId
+  if (url.pathname === "/api/ai/chats" || url.pathname.startsWith("/api/ai/chats/")) {
+    const urlParts = url.pathname.split("/");
+    await handleAiHistoryRoute(req, res, urlParts);
     return;
   }
 

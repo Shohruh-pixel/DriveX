@@ -1,13 +1,21 @@
 "use strict";
 
 function getVehicleContext(vehicle = {}) {
-  const mileage = Number(vehicle.mileage) || 54200;
+  // Если нет данных об авто — возвращаем null (не фейковые данные!)
+  const make    = vehicle.make    || "";
+  const model   = vehicle.model   || "";
+  const year    = Number(vehicle.year)    || 0;
+  const mileage = Number(vehicle.mileage) || 0;
+
+  // Нет ни одного значащего поля — авто не указано
+  if (!make && !model && !year && !mileage) return null;
+
   return {
-    make: vehicle.make || "BMW",
-    model: vehicle.model || "X5",
-    year: Number(vehicle.year) || 2018,
-    mileage,
-    fuelType: vehicle.fuelType || vehicle.engineType || "petrol"
+    make,
+    model,
+    year:     year    || null,
+    mileage:  mileage || null,
+    fuelType: vehicle.fuelType || vehicle.engineType || ""
   };
 }
 

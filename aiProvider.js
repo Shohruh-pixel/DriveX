@@ -256,15 +256,36 @@
     const timeoutId = window.setTimeout(() => controller.abort(), config.timeoutMs);
 
     try {
+      // Получаем историю из сессии если доступна
+      const historyService = window.DrivexAIHistoryService;
+      const activeChatId   = historyService ? historyService.getActiveChatId() : null;
+      const contextHistory = (historyService && activeChatId)
+        ? historyService.getContextHistory(activeChatId, 8)
+        : [];
+
       const requestBody = {
-        message: input.userMessage || "",
-        scenario: input.scenarioType || "diagnostic",
-        vehicle: input.vehicle || {},
-        location: input.location || {},
-        locale: input.locale || "ru-RU",
+        message:              input.userMessage || "",
+        userMessage:          input.userMessage || "",
+        scenario:             input.scenarioType || "diagnostic",
+        vehicle:              input.vehicle || {},
+        location:             input.location || {},
+        locale:               input.locale || "ru-RU",
         serviceHistorySummary: input.serviceHistorySummary || "",
+        // Новые поля для Claude контекста
+        userId:               input.userId  || null,
+        chatId:               activeChatId  || null,
+        history:              contextHistory,
         prompt
       };
+
+      // Сохраняем сообщение пользователя локально
+      if (historyService && activeChatId) {
+        historyService.addLocalMessage(activeChatId, {
+          role: "user",
+          text: input.userMessage,
+          createdAt: new Date().toISOString()
+        });
+      }
 
       if (config.debug) {
         console.info("[DriveX AI] request", {
@@ -288,7 +309,21 @@
       if (config.debug) {
         console.info("[DriveX AI] response", payload);
       }
-      return window.DrivexAIMapper.mapApiResponse(payload, input);
+      const mapped = window.DrivexAIMapper.mapApiResponse(payload, input);
+
+      // Сохраняем ответ AI локально в кэш истории
+      const hs2 = window.DrivexAIHistoryService;
+      const cid2 = hs2 ? hs2.getActiveChatId() : null;
+      if (hs2 && cid2 && mapped) {
+        hs2.addLocalMessage(cid2, {
+          role:      "assistant",
+          answer:    mapped.summary || "",
+          response:  mapped,
+          createdAt: new Date().toISOString()
+        });
+      }
+
+      return mapped;
     } finally {
       window.clearTimeout(timeoutId);
     }

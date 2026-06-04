@@ -1651,8 +1651,9 @@
     if (!incomingOrders.length) return loadSupabaseAppState();
 
     for (const order of incomingOrders) {
+      // Не передаём id — пусть Supabase генерирует UUID автоматически
+      // Это исправляет ошибку "invalid input syntax for type uuid"
       const orderRow = {
-        id: order.id || makeId("order"),
         store_id: order.storeId,
         customer_user_id: null,
         customer_name: order.customerName || "Клиент DRIVEX",
@@ -1662,14 +1663,16 @@
           : "delivery",
         delivery_address: order.address || "",
         total_amount: Math.max(0, Number(order.amount || 0)),
-        status: order.status || "new"
+        status: order.status || "new",
+        items: Array.isArray(order.items) ? order.items : []
       };
-      const { error: orderError } = await client.from("orders").insert(orderRow);
+      const { data: insertedOrder, error: orderError } = await client
+        .from("orders").insert(orderRow).select("id").single();
       if (orderError) throw orderError;
+      const createdOrderId = insertedOrder?.id || makeId("order");
 
       const orderItems = (order.items || []).map((item) => ({
-        id: makeId("order-item"),
-        order_id: orderRow.id,
+        order_id: createdOrderId,
         product_id: item.productId || null,
         product_title: item.title || "Товар",
         quantity: Math.max(1, Number(item.qty || 1)),
@@ -1679,13 +1682,13 @@
 
       if (orderItems.length) {
         const { error: itemsError } = await client.from("order_items").insert(orderItems);
-        if (itemsError) throw itemsError;
+        if (itemsError) console.warn("[seller-backend] order_items insert:", itemsError.message);
       }
 
       await client.from("seller_notifications").insert({
         store_id: order.storeId,
         type: "order_new",
-        title: `Новый заказ ${orderRow.id}`,
+        title: `Новый заказ ${createdOrderId}`,
         message: `${order.customerName || "Клиент DRIVEX"} • ${order.amount || 0} TJS`
       });
     }

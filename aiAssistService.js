@@ -12,15 +12,46 @@
     return digits ? Number(digits) : 0;
   }
 
-  function toVehicleContext(activeCar = {}) {
+  // ── Получить активный автомобиль из гаража пользователя ──────────────────────
+  function resolveActiveCar(activeCar, activeCarId) {
+    // 1. Если передан объект авто напрямую
+    if (activeCar && (activeCar.name || activeCar.make)) return activeCar;
+
+    // 2. Ищем по ID в глобальном гараже
+    if (activeCarId && typeof window !== "undefined") {
+      const cars = window.DX?._garageCarsRef?.val || [];
+      const found = cars.find(c => c.id === activeCarId);
+      if (found) return found;
+    }
+
+    // 3. Берём первый автомобиль из гаража
+    if (typeof window !== "undefined") {
+      const cars = window.DX?._garageCarsRef?.val || [];
+      if (cars.length > 0) return cars[0];
+    }
+
+    return null; // нет авто в гараже
+  }
+
+  function toVehicleContext(activeCar) {
+    if (!activeCar) return null;
+
     const parsed = parseCarName(activeCar.name);
+    const make   = activeCar.make  || parsed.make  || "";
+    const model  = activeCar.model || parsed.model || "";
+    const year   = activeCar.year  || "";
+    const ml     = parseMileage(activeCar.mileage);
+
+    // Нет никаких данных — не передаём пустой объект
+    if (!make && !model && !year && !ml) return null;
+
     return {
-      make: activeCar.make || parsed.make,
-      model: activeCar.model || parsed.model,
-      year: activeCar.year || "",
-      mileage: parseMileage(activeCar.mileage),
+      make,
+      model,
+      year,
+      mileage:      ml,
       mileageLabel: activeCar.mileage || "",
-      fuelType: activeCar.fuelType || ""
+      fuelType:     activeCar.fuelType || ""
     };
   }
 
@@ -62,18 +93,29 @@
     userMessage = "",
     scenarioType = "diagnostic",
     activeCar,
+    activeCarId,
     maintenance,
     location,
     locale = "ru-RU",
-    serviceHistorySummary
+    serviceHistorySummary,
+    userId,
+    chatId,
+    history
   } = {}) {
+    // Находим реальную машину пользователя
+    const resolvedCar = resolveActiveCar(activeCar, activeCarId);
+    const vehicle     = toVehicleContext(resolvedCar); // null если нет авто
+
     return {
       userMessage: String(userMessage || ""),
       scenarioType: normalizeScenarioType(scenarioType),
-      vehicle: toVehicleContext(activeCar || {}),
+      vehicle,                           // null или объект с данными авто
       location: location || { city: "Худжанд" },
       serviceHistorySummary: serviceHistorySummary || summarizeMaintenance(maintenance),
-      locale
+      locale,
+      userId,
+      chatId,
+      history: Array.isArray(history) ? history : []
     };
   }
 

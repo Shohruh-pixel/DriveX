@@ -26,6 +26,126 @@
       ],
       "products": []
     },
-    "updatedAt": "2026-05-31T16:35:00.720Z"
+    "updatedAt": "2026-06-04T18:42:26.531Z"
+  },
+  "drivex.seller.session.v1": {
+    "value": {
+      "id": "guest-buyer",
+      "name": "Покупатель DRIVEX",
+      "email": "buyer@drivex.app",
+      "role": "buyer",
+      "sellerStoreId": "auto-parts-khujand"
+    },
+    "updatedAt": "2026-06-04T18:40:05.143Z"
+  },
+  "drivex.seller.profile.v1": {
+    "value": {
+      "id": "seller-profile-auto-parts-khujand",
+      "ownerFullName": "",
+      "phone": "",
+      "email": "",
+      "password": "",
+      "registrationCompleted": false
+    },
+    "updatedAt": "2026-06-04T18:40:05.144Z"
+  },
+  "drivex.seller.store.v1": {
+    "value": {
+      "id": "auto-parts-khujand",
+      "name": "",
+      "ownerName": "",
+      "city": "",
+      "address": "",
+      "locationLabel": "",
+      "geolocation": "",
+      "storeCategory": "",
+      "businessType": "",
+      "phone": "",
+      "deliveryAvailable": false,
+      "pickupAvailable": false,
+      "deliveryRadius": "",
+      "workingHours": "",
+      "description": "",
+      "logo": "",
+      "rating": 4.7,
+      "reviews": 0,
+      "accent": "var(--drivex-electric-blue)",
+      "registrationCompleted": false,
+      "profileCompleted": false,
+      "status": "new",
+      "catalogInitialized": false
+    },
+    "updatedAt": "2026-06-04T18:40:05.145Z"
+  },
+  "drivex.seller.products.v1": {
+    "value": [],
+    "updatedAt": "2026-06-04T18:40:05.146Z"
+  },
+  "drivex.seller.orders.v1": {
+    "value": [],
+    "updatedAt": "2026-06-04T18:40:05.147Z"
+  },
+  "drivex.seller.notifications.v1": {
+    "value": [],
+    "updatedAt": "2026-06-04T18:40:05.148Z"
+  },
+  "drivex.service.profile.v1": {
+    "value": {
+      "id": "service-profile-service-hub-khujand",
+      "ownerFullName": "",
+      "phone": "+992 ",
+      "email": "",
+      "password": "",
+      "position": "Владелец сервиса",
+      "registrationCompleted": false
+    },
+    "updatedAt": "2026-06-04T18:40:03.965Z"
+  },
+  "drivex.service.center.v1": {
+    "value": {
+      "id": "service-hub-khujand",
+      "name": "",
+      "serviceType": "",
+      "city": "",
+      "address": "",
+      "locationLabel": "",
+      "geolocation": "",
+      "phone": "+992 ",
+      "email": "",
+      "boxesCount": 2,
+      "workingHours": "08:00 — 19:00",
+      "description": "",
+      "logo": "",
+      "coverImage": "",
+      "gallery": [],
+      "videoUrl": "",
+      "registrationCompleted": false,
+      "status": "new"
+    },
+    "updatedAt": "2026-06-04T18:42:26.512Z"
+  },
+  "drivex.service.clients.v1": {
+    "value": [],
+    "updatedAt": "2026-06-04T18:42:26.514Z"
+  },
+  "drivex.service.inventory.v1": {
+    "value": [],
+    "updatedAt": "2026-06-04T18:42:26.519Z"
+  },
+  "drivex.service.orders.v1": {
+    "value": [],
+    "updatedAt": "2026-06-04T18:42:26.517Z"
+  },
+  "drivex.service.finance.v1": {
+    "value": [],
+    "updatedAt": "2026-06-04T18:42:26.522Z"
+  },
+  "drivex.service.appointments.v1": {
+    "value": [],
+    "updatedAt": "2026-06-04T18:42:26.526Z"
+  },
+  "drivex.service.requests.v1": {
+    "value": [],
+    "updatedAt": "2026-06-04T18:42:26.528Z"
   }
 }

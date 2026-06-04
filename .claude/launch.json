@@ -2,10 +2,10 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "drivex-design-preview",
+      "name": "drivex-main",
       "runtimeExecutable": "node",
-      "runtimeArgs": ["-e", "require('http').createServer((req,res)=>{const fs=require('fs');const path=require('path');const f=path.join('C:/Users/user/DriveX','design-preview.html');res.writeHead(200,{'Content-Type':'text/html;charset=utf-8'});res.end(fs.readFileSync(f))}).listen(8099)"],
-      "port": 8099
+      "runtimeArgs": ["server.js"],
+      "port": 8080
     }
   ]
 }

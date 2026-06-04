@@ -6,6 +6,7 @@ const { composeLocalResponse } = require("./ai.composers");
 const { mapToUiResponse, parseModelResponse } = require("./ai.mapper");
 const { askDriveXLLM, getProvider } = require("./ai.llm");
 const { getVehicleContext } = require("../vehicle/vehicle.repository");
+const { saveConversationTurn } = require("./ai.history");
 
 function uniqueList(values) {
   return Array.from(new Set((values || []).filter(Boolean)));
@@ -51,7 +52,11 @@ function normalizeInput(body = {}) {
     vehicle: body.vehicle || {},
     location: body.location || { city: "Khujand" },
     locale: body.locale || "ru",
-    serviceHistorySummary: body.serviceHistorySummary || body.serviceHistory || null
+    serviceHistorySummary: body.serviceHistorySummary || body.serviceHistory || null,
+    // История и пользователь — для Claude контекста
+    userId:  body.userId  || body.user_id  || null,
+    chatId:  body.chatId  || body.chat_id  || null,
+    history: Array.isArray(body.history)  ? body.history  : []
   };
 }
 
@@ -71,7 +76,10 @@ function devLog(label, payload) {
 
 async function askAssistant(body = {}) {
   const input = normalizeInput(body);
-  const vehicle = getVehicleContext(input.vehicle);
+  // vehicle может быть null если пользователь не добавил авто
+  const vehicle = input.vehicle && Object.keys(input.vehicle).length > 0
+    ? getVehicleContext(input.vehicle)
+    : null;
   const classification = classifyIntent(input.userMessage, input.scenarioType);
   const mode = getMode();
   const retrieval = mode === "local"
@@ -113,6 +121,17 @@ async function askAssistant(body = {}) {
       urgency: mapped.urgency,
       sourcesUsed: mapped.sourcesUsed
     });
+
+    // Сохраняем диалог в историю (fire-and-forget, не блокируем ответ)
+    if (input.userId) {
+      saveConversationTurn(
+        input.userId,
+        input.userMessage,
+        { answer: mapped.summary, title: mapped.title, urgency: mapped.urgency, ...policyResponse },
+        vehicle,
+        classification.intent
+      ).catch(() => {});
+    }
 
     return mapped;
   } catch (error) {

@@ -1,6 +1,7 @@
 "use strict";
 
 const { assistantController } = require("./ai.controller");
+const { getUserChats, getChatHistory, deleteChat } = require("./ai.history");
 
 function sendJson(res, statusCode, payload) {
   res.writeHead(statusCode, {
@@ -65,7 +66,48 @@ async function handleAiRoute(req, res) {
   return true;
 }
 
+// ── История чатов ─────────────────────────────────────────────────────────────
+// GET  /api/ai/chats?userId=xxx         — список чатов пользователя
+// GET  /api/ai/chats/:chatId?userId=xxx — сообщения чата
+// DELETE /api/ai/chats/:chatId?userId=xxx — удалить чат
+async function handleAiHistoryRoute(req, res, urlParts) {
+  const url    = new URL(req.url, "http://localhost");
+  const userId = url.searchParams.get("userId") || url.searchParams.get("user_id") || "";
+
+  if (!userId) {
+    sendJson(res, 400, { error: "userId required" });
+    return true;
+  }
+
+  // /api/ai/chats/:chatId
+  const chatId = urlParts[4] || ""; // ['', 'api', 'ai', 'chats', '<chatId>']
+
+  if (req.method === "GET" && !chatId) {
+    // Список чатов
+    const chats = await getUserChats(userId).catch(() => []);
+    sendJson(res, 200, { chats });
+    return true;
+  }
+
+  if (req.method === "GET" && chatId) {
+    // Сообщения конкретного чата
+    const messages = await getChatHistory(chatId, userId).catch(() => []);
+    sendJson(res, 200, { messages });
+    return true;
+  }
+
+  if (req.method === "DELETE" && chatId) {
+    const ok = await deleteChat(chatId, userId).catch(() => false);
+    sendJson(res, 200, { ok });
+    return true;
+  }
+
+  sendJson(res, 405, { error: "Method not allowed" });
+  return true;
+}
+
 module.exports = {
   handleAiRoute,
+  handleAiHistoryRoute,
   sendJson
 };
