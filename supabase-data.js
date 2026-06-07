@@ -184,13 +184,13 @@
   async function upsertUserProfile(userId, profile) {
     const client = getClient();
     if (!client || !userId) return null;
+    // public.users — это мини-реестр (визитка). Личные данные (машины, документы, ТО)
+    // живут ТОЛЬКО в едином дереве user_app_state. Поэтому cars/active_car_id сюда НЕ пишем.
     const payload = {
       id: userId,
       full_name: profile.full_name || profile.name || "",
       phone: profile.phone || "",
       avatar_url: profile.avatar_url || "",
-      cars: profile.cars || [],
-      active_car_id: profile.active_car_id || "",
       updated_at: new Date().toISOString()
     };
     if (profile.role) payload.role = profile.role;

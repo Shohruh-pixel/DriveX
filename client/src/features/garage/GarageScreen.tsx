@@ -87,12 +87,18 @@ function AddCarForm({ onAdd }: { onAdd: (car: Car) => void }) {
   const [model, setModel] = useState("");
   const [year, setYear] = useState("");
   const [plate, setPlate] = useState("");
+  const [mileage, setMileage] = useState("");
   const toast = useToast();
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!make || !model) { toast.push("Выберите марку и модель", "error"); return; }
-    onAdd({ id: `car-${Date.now()}`, make, model, year, plate, addedAt: new Date().toISOString() });
+    onAdd({
+      id: crypto.randomUUID(),
+      make, model, year, plate,
+      mileage: mileage ? Number(mileage) : undefined,
+      addedAt: new Date().toISOString(),
+    });
     toast.push("Автомобиль добавлен!", "success");
   };
 
@@ -109,6 +115,15 @@ function AddCarForm({ onAdd }: { onAdd: (car: Car) => void }) {
           <Input label="Год" type="number" value={year} onChange={(e) => setYear(e.target.value)} placeholder="2019" min="1990" max={String(new Date().getFullYear())} />
           <Input label="Госномер" value={plate} onChange={(e) => setPlate(e.target.value)} placeholder="TJ 0000 AB" />
         </div>
+        <Input
+          label="Пробег (км)"
+          type="number"
+          value={mileage}
+          onChange={(e) => setMileage(e.target.value)}
+          placeholder="78 000"
+          min="0"
+          max="999999"
+        />
         <Button type="submit" fullWidth>Добавить</Button>
       </form>
     </Card>

@@ -20,6 +20,7 @@ export interface AuthSession {
   phone: string;
   email: string;
   role: UserRole;
+  avatar_url?: string;
   authenticated: boolean;
   provider: "supabase" | "local" | "guest";
 }

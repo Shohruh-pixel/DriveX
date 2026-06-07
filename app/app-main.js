@@ -14,10 +14,15 @@
   const BottomNav   = function(p){ return window.DX.BottomNav ? window.DX.BottomNav(p) : null; };
   const SimplePage  = function(p){ var F=window.DX.SimplePage; return F ? F(p) : (p.children||null); };
   const ToastProvider = function(p){ var F=window.DX.ToastProvider; return F ? F(p) : (p.children||null); };
+  const ConfirmProvider = function(p){ var F=window.DX.ConfirmProvider; return F ? F(p) : (p.children||null); };
 
   // ── useToast: напрямую через context (не через DX wrapper) ───────────
   const ToastContext = window.DX.ToastContext || createContext({ push: function(){} });
   function useToast(){ return useContext(ToastContext); }
+
+  // ── useConfirm: внутри-приложенческое модальное подтверждение ─────────
+  const ConfirmContext = window.DX.ConfirmContext || createContext({ confirm: function(){ return Promise.resolve(true); } });
+  function useConfirm(){ return useContext(ConfirmContext); }
 
   // ── normalizePath и useHashPath: прямые реализации (без DX proxy) ────
   function normalizePath(p) {
@@ -200,11 +205,14 @@
   function App() {
     const path = useHashPath();
     const toast = useToast();
+    const { confirm } = useConfirm();
     const sellerSyncChannelRef = useRef(null);
     const sharedAppStateReadyRef = useRef(false);
     const sharedAppStateUpdatedAtRef = useRef({});
     const buyerStateReadyRef = useRef(!getSupabaseClient());
     const recentBuyerSavesRef = useRef({});
+    // Индикатор загрузки личных данных из облака (после входа / при старте)
+    const [buyerStateLoading, setBuyerStateLoading] = useState(false);
     // Stable refs — позволяют useEffect([]) читать актуальные функции без перезапуска
     const applySharedStateSnapshotRef = useRef(null);
     const applyBuyerAppStateRef      = useRef(null);
@@ -734,11 +742,15 @@
         if (key === drivexStorageKeys.maintenance) {
           const source = nextValue && typeof nextValue === "object" ? nextValue : createEmptyMaintenanceState();
           const next = createEmptyMaintenanceState();
-          for (const car of garageCars) {
-            const carState = source.cars && source.cars[car.id] && typeof source.cars[car.id] === "object"
-              ? source.cars[car.id]
+          // Берём car id и из облака (source.cars), и из гаража — иначе при входе,
+          // когда гараж ещё не загрузился, записи ТО терялись.
+          const sourceCars = source.cars && typeof source.cars === "object" ? source.cars : {};
+          const carIds = new Set([...Object.keys(sourceCars), ...garageCars.map((c) => c.id)]);
+          for (const carId of carIds) {
+            const carState = sourceCars[carId] && typeof sourceCars[carId] === "object"
+              ? sourceCars[carId]
               : {};
-            next.cars[car.id] = {
+            next.cars[carId] = {
               records: (Array.isArray(carState.records) ? carState.records : [])
                 .map((item) => normalizeMaintenanceRecord(item))
                 .filter(Boolean)
@@ -924,12 +936,6 @@
     const pushBuyerState = useCallback(
       (key, nextValue) => {
         try {
-          recentBuyerSavesRef.current = recentBuyerSavesRef.current || {};
-          recentBuyerSavesRef.current[key] = Date.now();
-        } catch {
-          // ignore
-        }
-        try {
           if (typeof window !== "undefined" && window.localStorage) {
             console.debug && console.debug("[pushBuyerState]", { key, buyerId: buyerSession?.id || null });
             if (buyerSession?.authenticated && buyerSession.id) {
@@ -950,9 +956,20 @@
           // local cache is best effort
         }
 
-        if (buyerSession?.authenticated && buyerSession.id) {
-          // Всегда сохраняем в Supabase если авторизованы
-          // buyerStateReadyRef убран — иначе изменения до fetchBuyerAppState теряются
+        if (buyerSession?.authenticated && buyerSession.id && buyerStateReadyRef.current) {
+          // Сохраняем в Supabase ТОЛЬКО после первичной загрузки серверного состояния
+          // (buyerStateReadyRef === true). Иначе сброс к дефолтам при логине/перезагрузке
+          // успевает перезаписать реальные данные пользователя пустыми значениями.
+          // localStorage пишется выше без гейта — локальные правки не теряются.
+          // Метку «недавнего сохранения» ставим ТОЛЬКО при реальной отправке на сервер —
+          // иначе сброс к дефолтам (gated) помечал бы ключи и блокировал применение
+          // серверных данных (skipRecent) при первичной загрузке → пустой гараж.
+          try {
+            recentBuyerSavesRef.current = recentBuyerSavesRef.current || {};
+            recentBuyerSavesRef.current[key] = Date.now();
+          } catch {
+            // ignore
+          }
           saveBuyerAppState(buyerSession, key, nextValue).catch(() => {
             // Supabase sync should not break the current in-memory session.
           });
@@ -1196,9 +1213,40 @@
       (state) => {
         // Всегда ставим ready=true — иначе saveBuyerAppState никогда не вызывается
         if (state && typeof state === "object") {
-          applySharedStateSnapshot(state, { includeBuyerPersonal: true });
+          // Защита от потери данных: НЕ применяем пустые/дефолтные серверные значения
+          // поверх реальных локальных данных (иначе «отравленный» дефолтами сервер
+          // затирал бы машины/профиль покупателя при каждой перезагрузке).
+          const defaultProfileName = createDefaultBuyerProfile().name;
+          const isEmptyStateValue = (key, value) => {
+            if (value === null || value === undefined) return true;
+            if (Array.isArray(value)) return value.length === 0;
+            if (typeof value === "string") return value.trim() === "";
+            if (typeof value === "object") {
+              if (key === drivexStorageKeys.profile) {
+                return (!value.name || value.name === defaultProfileName) && !value.phone && !value.avatar;
+              }
+              const vals = Object.values(value);
+              if (!vals.length) return true;
+              return vals.every((v) =>
+                v === null || v === undefined ||
+                (Array.isArray(v) && v.length === 0) ||
+                (typeof v === "object" && v && Object.keys(v).length === 0) ||
+                (typeof v === "string" && v.trim() === "")
+              );
+            }
+            return false;
+          };
+          const filtered = {};
+          for (const [key, entry] of Object.entries(state)) {
+            const value = entry && typeof entry === "object" && Object.prototype.hasOwnProperty.call(entry, "value")
+              ? entry.value
+              : entry;
+            if (!isEmptyStateValue(key, value)) filtered[key] = entry;
+          }
+          applySharedStateSnapshot(filtered, { includeBuyerPersonal: true });
         }
         buyerStateReadyRef.current = true;
+        setBuyerStateLoading(false); // данные загружены — убираем индикатор
       },
       [applySharedStateSnapshot]
     );
@@ -1221,6 +1269,7 @@
           const fn = applyBuyerSessionRef.current;
           const session = fn && fn(makeBuyerSessionFromSupabaseUser(data.session.user));
           if (!session) return;
+          setBuyerStateLoading(true);
           fetchBuyerAppState(session)
             .then((state) => {
               if (!cancelled) {
@@ -1228,7 +1277,7 @@
                 applyFn && applyFn(state || {});
               }
             })
-            .catch(() => { buyerStateReadyRef.current = true; });
+            .catch(() => { buyerStateReadyRef.current = true; setBuyerStateLoading(false); });
         })
         .catch(() => {});
 
@@ -1238,6 +1287,7 @@
           const fn = applyBuyerSessionRef.current;
           const nextSession = fn && fn(makeBuyerSessionFromSupabaseUser(session.user));
           if (!nextSession) return;
+          setBuyerStateLoading(true);
           fetchBuyerAppState(nextSession)
             .then((state) => {
               if (!cancelled) {
@@ -1245,9 +1295,10 @@
                 applyFn && applyFn(state || {});
               }
             })
-            .catch(() => { buyerStateReadyRef.current = true; });
+            .catch(() => { buyerStateReadyRef.current = true; setBuyerStateLoading(false); });
         } else {
           buyerStateReadyRef.current = !getSupabaseClient();
+          setBuyerStateLoading(false);
           setBuyerSession(createEmptyBuyerSession());
         }
       });
@@ -1292,12 +1343,14 @@
         const nextCars = {};
         for (const car of userGarageCars) {
           const carDocs = current.cars && current.cars[car.id] ? current.cars[car.id] : {};
+          // Документы хранятся двусторонними ({front, back}) — нормализуем тем же
+          // нормализатором, что и при загрузке (normalizeSidedDoc), иначе обнуляются.
           nextCars[car.id] = {
-            registration: normalizeDocumentItem(carDocs.registration, `Техпаспорт ${car.name}`),
-            inspection: normalizeDocumentItem(carDocs.inspection, `Техосмотр ${car.name}`)
+            registration: normalizeSidedDoc(carDocs.registration),
+            inspection: normalizeSidedDoc(carDocs.inspection)
           };
         }
-        return { license: normalizeDocumentItem(current.license, "Права"), cars: nextCars };
+        return { license: normalizeSidedDoc(current.license), cars: nextCars };
       });
 
       setMaintenance((prev) => {
@@ -2000,15 +2053,12 @@
           if (user?.id) {
             let userRow = null;
             try {
-              const _r = await client.from("users").select("role,full_name,cars,active_car_id").eq("id", user.id);
+              const _r = await client.from("users").select("role,full_name").eq("id", user.id);
               userRow = Array.isArray(_r.data) ? _r.data[0] : (_r.data || null);
             } catch(_) {}
             if (userRow?.role) actualRole = userRow.role;
-            // Загружаем машины если они уже есть
-            if (Array.isArray(userRow?.cars) && userRow.cars.length > 0) {
-              setUserGarageCars(normalizeGarageList(userRow.cars));
-              if (userRow.active_car_id) setActiveCarId(userRow.active_car_id);
-            }
+            // Машины/документы/ТО грузятся ТОЛЬКО из единого дерева (user_app_state)
+            // через fetchBuyerAppState ниже — не дублируем чтение из users.cars.
           }
 
           const session = user
@@ -2108,7 +2158,9 @@
           // - если передан реальный email → используем его
           // - если только телефон → генерируем phone-email
           const digits = rawPhone.replace(/\D/g, "");
-          const authEmail = email || (digits + "@phone.drivex.app");
+          // Единая схема phone-email во всех путях входа (совпадает с OTP в auth-phone.js),
+          // чтобы один номер всегда давал один и тот же Supabase-аккаунт (без дублей).
+          const authEmail = email || ("phone_" + digits + "@drivex.app");
 
           const { data, error } = await client.auth.signUp({
             email: authEmail,
@@ -2173,64 +2225,69 @@
 
         const client = getSupabaseClient();
         if (client) {
-          let authEmail = email;
-
-          // Вход по телефону: ищем email в public.users по номеру телефона
-          if (phone && !email) {
+          // Собираем кандидатов email и пробуем войти по очереди.
+          // Надёжно даже если в users записан неверный email: детерминированный
+          // phone_<digits>@drivex.app всегда среди кандидатов и будет проверен.
+          let candidateEmails = [];
+          if (email) {
+            candidateEmails = [email];
+          } else if (phone) {
             const digits = phone.replace(/\D/g, "");
-            // Ищем email пользователя по номеру телефона
             const normalizedPhone = phone.startsWith("+") ? phone : ("+" + digits);
-            let profileData = null;
+            let lookedUp = [];
             try {
-              const r1 = await client.from("users").select("email").eq("phone", normalizedPhone);
-              profileData = Array.isArray(r1.data) && r1.data.length ? r1.data[0] : null;
-              if (!profileData && normalizedPhone !== phone) {
-                const r2 = await client.from("users").select("email").eq("phone", phone);
-                profileData = Array.isArray(r2.data) && r2.data.length ? r2.data[0] : null;
-              }
-            } catch(_) {}
-            // Если нашли профиль с email — используем его
-            // Иначе используем phone-derived email (для новых пользователей)
-            authEmail = (profileData?.email) || (digits + "@phone.drivex.app");
+              const variants = Array.from(new Set([normalizedPhone, phone, "+" + digits]));
+              const r1 = await client.from("users").select("email").in("phone", variants);
+              lookedUp = Array.isArray(r1.data) ? r1.data.map((row) => row && row.email).filter(Boolean) : [];
+            } catch (_) {}
+            candidateEmails = Array.from(new Set([...lookedUp, "phone_" + digits + "@drivex.app"]));
           }
 
-          const { data, error } = await client.auth.signInWithPassword({ email: authEmail, password });
-          if (error) throw error;
+          let data = null;
+          let lastError = null;
+          let authEmail = candidateEmails[0] || email;
+          for (const em of candidateEmails) {
+            const r = await client.auth.signInWithPassword({ email: em, password });
+            if (!r.error) { data = r.data; authEmail = em; lastError = null; break; }
+            lastError = r.error;
+          }
+          if (!data) throw lastError || new Error("Неверный номер или пароль");
           const session = makeBuyerSessionFromSupabaseUser(data?.user);
 
-          // Загружаем полный профиль из Supabase
+          // Самолечение реестра: гарантируем строку в public.users с НАШИМ auth-id
+          // (раньше строки создавались с чужими id → дубли и нестабильный поиск по номеру).
+          try {
+            const selfDigits = String(session.phone || phone || "").replace(/\D/g, "");
+            const selfPhone = selfDigits ? ("+" + selfDigits) : "";
+            await client.from("users").upsert({
+              id: session.id,
+              full_name: session.name || "",
+              phone: selfPhone,
+              email: session.email || authEmail,
+              role: session.role || "buyer"
+            }, { onConflict: "id" }).catch(() => {});
+          } catch (_) {}
+
+          // Имя/телефон для подписи сессии берём из мини-реестра public.users.
+          // ВСЕ личные данные (машины, документы, ТО, заказы и т.д.) грузятся ТОЛЬКО
+          // из единого дерева user_app_state (fetchBuyerAppState ниже) — один источник.
           const supa = window.DrivexSupabaseData;
           if (supa && session.id) {
-            const [userProfile, orders, docs] = await Promise.all([
-              supa.loadUserProfile(session.id).catch(() => null),
-              supa.loadBuyerOrders(session.id).catch(() => null),
-              supa.loadDocuments(session.id).catch(() => null)
-            ]);
+            const userProfile = await supa.loadUserProfile(session.id).catch(() => null);
             if (userProfile) {
-              // Применяем имя, телефон из профиля
               session.name = userProfile.full_name || session.name;
               session.phone = userProfile.phone || session.phone;
-              // Загружаем машины
-              if (Array.isArray(userProfile.cars) && userProfile.cars.length) {
-                setUserGarageCars(normalizeGarageList(userProfile.cars));
-                if (userProfile.active_car_id) setActiveCarId(userProfile.active_car_id);
-              }
-            }
-            if (orders) {
-              setBuyerOrders(orders.map((o) => ({
-                id: o.id, storeId: o.store_id, amount: Number(o.total_amount) || 0,
-                status: o.status, date: String(o.created_at || "").slice(0, 10),
-                items: Array.isArray(o.items) ? o.items : []
-              })));
             }
           }
 
           applyBuyerSession(session);
+          setBuyerStateLoading(true);
           const state = await fetchBuyerAppState(session).catch(() => null);
           if (state) {
             applyBuyerAppState(state);
           } else {
             buyerStateReadyRef.current = true;
+            setBuyerStateLoading(false);
           }
           // Push токен
           const push = window.DrivexPush;
@@ -2253,6 +2310,15 @@
     );
 
     const logoutBuyer = useCallback(async () => {
+      const confirmed = await confirm({
+        title: "Выйти из аккаунта?",
+        message: "Ваши данные сохранены в облаке.",
+        confirmLabel: "Выйти",
+        cancelLabel: "Остаться",
+        danger: true,
+        icon: "lock"
+      });
+      if (!confirmed) return;
       const client = getSupabaseClient();
       if (client) {
         await client.auth.signOut().catch(() => {});
@@ -2267,6 +2333,7 @@
       }
       setBuyerSession(createEmptyBuyerSession());
       buyerStateReadyRef.current = !getSupabaseClient();
+      setBuyerStateLoading(false);
       setProfile(createDefaultBuyerProfile());
       setUserGarageCars([]);
       setUserSavedPlaces([]);
@@ -2278,7 +2345,7 @@
       setCart({});
       navigateToHash("/login");
       toast.push("Вы вышли из аккаунта");
-    }, [buyerSession, toast]);
+    }, [buyerSession, toast, confirm]);
 
     const registerSeller = useCallback(
       async (payload) => {
@@ -3477,7 +3544,9 @@
       .filter((item) => item.centerId === serviceCurrentCenter.id && !isDemoServiceFinanceEntry(item));
     const serviceScopedAppointments = normalizeServiceAppointmentsList(serviceAppointments, serviceCurrentCenter.id)
       .filter((item) => item.centerId === serviceCurrentCenter.id && !isDemoServiceAppointment(item));
-    const notificationsCount = baseNotificationsCount + buildBuyerServiceNotifications(serviceRequests).length;
+    const notificationsCount = (window.DX && typeof window.DX.countUnreadBuyerNotifications === "function")
+      ? window.DX.countUnreadBuyerNotifications(serviceRequests)
+      : (baseNotificationsCount + buildBuyerServiceNotifications(serviceRequests).length);
     const serviceDirectory = buildServiceDirectoryData(serviceCurrentCenter, {
       clients: serviceScopedClients,
       orders: serviceScopedOrders,
@@ -4003,7 +4072,7 @@
         content = html`<${getScreen('OrdersScreen')} orders=${buyerOrders} orderChats=${orderChats} />`;
       } else if (normalized === "/trips") {
         activePath = "/profile";
-        content = html`<${getScreen('TripsScreen')} />`;
+        content = html`<${getScreen('ComingSoonScreen')} title="История поездок" emoji="🛣️" subtitle="GPS-история поездок появится в одном из ближайших обновлений" />`;
       } else if (normalized === "/saved-locations") {
         activePath = "/profile";
         content = html`<${getScreen('SavedLocationsScreen')}
@@ -4011,21 +4080,24 @@
           onAddPlace=${addSavedPlace}
           onRemovePlace=${removeSavedPlace}
         />`;
+      } else if (normalized === "/favorites") {
+        activePath = "/profile";
+        content = html`<${getScreen('FavoritesScreen')} />`;
       } else if (normalized === "/settings") {
         activePath = "/profile";
-        content = html`<${getScreen('SettingsScreen')} />`;
+        content = html`<${getScreen('SettingsScreen')} session=${buyerSession} />`;
       } else if (normalized === "/help") {
         activePath = "/profile";
         content = html`<${getScreen('HelpScreen')} />`;
       } else if (normalized === "/payment") {
         activePath = "/profile";
-        content = html`<${getScreen('PaymentDataScreen')} />`;
+        content = html`<${getScreen('ComingSoonScreen')} title="Платёжные данные" emoji="💳" subtitle="Управление картами появится в ближайшем обновлении" />`;
       } else if (normalized === "/bonus") {
         activePath = "/profile";
-        content = html`<${getScreen('BonusProgramScreen')} />`;
+        content = html`<${getScreen('ComingSoonScreen')} title="Бонусная программа" emoji="⭐" subtitle="Баллы и награды появятся в ближайшем обновлении" />`;
       } else if (normalized === "/invite") {
         activePath = "/profile";
-        content = html`<${getScreen('InviteFriendsScreen')} />`;
+        content = html`<${getScreen('ComingSoonScreen')} title="Пригласить друзей" emoji="🎁" subtitle="Реферальная программа появится в ближайшем обновлении" />`;
       } else {
         activePath = "/";
         content = html`<${getScreen('NotFoundScreen')} path=${normalized} />`;
@@ -4036,12 +4108,41 @@
       <div className="min-h-screen relative" style=${{ background: "var(--drivex-black)" }}>
         <main id="main">${content}</main>
         ${isSellerRoute || isPartnerRoute || isServiceCrmRoute ? null : html`<${BottomNav} activePath=${activePath} />`}
+        ${buyerStateLoading
+          ? html`
+              <div
+                className="fixed inset-0 z-50 flex items-center justify-center px-6"
+                style=${{ background: "rgba(2, 6, 12, 0.88)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", maxWidth: "480px", margin: "0 auto" }}
+                aria-live="polite"
+              >
+                <style>${"@keyframes drivexSpin{to{transform:rotate(360deg)}}"}</style>
+                <div className="flex flex-col items-center" style=${{ gap: "16px", textAlign: "center" }}>
+                  <div
+                    style=${{
+                      width: "52px",
+                      height: "52px",
+                      borderRadius: "9999px",
+                      border: "3px solid rgba(6, 182, 212, 0.25)",
+                      borderTopColor: "var(--drivex-neon-cyan)",
+                      animation: "drivexSpin 0.8s linear infinite"
+                    }}
+                  ></div>
+                  <p style=${{ color: "var(--drivex-white)", fontWeight: 700, fontSize: "16px" }}>
+                    Загружаем ваши данные…
+                  </p>
+                  <p style=${{ color: "var(--drivex-silver)", fontSize: "13px" }}>
+                    Синхронизация с облаком
+                  </p>
+                </div>
+              </div>
+            `
+          : null}
       </div>
     `;
   }
 
   function Root() {
-    return html`<${ToastProvider}><${App} /></${ToastProvider}>`;
+    return html`<${ToastProvider}><${ConfirmProvider}><${App} /></${ConfirmProvider}></${ToastProvider}>`;
   }
 
   const rootElement = document.getElementById("root");

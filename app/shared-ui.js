@@ -10,6 +10,10 @@
   // ToastContext и normalizePath приходят из utils-models.js (загружается перед shared-ui.js)
   const ToastContext = window.DX.ToastContext || createContext({ push: function(){} });
   function useToast() { return useContext(ToastContext); }
+  // ConfirmContext — внутри-приложенческое модальное подтверждение (вместо window.confirm)
+  const ConfirmContext = window.DX.ConfirmContext || createContext({ confirm: function(){ return Promise.resolve(true); } });
+  window.DX.ConfirmContext = ConfirmContext;
+  function useConfirm() { return useContext(ConfirmContext); }
   function normalizePath(p) {
     return window.DX.normalizePath ? window.DX.normalizePath(p) :
       (('/' + String(p||'').replace(/^#\//,'').replace(/\/+$/,'')) || '/');
@@ -380,6 +384,137 @@
           )}
         </div>
       </${ToastContext.Provider}>
+    `;
+  }
+
+  // In-app confirmation modal — заменяет нативный window.confirm.
+  // Использование: const confirm = useConfirm(); const ok = await confirm({ title, message, confirmLabel, danger });
+  function ConfirmProvider({ children }) {
+    const [request, setRequest] = useState(null);
+
+    const confirm = useCallback((options) => {
+      return new Promise((resolve) => {
+        setRequest({ options: options && typeof options === "object" ? options : {}, resolve });
+      });
+    }, []);
+
+    const close = useCallback((result) => {
+      setRequest((prev) => {
+        if (prev && typeof prev.resolve === "function") prev.resolve(result);
+        return null;
+      });
+    }, []);
+
+    const opts = request ? request.options : null;
+    const title = (opts && opts.title) || "Подтвердите действие";
+    const message = opts && opts.message;
+    const confirmLabel = (opts && opts.confirmLabel) || "Подтвердить";
+    const cancelLabel = (opts && opts.cancelLabel) || "Отмена";
+    const danger = Boolean(opts && opts.danger);
+    const icon = opts && opts.icon;
+
+    return html`
+      <${ConfirmContext.Provider} value=${{ confirm }}>
+        ${children}
+        ${request
+          ? html`
+              <div
+                className="fixed inset-0 z-50 flex items-center justify-center px-5"
+                style=${{ background: "rgba(2, 6, 12, 0.72)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", maxWidth: "480px", margin: "0 auto" }}
+                role="dialog"
+                aria-modal="true"
+                onClick=${() => close(false)}
+              >
+                <div
+                  className="glass-card rounded-3xl p-6 w-full neon-glow-cyan"
+                  style=${{ maxWidth: "400px" }}
+                  onClick=${(e) => e.stopPropagation()}
+                >
+                  ${icon
+                    ? html`<div
+                        className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4"
+                        style=${{
+                          background: danger ? "rgba(239, 68, 68, 0.16)" : "rgba(6, 182, 212, 0.16)",
+                          color: danger ? "var(--drivex-danger)" : "var(--drivex-neon-cyan)"
+                        }}
+                      >
+                        <${Icon} name=${icon} size=${26} />
+                      </div>`
+                    : null}
+                  <h2 className="text-xl font-bold mb-2" style=${{ color: "var(--drivex-white)" }}>
+                    ${title}
+                  </h2>
+                  ${message
+                    ? html`<p className="text-sm mb-6" style=${{ color: "var(--drivex-silver)", whiteSpace: "pre-line" }}>
+                        ${message}
+                      </p>`
+                    : html`<div style=${{ height: "12px" }}></div>`}
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      className="flex-1 py-3 rounded-2xl font-semibold glass-card-light"
+                      style=${{ color: "var(--drivex-white)" }}
+                      onClick=${() => close(false)}
+                    >
+                      ${cancelLabel}
+                    </button>
+                    <button
+                      type="button"
+                      className="flex-1 py-3 rounded-2xl font-bold"
+                      style=${{
+                        background: danger ? "rgba(239, 68, 68, 0.16)" : "var(--gradient-primary)",
+                        color: danger ? "var(--drivex-danger)" : "var(--drivex-white)"
+                      }}
+                      onClick=${() => close(true)}
+                    >
+                      ${confirmLabel}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            `
+          : null}
+      </${ConfirmContext.Provider}>
+    `;
+  }
+
+  // Toggle — стилизованный переключатель (вместо нативного <input type=checkbox>)
+  function Toggle({ checked, onChange, disabled }) {
+    const on = Boolean(checked);
+    return html`
+      <button
+        type="button"
+        role="switch"
+        aria-checked=${on ? "true" : "false"}
+        disabled=${Boolean(disabled)}
+        onClick=${() => { if (!disabled && typeof onChange === "function") onChange(!on); }}
+        style=${{
+          position: "relative",
+          width: "48px",
+          height: "28px",
+          borderRadius: "9999px",
+          background: on ? "var(--drivex-neon-cyan)" : "rgba(148, 163, 184, 0.3)",
+          opacity: disabled ? 0.5 : 1,
+          cursor: disabled ? "default" : "pointer",
+          padding: "2px",
+          border: "none",
+          flexShrink: 0,
+          transition: "background 0.2s"
+        }}
+      >
+        <span
+          style=${{
+            display: "block",
+            width: "24px",
+            height: "24px",
+            borderRadius: "9999px",
+            background: "#ffffff",
+            transform: on ? "translateX(20px)" : "translateX(0)",
+            transition: "transform 0.2s",
+            boxShadow: "0 1px 3px rgba(0,0,0,0.3)"
+          }}
+        ></span>
+      </button>
     `;
   }
 
@@ -2044,5 +2179,7 @@
   try { if (typeof SmartDashboard !== 'undefined') window.DX['SmartDashboard'] = SmartDashboard; } catch(e) {}
   try { if (typeof sortByDateDesc !== 'undefined') window.DX['sortByDateDesc'] = sortByDateDesc; } catch(e) {}
   try { if (typeof ToastProvider !== 'undefined') window.DX['ToastProvider'] = ToastProvider; } catch(e) {}
+  try { if (typeof ConfirmProvider !== 'undefined') window.DX['ConfirmProvider'] = ConfirmProvider; } catch(e) {}
+  try { if (typeof Toggle !== 'undefined') window.DX['Toggle'] = Toggle; } catch(e) {}
   try { if (typeof useHashPath !== 'undefined') window.DX['useHashPath'] = useHashPath; } catch(e) {}
 })();

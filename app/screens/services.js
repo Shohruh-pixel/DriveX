@@ -2085,6 +2085,7 @@
       {
         title: "Заказы и услуги",
         items: [
+          { icon: "star", label: "Избранное", path: "/favorites", badge: null },
           {
             icon: "bag",
             label: "История заказов",
@@ -2107,7 +2108,7 @@
             icon: "bell",
             label: "Уведомления",
             path: "/notifications",
-            badge: String(notificationsCount)
+            badge: notificationsCount ? String(notificationsCount) : null
           },
           { icon: "card", label: "Платёжные данные", path: "/payment", badge: null },
           { icon: "star", label: "Бонусная программа", path: "/bonus", badge: null },

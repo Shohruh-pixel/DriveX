@@ -106,6 +106,7 @@ export function AuthFlow() {
         provider: userId ? ("supabase" as const) : ("local" as const),
       };
       setSession(session);
+      useAuthStore.getState().syncFromSupabase().catch(console.error);
 
       // Редирект по роли
       if (role === "seller") { navigate("/seller"); return; }

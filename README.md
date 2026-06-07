@@ -23,3 +23,9 @@
 ## Стили
 
 - Общие стили и токены лежат в `..\drivex.css` и `..\app.css`.
+
+## Миграции Supabase
+
+- Перед запуском приложения выполните SQL из `migrations/20260606_0004_users_profile_fields.sql` в Supabase SQL Editor.
+- Run this SQL in Supabase SQL Editor before starting the app.
+- Создайте Storage-бакеты по инструкции в `migrations/STORAGE_SETUP.md`.

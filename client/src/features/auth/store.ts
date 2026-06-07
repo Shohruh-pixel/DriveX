@@ -3,6 +3,7 @@ import { persist } from "zustand/middleware";
 import type { AuthSession, Car, UserRole } from "@shared/api/types";
 import { getSupabase, isSupabaseConfigured } from "@shared/api/supabase";
 import { loadUserLocal, saveUserLocal } from "@shared/api/dataLayer";
+import { saveCarToSupabase } from "../auth/api";
 
 const EMPTY_SESSION: AuthSession = {
   id: "",
@@ -51,11 +52,21 @@ export const useAuthStore = create<AuthStore>()(
         const next = [car, ...get().cars.filter((c) => c.id !== car.id)];
         set({ cars: next, activeCarId: car.id });
         saveUserLocal("cars", next);
+        const { id } = get().session;
+        if (id) saveCarToSupabase(id, next).catch(console.error);
       },
 
       setActiveCarId: (id) => {
         set({ activeCarId: id });
         saveUserLocal("activeCarId", id);
+        const userId = get().session.id;
+        if (userId) {
+          getSupabase()
+            .from("users")
+            .update({ active_car_id: id })
+            .eq("id", userId)
+            .then(() => {}, console.error);
+        }
       },
 
       logout: async () => {

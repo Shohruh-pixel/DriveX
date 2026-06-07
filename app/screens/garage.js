@@ -9,41 +9,98 @@
   const Icon    = function(p){ return DX.Icon ? DX.Icon(p) : null; };
   const alphaBg = function(){ return DX.alphaBg ? DX.alphaBg(...arguments) : arguments[0]; };
   function useToast(){ return DX.useToast ? DX.useToast() : {push: function(){}}; }
+  function useConfirm(){ return DX.ConfirmContext && React.useContext ? React.useContext(DX.ConfirmContext) : { confirm: function(){ return Promise.resolve(true); } }; }
   const navigateToHash = function(p){ DX.navigateToHash && DX.navigateToHash(p); };
   const SimplePage = function(p){ var F=DX.SimplePage; return F ? F(p) : (p.children||null); };
   const formatTjsPrice = function(n){ return DX.formatTjsPrice ? DX.formatTjsPrice(n) : (String(n)+' сом.'); };
   const genId = function(p){ return DX.genId ? DX.genId(p) : (p+'-'+Date.now()); };
 
+  // Марки и модели для формы добавления авто
+  const CAR_MAKES = ["Toyota", "Chevrolet", "Hyundai", "Kia", "BMW", "Mercedes", "Daewoo", "Другое"];
+  const CAR_MODELS = {
+    Toyota:    ["Camry", "Corolla", "RAV4", "Land Cruiser", "Prius"],
+    Chevrolet: ["Cobalt", "Nexia", "Lacetti", "Captiva", "Spark"],
+    Hyundai:   ["Elantra", "Tucson", "Accent", "Santa Fe", "Sonata"],
+    Kia:       ["Rio", "Sportage", "Ceed", "K5", "Cerato"],
+    BMW:       ["3 Series", "5 Series", "X5", "X6"],
+    Mercedes:  ["C-Class", "E-Class", "GLE", "S-Class"],
+    Daewoo:    ["Matiz", "Nexia", "Lacetti"],
+    "Другое":  []
+  };
+
   function GarageScreen({ activeCarId, onSelectCar, onAddCar, onRemoveCar }) {
     const toast = useToast();
+    const { confirm } = useConfirm();
     const [showForm, setShowForm] = useState(false);
-    const [name, setName] = useState("");
+    const [make, setMake] = useState("");
+    const [model, setModel] = useState("");
+    const [customMake, setCustomMake] = useState("");
     const [plate, setPlate] = useState("");
     const [year, setYear] = useState("");
     const [mileage, setMileage] = useState("");
 
     const cars = garageCars;
     const activeCar = findGarageCar(activeCarId) || cars[0];
+
+    const handleSelectCar = useCallback((car) => {
+      onSelectCar && onSelectCar(car.id);
+      toast.push(`Активная машина: ${car.name}`);
+    }, [onSelectCar, toast]);
+
+    const handleRemoveCar = useCallback(async (car) => {
+      const ok = await confirm({
+        title: "Удалить автомобиль?",
+        message: `${car.name}: документы и история ТО этой машины будут отвязаны.`,
+        confirmLabel: "Удалить",
+        cancelLabel: "Отмена",
+        danger: true,
+        icon: "trash"
+      });
+      if (!ok) return;
+      onRemoveCar && onRemoveCar(car.id);
+      toast.push("Автомобиль удалён");
+    }, [confirm, onRemoveCar, toast]);
+
     const submitCar = useCallback(() => {
+      const brand = make === "Другое" ? customMake.trim() : make;
+      if (!brand || !model.trim()) {
+        toast.push("Выберите марку и модель");
+        return;
+      }
+      const currentYear = new Date().getFullYear();
+      if (year) {
+        const y = Number(year);
+        if (!Number.isFinite(y) || y < 1980 || y > currentYear) {
+          toast.push(`Год должен быть в диапазоне 1980–${currentYear}`);
+          return;
+        }
+      }
+      const mileageNum = mileage === "" ? 0 : Number(mileage);
+      if (!Number.isFinite(mileageNum) || mileageNum < 0) {
+        toast.push("Проверьте пробег");
+        return;
+      }
       const nextCar = normalizeGarageCar({
-        name,
+        brand,
+        model: model.trim(),
         plate,
         year,
-        mileageValue: mileage,
-        mileage: mileage ? `${Number(mileage).toLocaleString("ru-RU")} км` : ""
+        mileageValue: mileageNum
       });
       if (!nextCar) {
-        toast.push("Введите марку и модель");
+        toast.push("Выберите марку и модель");
         return;
       }
       onAddCar && onAddCar(nextCar);
-      setName("");
+      setMake("");
+      setModel("");
+      setCustomMake("");
       setPlate("");
       setYear("");
       setMileage("");
       setShowForm(false);
       toast.push("Автомобиль добавлен");
-    }, [mileage, name, onAddCar, plate, toast, year]);
+    }, [make, model, customMake, mileage, onAddCar, plate, toast, year]);
 
     return html`
       <${SimplePage} title="Мой гараж" backPath="/profile">
@@ -90,12 +147,40 @@
           ${showForm
             ? html`
                 <div className="glass-card-light rounded-2xl p-4 space-y-3">
-                  <input
-                    className="w-full p-3 rounded-xl dx-input"
-                    value=${name}
-                    onInput=${(e) => setName(e.target.value)}
-                    placeholder="Марка и модель, например Toyota Camry"
-                  />
+                  <div className="grid grid-cols-2 gap-3">
+                    <select
+                      className="w-full p-3 rounded-xl dx-input"
+                      value=${make}
+                      onChange=${(e) => { setMake(e.target.value); setModel(""); setCustomMake(""); }}
+                    >
+                      <option value="">Марка…</option>
+                      ${CAR_MAKES.map((m) => html`<option key=${m} value=${m}>${m}</option>`)}
+                    </select>
+                    ${make === "Другое"
+                      ? html`<input
+                          className="w-full p-3 rounded-xl dx-input"
+                          value=${customMake}
+                          onInput=${(e) => setCustomMake(e.target.value)}
+                          placeholder="Марка вручную"
+                        />`
+                      : html`<select
+                          className="w-full p-3 rounded-xl dx-input"
+                          value=${model}
+                          onChange=${(e) => setModel(e.target.value)}
+                          disabled=${!make}
+                        >
+                          <option value="">Модель…</option>
+                          ${(CAR_MODELS[make] || []).map((m) => html`<option key=${m} value=${m}>${m}</option>`)}
+                        </select>`}
+                  </div>
+                  ${make === "Другое"
+                    ? html`<input
+                        className="w-full p-3 rounded-xl dx-input"
+                        value=${model}
+                        onInput=${(e) => setModel(e.target.value)}
+                        placeholder="Модель"
+                      />`
+                    : null}
                   <div className="grid grid-cols-2 gap-3">
                     <input
                       className="w-full p-3 rounded-xl dx-input"
@@ -109,6 +194,8 @@
                       value=${year}
                       onInput=${(e) => setYear(e.target.value)}
                       placeholder="Год"
+                      min="1980"
+                      max=${String(new Date().getFullYear())}
                     />
                   </div>
                   <input
@@ -117,6 +204,7 @@
                     value=${mileage}
                     onInput=${(e) => setMileage(e.target.value)}
                     placeholder="Пробег, км"
+                    min="0"
                   />
                   <button type="button" className="w-full py-3 rounded-2xl font-bold dx-btn" onClick=${submitCar}>
                     Сохранить автомобиль
@@ -128,31 +216,32 @@
           <div className="space-y-3">
             ${cars.length
               ? cars.map((car) => html`
-                <button
+                <div
                   key=${car.id}
-                  type="button"
-                  className="w-full glass-card-light rounded-2xl p-4 flex items-center gap-4 text-left transition-all hover:scale-[1.02]"
-                  onClick=${() => {
-                    onSelectCar && onSelectCar(car.id);
-                    toast.push(`Активная машина: ${car.name}`);
-                  }}
+                  className="w-full glass-card-light rounded-2xl p-4 flex items-center gap-3"
                 >
-                  <div
-                    className="w-12 h-12 rounded-xl flex items-center justify-center"
-                    style=${{ background: "rgba(14, 165, 233, 0.2)", color: "var(--drivex-electric-blue)" }}
+                  <button
+                    type="button"
+                    className="flex items-center gap-4 flex-1 text-left min-w-0"
+                    onClick=${() => handleSelectCar(car)}
                   >
-                    <${Icon} name="car" size=${22} />
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-bold" style=${{ color: "var(--drivex-white)" }}>
-                      ${car.name}
-                    </p>
-                    <p className="text-sm" style=${{ color: "var(--drivex-silver)" }}>
-                      ${car.plate} • ${car.year} • ${car.mileage}
-                    </p>
-                  </div>
+                    <div
+                      className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0"
+                      style=${{ background: "rgba(14, 165, 233, 0.2)", color: "var(--drivex-electric-blue)" }}
+                    >
+                      <${Icon} name="car" size=${22} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold truncate" style=${{ color: "var(--drivex-white)" }}>
+                        ${car.name}
+                      </p>
+                      <p className="text-sm truncate" style=${{ color: "var(--drivex-silver)" }}>
+                        ${[car.plate, car.year, car.mileage].filter(Boolean).join(" • ") || "—"}
+                      </p>
+                    </div>
+                  </button>
                   <span
-                    className="px-3 py-1 rounded-xl text-xs font-bold"
+                    className="px-3 py-1 rounded-xl text-xs font-bold whitespace-nowrap"
                     style=${{
                       background: car.id === activeCar?.id ? "rgba(6, 182, 212, 0.18)" : "rgba(148, 163, 184, 0.12)",
                       color: car.id === activeCar?.id ? "var(--drivex-neon-cyan)" : "var(--drivex-silver)"
@@ -160,19 +249,16 @@
                   >
                     ${car.id === activeCar?.id ? "Активна" : "Выбрать"}
                   </span>
-                  <span
-                    role="button"
-                    className="px-3 py-1 rounded-xl text-xs font-bold"
+                  <button
+                    type="button"
+                    className="px-3 py-1 rounded-xl text-xs font-bold whitespace-nowrap"
                     style=${{ background: "rgba(239, 68, 68, 0.12)", color: "var(--drivex-danger)" }}
-                    onClick=${(event) => {
-                      event.stopPropagation();
-                      onRemoveCar && onRemoveCar(car.id);
-                      toast.push("Автомобиль удалён");
-                    }}
+                    onClick=${() => handleRemoveCar(car)}
+                    aria-label="Удалить автомобиль"
                   >
                     Удалить
-                  </span>
-                </button>
+                  </button>
+                </div>
               `)
               : html`
                   <div className="glass-card-light rounded-2xl p-5 text-center">
@@ -286,6 +372,20 @@
 
   function MaintenanceScreen({ maintenance, spentTotal, activeCarId, onSelectCar, onRemoveRecord, serviceRequests }) {
     const toast = useToast();
+    const { confirm } = useConfirm();
+    const removeRecord = useCallback(async (carId, recordId) => {
+      const ok = await confirm({
+        title: "Удалить запись?",
+        message: "Запись об обслуживании будет удалена без возможности восстановления.",
+        confirmLabel: "Удалить",
+        cancelLabel: "Отмена",
+        danger: true,
+        icon: "trash"
+      });
+      if (!ok) return;
+      onRemoveRecord && onRemoveRecord(carId, recordId);
+      toast.push("Удалено");
+    }, [confirm, onRemoveRecord, toast]);
     const safeCarId = ensureCarId(activeCarId);
     const activeCar = findGarageCar(safeCarId) || garageCars[0];
     const carState = getMaintenanceCarState(maintenance, safeCarId);
@@ -524,10 +624,7 @@
                             type="button"
                             className="mt-3 p-2 rounded-xl glass-card"
                             style=${{ color: "var(--drivex-danger)" }}
-                            onClick=${() => {
-                              onRemoveRecord && onRemoveRecord(safeCarId, r.id);
-                              toast.push("Удалено");
-                            }}
+                            onClick=${() => removeRecord(safeCarId, r.id)}
                             aria-label="Удалить запись"
                           >
                             <${Icon} name="trash" size=${18} />

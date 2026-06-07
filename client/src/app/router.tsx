@@ -15,6 +15,7 @@ const ServicesScreen = lazy(() => import("@features/services/ServicesScreen")   
 const MapScreen      = lazy(() => import("@features/map/MapScreen")              .then((m) => ({ default: m.MapScreen })));
 const AiScreen       = lazy(() => import("@features/ai/AiScreen")               .then((m) => ({ default: m.AiScreen })));
 const ProfileScreen  = lazy(() => import("@features/profile/ProfileScreen")      .then((m) => ({ default: m.ProfileScreen })));
+const FavoritesScreen = lazy(() => import("@features/profile/FavoritesScreen")    .then((m) => ({ default: m.FavoritesScreen })));
 const SellerCRM      = lazy(() => import("@features/seller-crm/SellerCRM")       .then((m) => ({ default: m.SellerCRM })));
 const PartnerCRM     = lazy(() => import("@features/partner-crm/PartnerCRM")     .then((m) => ({ default: m.PartnerCRM })));
 
@@ -65,7 +66,7 @@ export function AppRouter() {
 
         {/* ── Профиль ── */}
         <Route path="/profile"   element={<FeatureBoundary name="Профиль"><ProfileScreen /></FeatureBoundary>} />
-        <Route path="/favorites" element={<Placeholder title="⭐ Избранное" emoji="⭐" />} />
+        <Route path="/favorites" element={<FeatureBoundary name="Избранное"><FavoritesScreen /></FeatureBoundary>} />
         <Route path="/emergency" element={<Placeholder title="🆘 SOS Помощь" emoji="🆘" />} />
 
         {/* ── CRM ── */}
