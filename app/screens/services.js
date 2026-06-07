@@ -24,7 +24,7 @@
   const SellerTextarea     = function(p){ var F=(window.DX.screens||{}).SellerTextarea; return F ? React.createElement(F, p) : null; };
   const OrderStatusTimeline= function(p){ var F=(window.DX.screens||{}).OrderStatusTimeline||window.DX.OrderStatusTimeline; return F?F(p):null; };
 
-  function ServicesScreen({ serviceDirectory, activeCarId, serviceCrmReady = false, serviceCenterName = "" }) {
+  function ServicesScreen({ serviceDirectory, activeCarId, serviceCrmReady = false, serviceCenterName = "", favorites = [], onToggleFavorite }) {
     const toast = useToast();
     const [serviceSearchQuery, setServiceSearchQuery] = useState("");
     const servicesList =
@@ -70,6 +70,26 @@
       event.preventDefault();
       event.stopPropagation();
       toast.push(`Сравнение ${serviceName} скоро добавим`);
+    };
+
+    const favServiceIds = new Set(
+      (Array.isArray(favorites) ? favorites : [])
+        .filter((f) => f && f.type === "service")
+        .map((f) => f.id)
+    );
+    const handleFavService = (event, service) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!onToggleFavorite) return;
+      const added = onToggleFavorite({
+        type: "service",
+        id: service.id,
+        title: service.name,
+        subtitle: service.city || service.category || service.type || "",
+        image: service.image || "",
+        path: "/service/" + service.id
+      });
+      toast.push(added ? "Добавлено в избранное" : "Убрано из избранного");
     };
 
     const normalizedSearchQuery = normalizeServiceCategoryText(serviceSearchQuery);
@@ -294,8 +314,9 @@
               <button
                 type="button"
                 className="services-redesign-save"
-                aria-label="Сохранить сервис"
-                onClick=${(event) => compareService(event, service.name)}
+                aria-label=${favServiceIds.has(service.id) ? "Убрать из избранного" : "В избранное"}
+                style=${favServiceIds.has(service.id) ? { color: "var(--drivex-neon-cyan)" } : null}
+                onClick=${(event) => handleFavService(event, service)}
               >
                 <${Icon} name="star" size=${16} />
               </button>
@@ -2046,7 +2067,7 @@
 
     const BuyerPhoneAuthScreen = BuyerAuthScreen;
 
-  function ProfileScreen({ notificationsCount, profile, documents, documentsTotalCount, maintenance, ordersCount, onLogout }) {
+  function ProfileScreen({ notificationsCount, profile, documents, documentsTotalCount, maintenance, ordersCount, favoritesCount, onLogout }) {
     const fallbackProfile = createDefaultBuyerProfile();
     const name = profile?.name || fallbackProfile.name;
     const phone = profile?.phone || fallbackProfile.phone;
@@ -2085,7 +2106,7 @@
       {
         title: "Заказы и услуги",
         items: [
-          { icon: "star", label: "Избранное", path: "/favorites", badge: null },
+          { icon: "star", label: "Избранное", path: "/favorites", badge: favoritesCount ? String(favoritesCount) : null },
           {
             icon: "bag",
             label: "История заказов",

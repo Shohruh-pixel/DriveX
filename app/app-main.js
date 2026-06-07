@@ -285,6 +285,14 @@
     });
     savedPlaces = userSavedPlaces;
     if (window.DX && window.DX._savedPlacesRef) window.DX._savedPlacesRef.val = userSavedPlaces;
+    const [favorites, setFavorites] = useState(() => {
+      try {
+        const raw = readBuyerLocalStorage(drivexStorageKeys.favorites, buyerSession);
+        return normalizeFavoritesList(raw ? raw : []);
+      } catch {
+        return [];
+      }
+    });
     const [buyerAuthStatus, setBuyerAuthStatus] = useState(() => getBuyerAuthStatus());
     const [profile, setProfile] = useState(() => {
       const fallback = createDefaultBuyerProfile();
@@ -683,6 +691,11 @@
 
         if (key === drivexStorageKeys.savedPlaces) {
           setUserSavedPlaces(normalizeSavedPlacesList(nextValue));
+          return;
+        }
+
+        if (key === drivexStorageKeys.favorites) {
+          setFavorites(normalizeFavoritesList(nextValue));
           return;
         }
 
@@ -1187,6 +1200,7 @@
         setUserGarageCars([]);
         setActiveCarId("");
         setUserSavedPlaces([]);
+        setFavorites([]);
         setDocuments(createEmptyDocumentsState());
         setMaintenance(createEmptyMaintenanceState());
         setBuyerOrders([]);
@@ -1372,6 +1386,10 @@
     useEffect(() => {
       pushBuyerState(drivexStorageKeys.savedPlaces, userSavedPlaces);
     }, [pushBuyerState, userSavedPlaces]);
+
+    useEffect(() => {
+      pushBuyerState(drivexStorageKeys.favorites, favorites);
+    }, [pushBuyerState, favorites]);
 
     useEffect(() => {
       pushBuyerState(drivexStorageKeys.activeCar, activeCarId);
@@ -1812,6 +1830,30 @@
     const removeSavedPlace = useCallback((placeId) => {
       const safeId = String(placeId || "");
       setUserSavedPlaces((prev) => normalizeSavedPlacesList(prev).filter((place) => place.id !== safeId));
+    }, []);
+
+    // ── Избранное ──────────────────────────────────────────────────────────
+    const removeFavorite = useCallback((type, id) => {
+      const safeType = type === "product" ? "product" : "service";
+      const safeId = String(id || "");
+      setFavorites((prev) => normalizeFavoritesList(prev).filter((f) => !(f.type === safeType && f.id === safeId)));
+    }, []);
+
+    const toggleFavorite = useCallback((item) => {
+      const normalized = normalizeFavorite(item);
+      if (!normalized) return false;
+      let added = false;
+      setFavorites((prev) => {
+        const list = normalizeFavoritesList(prev);
+        const exists = list.some((f) => f.type === normalized.type && f.id === normalized.id);
+        if (exists) {
+          added = false;
+          return list.filter((f) => !(f.type === normalized.type && f.id === normalized.id));
+        }
+        added = true;
+        return [normalized, ...list];
+      });
+      return added;
     }, []);
 
     // side = "front" | "back"
@@ -2337,6 +2379,7 @@
       setProfile(createDefaultBuyerProfile());
       setUserGarageCars([]);
       setUserSavedPlaces([]);
+      setFavorites([]);
       setActiveCarId("");
       setDocuments({ license: null, cars: {} });
       setMaintenance({ cars: {} });
@@ -3580,6 +3623,7 @@
             documentsTotalCount=${documentsTotalCount}
             maintenance=${maintenance}
             ordersCount=${buyerActiveOrdersCount || buyerOrders.length}
+            favoritesCount=${favorites.length}
             onLogout=${logoutBuyer}
           />`
         : html`<${getScreen('BuyerAuthScreen')}
@@ -3884,10 +3928,12 @@
         activeCarId=${activeCarId}
         serviceCrmReady=${!serviceNeedsRegistration}
         serviceCenterName=${serviceCurrentCenter.name}
+        favorites=${favorites}
+        onToggleFavorite=${toggleFavorite}
       />`;
     } else if (normalized === "/market") {
       activePath = "/market";
-      content = html`<${getScreen('MarketScreen')} cartCount=${cartCount} onAddToCart=${addToCart} />`;
+      content = html`<${getScreen('MarketScreen')} cartCount=${cartCount} onAddToCart=${addToCart} favorites=${favorites} onToggleFavorite=${toggleFavorite} />`;
     } else if (normalized === "/marketplace/catalog") {
       activePath = "/market";
       content = html`<${getScreen('MarketCatalogScreen')} cartCount=${cartCount} onAddToCart=${addToCart} />`;
@@ -3910,6 +3956,7 @@
         documentsTotalCount=${documentsTotalCount}
         maintenance=${maintenance}
         ordersCount=${buyerActiveOrdersCount || buyerOrders.length}
+        favoritesCount=${favorites.length}
         onLogout=${logoutBuyer}
       />`;
     } else {
@@ -4082,7 +4129,10 @@
         />`;
       } else if (normalized === "/favorites") {
         activePath = "/profile";
-        content = html`<${getScreen('FavoritesScreen')} />`;
+        content = html`<${getScreen('FavoritesScreen')}
+          favorites=${favorites}
+          onRemove=${removeFavorite}
+        />`;
       } else if (normalized === "/settings") {
         activePath = "/profile";
         content = html`<${getScreen('SettingsScreen')} session=${buyerSession} />`;

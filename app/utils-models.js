@@ -25,6 +25,7 @@
     buyerUsers: "drivex.buyer.users.v1",
     buyerGarage: "drivex.buyer.garage.v1",
     savedPlaces: "drivex.saved-places.v1",
+    favorites: "drivex.favorites.v1",
     orderChats: "drivex.order-chats.v1",
     buyerInvite: "drivex.buyer.invite.v1",
     marketplaceCatalog: "drivex.market.catalog.v1",
@@ -67,6 +68,7 @@
     drivexStorageKeys.buyerOrders,
     drivexStorageKeys.orderChats,
     drivexStorageKeys.savedPlaces,
+    drivexStorageKeys.favorites,
     drivexStorageKeys.buyerInvite
   ]);
   const drivexMediaDbName = "drivex.media.v1";
@@ -2273,6 +2275,35 @@
 
   function normalizeSavedPlacesList(value) {
     return (Array.isArray(value) ? value : []).map(normalizeSavedPlace).filter(Boolean);
+  }
+
+  function normalizeFavorite(value) {
+    if (!value || typeof value !== "object") return null;
+    const id = typeof value.id === "string" ? value.id.trim() : (value.id != null ? String(value.id) : "");
+    if (!id) return null;
+    const type = value.type === "product" ? "product" : "service";
+    return {
+      id,
+      type,
+      title: typeof value.title === "string" && value.title.trim() ? value.title.trim() : (value.name || "Без названия"),
+      subtitle: typeof value.subtitle === "string" ? value.subtitle : "",
+      image: typeof value.image === "string" ? value.image : "",
+      path: typeof value.path === "string" ? value.path : "",
+      addedAt: typeof value.addedAt === "string" ? value.addedAt : new Date().toISOString()
+    };
+  }
+
+  function normalizeFavoritesList(value) {
+    const seen = new Set();
+    return (Array.isArray(value) ? value : [])
+      .map(normalizeFavorite)
+      .filter(Boolean)
+      .filter((item) => {
+        const key = item.type + ":" + item.id;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
   }
 
   function createSellerOrdersSeed(storeId = sellerPrimaryStoreId) {
@@ -4872,6 +4903,8 @@
   try { if (typeof normalizePath !== 'undefined') window.DX['normalizePath'] = normalizePath; } catch(e) {}
   try { if (typeof normalizeSavedPlace !== 'undefined') window.DX['normalizeSavedPlace'] = normalizeSavedPlace; } catch(e) {}
   try { if (typeof normalizeSavedPlacesList !== 'undefined') window.DX['normalizeSavedPlacesList'] = normalizeSavedPlacesList; } catch(e) {}
+  try { if (typeof normalizeFavorite !== 'undefined') window.DX['normalizeFavorite'] = normalizeFavorite; } catch(e) {}
+  try { if (typeof normalizeFavoritesList !== 'undefined') window.DX['normalizeFavoritesList'] = normalizeFavoritesList; } catch(e) {}
   try { if (typeof normalizeSellerNotification !== 'undefined') window.DX['normalizeSellerNotification'] = normalizeSellerNotification; } catch(e) {}
   try { if (typeof normalizeSellerNotificationsList !== 'undefined') window.DX['normalizeSellerNotificationsList'] = normalizeSellerNotificationsList; } catch(e) {}
   try { if (typeof normalizeSellerOrder !== 'undefined') window.DX['normalizeSellerOrder'] = normalizeSellerOrder; } catch(e) {}

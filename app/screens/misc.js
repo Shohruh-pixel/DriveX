@@ -332,9 +332,26 @@
     ];
 
     const contacts = [
-      { icon: "phone", label: "Телефон", value: "+992 44 640 00 00", href: "tel:+992446400000" },
-      { icon: "user", label: "Email", value: "support@drivex.app", href: "mailto:support@drivex.app" },
-      { icon: "bell", label: "Чат поддержки", value: "Скоро", toast: "Чат поддержки скоро" }
+      {
+        label: "Телефон", value: "+992 92 712 59 89", href: "tel:+992927125989",
+        color: "var(--drivex-neon-cyan)", bg: "rgba(6, 182, 212, 0.16)",
+        path: "M6.62 10.79c1.44 2.83 3.76 5.15 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"
+      },
+      {
+        label: "Telegram", value: "@shoxrux15080", href: "https://t.me/shoxrux15080", external: true,
+        color: "#2AABEE", bg: "rgba(42, 171, 238, 0.16)",
+        path: "M21.94 4.66a1.2 1.2 0 0 0-1.2-.18L3.4 11.2c-.86.33-.85 1.57.02 1.88l4.27 1.5 1.65 5.24c.2.62.97.83 1.46.4l2.38-2.07 4.2 3.1c.5.36 1.2.1 1.35-.5l3.27-15.2a1.2 1.2 0 0 0-.46-1.39zM9.5 14.3l8.2-5.05c.16-.1.33.12.19.25l-6.66 6.03c-.2.18-.32.43-.36.7l-.23 1.66-1.14-3.59z"
+      },
+      {
+        label: "WhatsApp", value: "+992 92 712 59 89", href: "https://wa.me/992927125989", external: true,
+        color: "#25D366", bg: "rgba(37, 211, 102, 0.16)",
+        path: "M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.86 9.86 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2zm5.8 14.13c-.24.68-1.42 1.31-1.96 1.36-.5.05-1.14.07-1.84-.12-.42-.13-.97-.31-1.67-.61-2.94-1.27-4.86-4.23-5.01-4.42-.15-.2-1.2-1.59-1.2-3.03 0-1.44.76-2.15 1.03-2.44.27-.29.58-.36.77-.36.19 0 .39 0 .56.01.18.01.42-.07.66.5.24.59.82 2.03.89 2.18.07.15.12.32.02.51-.34.68-.7.65-.51.98.29.5 1.28 2.11 2.76 2.96.42.24.86.45 1.16.27.29-.18.73-.85.92-1.14.19-.29.39-.24.66-.15.27.1 1.71.81 2 .96.29.15.49.22.56.34.07.12.07.7-.17 1.38z"
+      },
+      {
+        label: "Email", value: "shohruh15082006@gmail.com", href: "mailto:shohruh15082006@gmail.com",
+        color: "#cbd5e1", bg: "rgba(148, 163, 184, 0.16)",
+        path: "M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4-8 5-8-5V6l8 5 8-5v2z"
+      }
     ];
 
     return html`
@@ -363,26 +380,29 @@
 
           <div className="space-y-3">
             ${contacts.map((c, idx) => {
-              const iconName = c.icon === "phone" ? "sos" : c.icon;
               const inner = html`
                 <div
-                  className="w-12 h-12 rounded-xl flex items-center justify-center"
-                  style=${{ background: "var(--gradient-primary)", color: "var(--drivex-white)" }}
+                  className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0"
+                  style=${{ background: c.bg || "var(--gradient-primary)" }}
                 >
-                  <${Icon} name=${iconName} size=${24} />
+                  <svg viewBox="0 0 24 24" width="24" height="24" fill=${c.color || "var(--drivex-white)"} aria-hidden="true">
+                    <path d=${c.path}></path>
+                  </svg>
                 </div>
-                <div className="flex-1">
+                <div className="flex-1 min-w-0">
                   <p className="font-semibold mb-1" style=${{ color: "var(--drivex-white)" }}>
                     ${c.label}
                   </p>
-                  <p className="text-sm" style=${{ color: "var(--drivex-silver)" }}>
+                  <p className="text-sm truncate" style=${{ color: "var(--drivex-silver)" }}>
                     ${c.value}
                   </p>
                 </div>
+                <span style=${{ color: "var(--drivex-silver)" }}>›</span>
               `;
+              const extraProps = c.external ? { target: "_blank", rel: "noopener noreferrer" } : {};
               return c.href
-                ? html`<a key=${idx} href=${c.href} className="w-full glass-card-light rounded-2xl p-5 flex items-center gap-4 text-left">${inner}</a>`
-                : html`<button key=${idx} type="button" className="w-full glass-card-light rounded-2xl p-5 flex items-center gap-4 text-left" onClick=${() => toast.push(c.toast)}>${inner}</button>`;
+                ? html`<a key=${idx} href=${c.href} ...${extraProps} className="w-full glass-card-light rounded-2xl p-4 flex items-center gap-4 text-left">${inner}</a>`
+                : html`<button key=${idx} type="button" className="w-full glass-card-light rounded-2xl p-4 flex items-center gap-4 text-left" onClick=${() => toast.push(c.toast)}>${inner}</button>`;
             })}
           </div>
         </div>
@@ -415,8 +435,91 @@
     `;
   }
 
-  function FavoritesScreen() {
-    return html`<${ComingSoonScreen} title="Избранное" emoji="⭐" subtitle="Здесь появятся сохранённые сервисы и товары" />`;
+  function FavoritesScreen({ favorites = [], onRemove }) {
+    const toast = useToast();
+    const { confirm } = useConfirm();
+    const list = Array.isArray(favorites) ? favorites : [];
+    const services = list.filter((f) => f.type === "service");
+    const products = list.filter((f) => f.type === "product");
+
+    const handleRemove = useCallback(async (item) => {
+      const ok = await confirm({
+        title: "Убрать из избранного?",
+        message: item.title,
+        confirmLabel: "Убрать",
+        cancelLabel: "Отмена",
+        danger: true,
+        icon: "star"
+      });
+      if (!ok) return;
+      onRemove && onRemove(item.type, item.id);
+      toast.push("Убрано из избранного");
+    }, [confirm, onRemove, toast]);
+
+    const renderItem = (item) => html`
+      <div key=${item.type + ":" + item.id} className="glass-card-light rounded-2xl p-4 flex items-center gap-3">
+        <button
+          type="button"
+          className="flex items-center gap-3 flex-1 text-left min-w-0"
+          onClick=${() => { if (item.path) navigateToHash(item.path); }}
+        >
+          <div
+            className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 overflow-hidden"
+            style=${{ background: "rgba(6, 182, 212, 0.15)", color: "var(--drivex-neon-cyan)" }}
+          >
+            ${item.image
+              ? html`<img src=${item.image} alt="" style=${{ width: "100%", height: "100%", objectFit: "cover" }} />`
+              : html`<${Icon} name=${item.type === "product" ? "bag" : "wrench"} size=${22} />`}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-bold truncate" style=${{ color: "var(--drivex-white)" }}>${item.title}</p>
+            ${item.subtitle ? html`<p className="text-sm truncate" style=${{ color: "var(--drivex-silver)" }}>${item.subtitle}</p>` : null}
+          </div>
+        </button>
+        <button
+          type="button"
+          className="px-3 py-1 rounded-xl text-xs font-bold whitespace-nowrap"
+          style=${{ background: "rgba(239, 68, 68, 0.12)", color: "var(--drivex-danger)" }}
+          onClick=${() => handleRemove(item)}
+          aria-label="Убрать из избранного"
+        >
+          Убрать
+        </button>
+      </div>
+    `;
+
+    return html`
+      <${SimplePage} title="Избранное" backPath="/profile">
+        <div className="px-6 py-6 space-y-5">
+          ${!list.length
+            ? html`
+                <div className="glass-card-light rounded-2xl text-center" style=${{ padding: "48px" }}>
+                  <div style=${{ fontSize: "56px", marginBottom: "16px" }}>⭐</div>
+                  <p className="font-semibold" style=${{ color: "var(--drivex-white)", marginBottom: "8px" }}>
+                    Пока пусто
+                  </p>
+                  <p className="text-sm" style=${{ color: "var(--drivex-silver)" }}>
+                    Добавляйте сервисы и товары в избранное кнопкой ♡ на карточке
+                  </p>
+                </div>
+              `
+            : html`
+                ${services.length
+                  ? html`<div className="space-y-3">
+                      <h3 className="text-sm font-semibold px-2" style=${{ color: "var(--drivex-silver)" }}>Сервисы</h3>
+                      ${services.map(renderItem)}
+                    </div>`
+                  : null}
+                ${products.length
+                  ? html`<div className="space-y-3">
+                      <h3 className="text-sm font-semibold px-2" style=${{ color: "var(--drivex-silver)" }}>Товары</h3>
+                      ${products.map(renderItem)}
+                    </div>`
+                  : null}
+              `}
+        </div>
+      </${SimplePage}>
+    `;
   }
 
   function PaymentDataScreen() {

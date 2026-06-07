@@ -28,7 +28,7 @@
     // Buyer models
     'normalizeBuyerSession','normalizeBuyerProfile','createDefaultBuyerProfile',
     'buyerSessionToProfile','makeBuyerSessionFromSupabaseUser','makeBuyerSessionFromLocalUser',
-    'makeBuyerId','normalizeSavedPlacesList',
+    'makeBuyerId','normalizeSavedPlacesList','normalizeFavorite','normalizeFavoritesList',
     'readBuyerLocalStorage','writeBuyerLocalStorage','readLocalBuyerUsers','writeLocalBuyerUsers',
     'getBuyerLocalStorageKey','clearBuyerLocalStorageForSession',
     'fetchProfileFromSupabase','syncProfileToSupabase','uploadAvatarToStorage',
