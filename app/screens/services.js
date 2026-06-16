@@ -1294,7 +1294,7 @@
                 <p className="text-xs mt-0.5" style=${{ color: "var(--drivex-silver)" }}>Откройте магазин и начните продавать уже сегодня</p>
               </div>
             </div>
-            <a href="#/seller-crm"
+            <a href="#/seller/register"
               className="block w-full text-center py-3 rounded-xl font-semibold text-sm"
               style=${{ background: "linear-gradient(135deg, var(--drivex-neon-cyan) 0%, var(--drivex-electric-blue) 100%)", color: "var(--drivex-black)" }}>
               Зарегистрировать магазин →
