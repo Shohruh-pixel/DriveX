@@ -2202,6 +2202,19 @@
       [draftMessage, onSendMessage, order?.id, safeViewerRole, toast]
     );
 
+    const handleKeyDown = useCallback(
+      (event) => {
+        if (event.key === "Enter" && !event.shiftKey) {
+          event.preventDefault();
+          const text = String(draftMessage || "").trim();
+          if (!text || !order?.id) return;
+          onSendMessage && onSendMessage(order.id, safeViewerRole, text);
+          setDraftMessage("");
+        }
+      },
+      [draftMessage, onSendMessage, order?.id, safeViewerRole]
+    );
+
     const statusMeta = order
       ? safeViewerRole === "seller"
         ? getSellerOrderStatusMeta(order.status)
@@ -2432,68 +2445,67 @@
               </div>
             </div>
 
-            <form
-              className="rounded-full p-2"
-              onSubmit=${handleSubmit}
+            <div
+              className="pt-4 mt-2"
               style=${{
-                background: "rgba(12, 15, 22, 0.97)",
-                border: "1px solid rgba(255, 255, 255, 0.06)",
-                boxShadow: "0 12px 28px rgba(0, 0, 0, 0.12)"
+                borderTop: "1px solid rgba(255, 255, 255, 0.06)",
+                background: "rgba(12, 15, 22, 0.97)"
               }}
             >
-              <div className="flex items-center gap-3">
-                <div
-                  className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0"
-                  style=${{
-                    background: "rgba(255, 255, 255, 0.03)",
-                    border: "1px solid rgba(255, 255, 255, 0.05)",
-                    color: "var(--drivex-silver)"
-                  }}
-                >
-                  <${Icon} name="smile" size=${20} />
-                </div>
-                <div
-                  className="flex-1 rounded-full px-5 py-3.5"
-                  style=${{
-                    background: "rgba(255, 255, 255, 0.02)",
-                    border: "1px solid rgba(255, 255, 255, 0.04)"
-                  }}
-                >
-                  <textarea
-                    rows="1"
-                    value=${draftMessage}
-                    onInput=${(event) => setDraftMessage(event.target.value)}
-                    placeholder=${safeViewerRole === "seller" ? "Ответить покупателю..." : "Написать продавцу..."}
-                    className="w-full outline-none dx-input"
+              <form onSubmit=${handleSubmit}>
+                <div className="flex items-end gap-3">
+                  <div
+                    className="flex-1 rounded-[20px] px-4 py-3"
                     style=${{
-                      color: "var(--drivex-white)",
-                      minHeight: "26px",
-                      maxHeight: "120px",
-                      resize: "none",
-                      background: "transparent",
-                      padding: 0,
-                      lineHeight: 1.45
+                      background: "rgba(255, 255, 255, 0.04)",
+                      border: "1px solid rgba(255, 255, 255, 0.08)"
                     }}
-                  ></textarea>
+                  >
+                    <textarea
+                      rows="1"
+                      value=${draftMessage}
+                      onInput=${(event) => {
+                        setDraftMessage(event.target.value);
+                        event.target.style.height = "auto";
+                        event.target.style.height = Math.min(event.target.scrollHeight, 120) + "px";
+                      }}
+                      onKeyDown=${handleKeyDown}
+                      placeholder=${safeViewerRole === "seller" ? "Ответить покупателю..." : "Написать продавцу..."}
+                      className="w-full outline-none dx-input"
+                      style=${{
+                        color: "var(--drivex-white)",
+                        minHeight: "24px",
+                        maxHeight: "120px",
+                        resize: "none",
+                        background: "transparent",
+                        padding: 0,
+                        lineHeight: 1.5
+                      }}
+                    ></textarea>
+                  </div>
+                  <button
+                    type="submit"
+                    className="w-12 h-12 rounded-[18px] flex-shrink-0 flex items-center justify-center"
+                    disabled=${!draftMessage.trim()}
+                    style=${{
+                      background: draftMessage.trim()
+                        ? "linear-gradient(135deg, rgba(6, 182, 212, 0.92) 0%, rgba(8, 145, 178, 0.96) 100%)"
+                        : "rgba(255, 255, 255, 0.05)",
+                      color: draftMessage.trim() ? "var(--drivex-white)" : "var(--drivex-silver)",
+                      border: "1px solid rgba(6, 182, 212, 0.22)",
+                      opacity: draftMessage.trim() ? 1 : 0.5,
+                      boxShadow: draftMessage.trim() ? "0 8px 20px rgba(6, 182, 212, 0.18)" : "none",
+                      transition: "all 0.2s"
+                    }}
+                  >
+                    <${Icon} name="send" size=${20} />
+                  </button>
                 </div>
-                <button
-                  type="submit"
-                  className="px-8 h-14 rounded-full text-sm font-semibold whitespace-nowrap"
-                  disabled=${!draftMessage.trim()}
-                  style=${{
-                    background: draftMessage.trim()
-                      ? "linear-gradient(135deg, rgba(6, 182, 212, 0.92) 0%, rgba(8, 145, 178, 0.96) 100%)"
-                      : "linear-gradient(135deg, rgba(6, 182, 212, 0.48) 0%, rgba(8, 145, 178, 0.54) 100%)",
-                    color: "var(--drivex-white)",
-                    border: "1px solid rgba(6, 182, 212, 0.22)",
-                    opacity: draftMessage.trim() ? 1 : 0.6,
-                    boxShadow: draftMessage.trim() ? "0 14px 30px rgba(6, 182, 212, 0.16)" : "none"
-                  }}
-                >
-                  Отправить
-                </button>
-              </div>
-            </form>
+                <p className="text-xs mt-2 text-center" style=${{ color: "rgba(255,255,255,0.22)" }}>
+                  Enter — отправить · Shift+Enter — новая строка
+                </p>
+              </form>
+            </div>
           </div>
         `
       : html`

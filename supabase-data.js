@@ -271,4 +271,184 @@
     mapServiceCenter,
     mapProduct
   };
+
+  // ── Отзывы о товарах (Supabase + серверный fallback) ──
+
+  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+  function mapReviewRow(row) {
+    if (!row) return null;
+    return {
+      id: String(row.id || ""),
+      productId: String(row.productId || row.product_id || ""),
+      authorName: String(row.authorName || row.author_name || "").trim() || "Покупатель DRIVEX",
+      rating: Math.max(1, Math.min(5, Math.floor(Number(row.rating) || 5))),
+      comment: String(row.comment || "").trim(),
+      verified: Boolean(row.verified),
+      createdAt: row.createdAt || row.created_at || new Date().toISOString(),
+      userId: row.userId || row.user_id || null
+    };
+  }
+
+  async function loadProductReviews(productId) {
+    const safeId = String(productId || "").trim();
+    if (!safeId) return [];
+    const collected = [];
+
+    const client = getClient();
+    if (client && uuidPattern.test(safeId)) {
+      const { data, error } = await client
+        .from("product_reviews")
+        .select("*")
+        .eq("product_id", safeId)
+        .order("created_at", { ascending: false })
+        .limit(50);
+      if (!error && Array.isArray(data)) collected.push(...data.map(mapReviewRow));
+    }
+
+    try {
+      const response = await fetch(`/api/market/reviews?productId=${encodeURIComponent(safeId)}`, {
+        headers: { Accept: "application/json" },
+        cache: "no-store"
+      });
+      if (response.ok) {
+        const payload = await response.json();
+        collected.push(...(Array.isArray(payload.reviews) ? payload.reviews : []).map(mapReviewRow));
+      }
+    } catch (e) {
+      // офлайн — только Supabase
+    }
+
+    const seen = new Set();
+    return collected
+      .filter(Boolean)
+      .filter((review) => {
+        if (seen.has(review.id)) return false;
+        seen.add(review.id);
+        return true;
+      })
+      .sort((l, r) => String(r.createdAt).localeCompare(String(l.createdAt)));
+  }
+
+  async function addProductReview({ productId, rating, comment = "", authorName = "", verified = false }) {
+    const safeId = String(productId || "").trim();
+    const safeRating = Math.max(1, Math.min(5, Math.floor(Number(rating) || 0)));
+    if (!safeId || !safeRating) throw new Error("Поставьте оценку от 1 до 5");
+
+    const client = getClient();
+    if (client && uuidPattern.test(safeId)) {
+      const { data: authData } = await client.auth.getUser().catch(() => ({ data: null }));
+      const userId = authData?.user?.id;
+      if (userId) {
+        const reviewRow = {
+          product_id: safeId,
+          user_id: userId,
+          author_name: String(authorName || "").trim(),
+          rating: safeRating,
+          comment: String(comment || "").trim(),
+          verified: Boolean(verified)
+        };
+        let { data, error } = await client
+          .from("product_reviews")
+          .upsert(reviewRow, { onConflict: "product_id,user_id" })
+          .select()
+          .single();
+        if (error && /verified/i.test(String(error.message || ""))) {
+          const { verified: _skip, ...rowWithoutVerified } = reviewRow;
+          ({ data, error } = await client
+            .from("product_reviews")
+            .upsert(rowWithoutVerified, { onConflict: "product_id,user_id" })
+            .select()
+            .single());
+        }
+        if (!error) return mapReviewRow(data);
+        console.warn("[supabase-data] addProductReview:", error.message);
+      }
+    }
+
+    const response = await fetch("/api/market/reviews", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({
+        productId: safeId,
+        rating: safeRating,
+        comment: String(comment || "").trim(),
+        authorName: String(authorName || "").trim(),
+        verified: Boolean(verified)
+      })
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(payload?.error || "Не удалось сохранить отзыв");
+    }
+    const payload = await response.json();
+    return mapReviewRow(payload.review);
+  }
+
+  async function loadRatingsSummary() {
+    const summary = {};
+    try {
+      const response = await fetch("/api/market/reviews?summary=1", {
+        headers: { Accept: "application/json" },
+        cache: "no-store"
+      });
+      if (response.ok) {
+        const payload = await response.json();
+        if (payload && typeof payload.summary === "object" && payload.summary) {
+          for (const [productId, entry] of Object.entries(payload.summary)) {
+            if (!entry) continue;
+            summary[String(productId)] = {
+              rating: Number(entry.rating) || 0,
+              count: Math.max(0, Math.floor(Number(entry.count) || 0))
+            };
+          }
+        }
+      }
+    } catch (e) { /* offline */ }
+
+    const client = getClient();
+    if (client) {
+      const { data, error } = await client.from("product_rating_summary").select("*").limit(2000);
+      if (!error && Array.isArray(data)) {
+        for (const row of data) {
+          if (!row || !row.product_id) continue;
+          const key = String(row.product_id);
+          const incoming = {
+            rating: Number(row.rating) || 0,
+            count: Math.max(0, Math.floor(Number(row.reviews_count) || 0))
+          };
+          const existing = summary[key];
+          if (existing && existing.count) {
+            const totalCount = existing.count + incoming.count;
+            summary[key] = {
+              count: totalCount,
+              rating: totalCount
+                ? Math.round(((existing.rating * existing.count + incoming.rating * incoming.count) / totalCount) * 10) / 10
+                : 0
+            };
+          } else {
+            summary[key] = incoming;
+          }
+        }
+      }
+    }
+    return summary;
+  }
+
+  function summarizeReviews(reviews) {
+    const list = Array.isArray(reviews) ? reviews.filter(Boolean) : [];
+    if (!list.length) return { count: 0, rating: 0 };
+    const total = list.reduce((sum, review) => sum + (Number(review.rating) || 0), 0);
+    return {
+      count: list.length,
+      rating: Math.round((total / list.length) * 10) / 10
+    };
+  }
+
+  window.DrivexMarketReviews = {
+    loadProductReviews,
+    addProductReview,
+    summarizeReviews,
+    loadRatingsSummary
+  };
 })();

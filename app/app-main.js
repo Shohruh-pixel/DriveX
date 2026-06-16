@@ -695,7 +695,9 @@
         }
 
         if (key === drivexStorageKeys.favorites) {
-          setFavorites(normalizeFavoritesList(nextValue));
+          const normalized = normalizeFavoritesList(nextValue);
+          setFavorites(normalized);
+          try { if (typeof marketFavoritesStore !== "undefined") marketFavoritesStore.setAll(normalized, { silent: true }); } catch {}
           return;
         }
 
@@ -905,7 +907,27 @@
         }
 
         if (key === drivexStorageKeys.orderChats) {
-          setOrderChats(nextValue === null ? {} : normalizeOrderChatsMap(nextValue));
+          setOrderChats((prev) => {
+            if (nextValue === null) return {};
+            const incoming = normalizeOrderChatsMap(nextValue);
+            if (!prev || !Object.keys(prev).length) return incoming;
+            const merged = { ...prev };
+            for (const [orderId, thread] of Object.entries(incoming)) {
+              if (!thread) continue;
+              const existingThread = merged[orderId];
+              if (!existingThread) { merged[orderId] = thread; continue; }
+              const existingMsgs = Array.isArray(existingThread.messages) ? existingThread.messages : [];
+              const incomingMsgs = Array.isArray(thread.messages) ? thread.messages : [];
+              const msgsById = new Map();
+              for (const m of existingMsgs) { if (m && m.id) msgsById.set(m.id, m); }
+              for (const m of incomingMsgs) { if (m && m.id) msgsById.set(m.id, m); }
+              const messages = Array.from(msgsById.values()).sort((a, b) =>
+                (a.sentAt || "") < (b.sentAt || "") ? -1 : 1
+              );
+              merged[orderId] = { ...existingThread, ...thread, messages };
+            }
+            return merged;
+          });
           return;
         }
 
@@ -1188,6 +1210,16 @@
         }
       }).catch(() => {});
 
+      // Реальные оценки товаров из отзывов покупателей
+      const reviewsApi = window.DrivexMarketReviews;
+      if (reviewsApi && typeof reviewsApi.loadRatingsSummary === "function") {
+        reviewsApi.loadRatingsSummary().then((summaryMap) => {
+          if (!cancelled && summaryMap && typeof marketRatingsStore !== "undefined") {
+            marketRatingsStore.setAll(summaryMap);
+          }
+        }).catch(() => {});
+      }
+
       return () => { cancelled = true; };
     }, []);
 
@@ -1390,6 +1422,18 @@
     useEffect(() => {
       pushBuyerState(drivexStorageKeys.favorites, favorites);
     }, [pushBuyerState, favorites]);
+
+    useEffect(() => {
+      try {
+        if (typeof marketFavoritesStore === "undefined") return;
+        marketFavoritesStore.setAll(Array.isArray(favorites) ? favorites : [], { silent: true });
+        return marketFavoritesStore.subscribe(() => {
+          const list = marketFavoritesStore.list();
+          setFavorites(list);
+          pushBuyerState(drivexStorageKeys.favorites, list);
+        });
+      } catch { /* ignore if store not ready */ }
+    }, [buyerSession?.id]);  // eslint-disable-line
 
     useEffect(() => {
       pushBuyerState(drivexStorageKeys.activeCar, activeCarId);
@@ -1663,7 +1707,8 @@
 
     useEffect(() => {
       pushBuyerState(drivexStorageKeys.orderChats, orderChats);
-    }, [orderChats, pushBuyerState]);
+      pushSharedState(drivexStorageKeys.orderChats, orderChats);
+    }, [orderChats, pushBuyerState, pushSharedState]);
 
     useEffect(() => {
       const normalizedCatalog = normalizeMarketplacePartnerCatalog(marketplacePartnerCatalog);
@@ -2638,8 +2683,12 @@
       const safeText = String(text || "").trim();
       if (!safeOrderId || !safeText) return;
 
-      setOrderChats((prev) => appendOrderChatMessage(prev, safeOrderId, { senderRole, text: safeText }));
-    }, []);
+      setOrderChats((prev) => {
+        const next = appendOrderChatMessage(prev, safeOrderId, { senderRole, text: safeText });
+        try { pushSharedState(drivexStorageKeys.orderChats, next); } catch {}
+        return next;
+      });
+    }, [pushSharedState]);
 
     const markOrderChatRead = useCallback((orderId, viewerRole) => {
       const safeOrderId = String(orderId || "").trim();
@@ -2647,9 +2696,11 @@
 
       setOrderChats((prev) => {
         if (!getOrderChatUnreadCount(prev, safeOrderId, viewerRole)) return prev;
-        return markOrderChatAsRead(prev, safeOrderId, viewerRole);
+        const next = markOrderChatAsRead(prev, safeOrderId, viewerRole);
+        try { pushSharedState(drivexStorageKeys.orderChats, next); } catch {}
+        return next;
       });
-    }, []);
+    }, [pushSharedState]);
 
     const saveSellerStore = useCallback(
       async (nextStore) => {

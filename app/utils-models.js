@@ -56,7 +56,10 @@
     drivexStorageKeys.serviceRequests,
     drivexStorageKeys.serviceCenter,
     drivexStorageKeys.maintenance,
-    drivexStorageKeys.marketplaceCatalog
+    drivexStorageKeys.marketplaceCatalog,
+    drivexStorageKeys.sellerOrders,
+    drivexStorageKeys.sellerNotifications,
+    drivexStorageKeys.orderChats
   ]);
   const buyerPersonalStorageKeys = new Set([
     drivexStorageKeys.profile,
@@ -66,7 +69,6 @@
     drivexStorageKeys.maintenance,
     drivexStorageKeys.cart,
     drivexStorageKeys.buyerOrders,
-    drivexStorageKeys.orderChats,
     drivexStorageKeys.savedPlaces,
     drivexStorageKeys.favorites,
     drivexStorageKeys.buyerInvite
@@ -391,6 +393,150 @@
       storeId: raw.slice(0, separatorIndex),
       productId: normalizeMarketProductId(raw.slice(separatorIndex + 2))
     };
+  }
+
+  // ── Избранное маркета: глобальный store с подпиской ──
+  const marketFavoritesStore = {
+    ids: new Set(),
+    listeners: new Set(),
+    notify() {
+      this.listeners.forEach((listener) => { try { listener(); } catch { /* ignore */ } });
+    },
+    setAll(list, { silent = false } = {}) {
+      this.ids = new Set(
+        (Array.isArray(list) ? list : []).map((item) => String(item || "").trim()).filter(Boolean)
+      );
+      if (!silent) this.notify();
+    },
+    toggle(key) {
+      const clean = String(key || "").trim();
+      if (!clean) return false;
+      const wasFavorite = this.ids.has(clean);
+      if (wasFavorite) { this.ids.delete(clean); } else { this.ids.add(clean); }
+      this.notify();
+      return !wasFavorite;
+    },
+    has(key) { return this.ids.has(String(key || "").trim()); },
+    list() { return [...this.ids]; },
+    subscribe(listener) {
+      this.listeners.add(listener);
+      return () => this.listeners.delete(listener);
+    }
+  };
+
+  function useMarketFavorites() {
+    const [, setTick] = useState(0);
+    useEffect(() => marketFavoritesStore.subscribe(() => setTick((v) => v + 1)), []);
+    return marketFavoritesStore;
+  }
+
+  function getMarketFavoriteKey(product) {
+    if (!product || typeof product !== "object") return "";
+    return createMarketCartKey(product.id, product.storeId || "");
+  }
+
+  function getMarketFavoriteProducts(catalog) {
+    return (Array.isArray(catalog) ? catalog : []).filter((product) =>
+      marketFavoritesStore.has(getMarketFavoriteKey(product))
+    );
+  }
+
+  // ── Реальные оценки товаров: глобальный store ──
+  const marketRatingsStore = {
+    map: {},
+    listeners: new Set(),
+    notify() {
+      this.listeners.forEach((listener) => { try { listener(); } catch { /* ignore */ } });
+    },
+    setAll(map) {
+      if (!map || typeof map !== "object") return;
+      this.map = { ...this.map, ...map };
+      this.notify();
+    },
+    set(productId, entry) {
+      const key = String(productId ?? "").trim();
+      if (!key || !entry) return;
+      this.map[key] = { rating: Number(entry.rating) || 0, count: Math.max(0, Math.floor(Number(entry.count) || 0)) };
+      this.notify();
+    },
+    get(productId) { return this.map[String(productId ?? "").trim()] || null; },
+    subscribe(listener) {
+      this.listeners.add(listener);
+      return () => this.listeners.delete(listener);
+    }
+  };
+
+  function useMarketRatings() {
+    const [, setTick] = useState(0);
+    useEffect(() => marketRatingsStore.subscribe(() => setTick((v) => v + 1)), []);
+    return marketRatingsStore;
+  }
+
+  function getMarketProductRating(product) {
+    const entry = marketRatingsStore.get(product && product.id);
+    if (entry && entry.count > 0) return { rating: entry.rating, count: entry.count, has: true };
+    return { rating: 0, count: 0, has: false };
+  }
+
+  function getMarketStoreRating(storeId) {
+    const safeStoreId = String(storeId ?? "").trim();
+    if (!safeStoreId) return { rating: 0, count: 0, has: false };
+    let total = 0;
+    let count = 0;
+    for (const product of marketplaceData.products) {
+      if (String(product.storeId ?? "").trim() !== safeStoreId) continue;
+      const entry = marketRatingsStore.get(product.id);
+      if (!entry || !entry.count) continue;
+      total += entry.rating * entry.count;
+      count += entry.count;
+    }
+    if (!count) return { rating: 0, count: 0, has: false };
+    return { rating: Math.round((total / count) * 10) / 10, count, has: true };
+  }
+
+  function normalizeProductCompatibility(value) {
+    if (!value || typeof value !== "object") return null;
+    const brands = Array.isArray(value.brands) ? value.brands.filter(Boolean).map(String) : [];
+    const models = Array.isArray(value.models) ? value.models.filter(Boolean).map(String) : [];
+    const years = Array.isArray(value.years)
+      ? value.years.map((year) => Math.floor(Number(year))).filter((year) => Number.isFinite(year))
+      : [];
+    const universal = Boolean(value.universal) || (!brands.length && !models.length && !years.length);
+    return { universal, brands, models, years };
+  }
+
+  function productMatchesCar(product, { brand = "", model = "", year = "" } = {}) {
+    const compat = normalizeProductCompatibility(product && product.compatibility);
+    if (!compat || compat.universal) return { match: true, universal: true };
+    if (compat.brands.length && brand) {
+      const brandNorm = normalizeMarketSearchText(brand);
+      const hasBrand = compat.brands.some((item) => normalizeMarketSearchText(item) === brandNorm);
+      if (!hasBrand) return { match: false, universal: false };
+    }
+    if (compat.models.length && model && model !== "any") {
+      const modelNorm = normalizeMarketSearchText(model);
+      const hasModel = compat.models.some((item) => {
+        const itemNorm = normalizeMarketSearchText(item);
+        return itemNorm.includes(modelNorm) || modelNorm.includes(itemNorm);
+      });
+      if (!hasModel) return { match: false, universal: false };
+    }
+    if (compat.years.length === 2 && year) {
+      const numericYear = Number(year);
+      if (Number.isFinite(numericYear) && (numericYear < compat.years[0] || numericYear > compat.years[1])) {
+        return { match: false, universal: false };
+      }
+    }
+    return { match: true, universal: false };
+  }
+
+  const marketQuestionThreadPrefix = "question::";
+
+  function getMarketProductQuestionThreadId(storeId, productId) {
+    const safeStoreId = String(storeId ?? "").trim();
+    const safeProductId = String(productId ?? "").trim();
+    if (!safeStoreId || !safeProductId) return "";
+    return `${marketQuestionThreadPrefix}${safeStoreId}::${safeProductId}`;
   }
 
   function getMarketStore(storeId) {
@@ -4769,6 +4915,17 @@
   try { if (typeof createFreshServiceSession !== 'undefined') window.DX['createFreshServiceSession'] = createFreshServiceSession; } catch(e) {}
   try { if (typeof createGeneratedMarketProductId !== 'undefined') window.DX['createGeneratedMarketProductId'] = createGeneratedMarketProductId; } catch(e) {}
   try { if (typeof createMarketCartKey !== 'undefined') window.DX['createMarketCartKey'] = createMarketCartKey; } catch(e) {}
+  try { if (typeof marketFavoritesStore !== 'undefined') window.DX['marketFavoritesStore'] = marketFavoritesStore; } catch(e) {}
+  try { if (typeof marketRatingsStore !== 'undefined') window.DX['marketRatingsStore'] = marketRatingsStore; } catch(e) {}
+  try { if (typeof useMarketFavorites !== 'undefined') window.DX['useMarketFavorites'] = useMarketFavorites; } catch(e) {}
+  try { if (typeof getMarketFavoriteKey !== 'undefined') window.DX['getMarketFavoriteKey'] = getMarketFavoriteKey; } catch(e) {}
+  try { if (typeof getMarketFavoriteProducts !== 'undefined') window.DX['getMarketFavoriteProducts'] = getMarketFavoriteProducts; } catch(e) {}
+  try { if (typeof useMarketRatings !== 'undefined') window.DX['useMarketRatings'] = useMarketRatings; } catch(e) {}
+  try { if (typeof getMarketProductRating !== 'undefined') window.DX['getMarketProductRating'] = getMarketProductRating; } catch(e) {}
+  try { if (typeof getMarketStoreRating !== 'undefined') window.DX['getMarketStoreRating'] = getMarketStoreRating; } catch(e) {}
+  try { if (typeof normalizeProductCompatibility !== 'undefined') window.DX['normalizeProductCompatibility'] = normalizeProductCompatibility; } catch(e) {}
+  try { if (typeof productMatchesCar !== 'undefined') window.DX['productMatchesCar'] = productMatchesCar; } catch(e) {}
+  try { if (typeof getMarketProductQuestionThreadId !== 'undefined') window.DX['getMarketProductQuestionThreadId'] = getMarketProductQuestionThreadId; } catch(e) {}
   try { if (typeof createMarketplaceCheckoutDraft !== 'undefined') window.DX['createMarketplaceCheckoutDraft'] = createMarketplaceCheckoutDraft; } catch(e) {}
   try { if (typeof createPendingSellerStoreId !== 'undefined') window.DX['createPendingSellerStoreId'] = createPendingSellerStoreId; } catch(e) {}
   try { if (typeof createSellerNotifications !== 'undefined') window.DX['createSellerNotifications'] = createSellerNotifications; } catch(e) {}

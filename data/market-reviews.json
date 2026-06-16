@@ -1,0 +1,80 @@
+[
+  {
+    "id": "review-1781416629045-238e513157ac1",
+    "productId": "863420",
+    "authorName": "Покупатель DRIVEX",
+    "rating": 2,
+    "comment": "",
+    "verified": false,
+    "createdAt": "2026-06-14T05:57:09.045Z"
+  },
+  {
+    "id": "review-1781314990743-5d13e1fd73108",
+    "productId": "863420",
+    "authorName": "Покупатель DRIVEX",
+    "rating": 1,
+    "comment": "",
+    "verified": false,
+    "createdAt": "2026-06-13T01:43:10.743Z"
+  },
+  {
+    "id": "review-1781281355976-3f5cc3bf68ddf8",
+    "productId": "668229",
+    "authorName": "Шохрух",
+    "rating": 1,
+    "comment": "НЕ  очен  лучший",
+    "verified": true,
+    "createdAt": "2026-06-12T16:22:35.976Z"
+  },
+  {
+    "id": "review-1781274494612-9a5d4975d13c88",
+    "productId": "6",
+    "authorName": "Покупатель DRIVEX",
+    "rating": 2,
+    "comment": "",
+    "verified": false,
+    "createdAt": "2026-06-12T14:28:14.612Z"
+  },
+  {
+    "id": "review-1781273918267-28a126c8838128",
+    "productId": "6",
+    "authorName": "Покупатель Брембо",
+    "rating": 5,
+    "comment": "Хорошее масло, лью постоянно",
+    "verified": false,
+    "createdAt": "2026-06-12T14:18:38.267Z"
+  },
+  {
+    "id": "review-1781273890829-0814e1aa876d7",
+    "productId": "3",
+    "authorName": "Покупатель Брембо",
+    "rating": 5,
+    "comment": "Заказывал здесь — колодки оригинал",
+    "verified": true,
+    "createdAt": "2026-06-12T14:18:10.829Z"
+  },
+  {
+    "id": "review-1781246493335-0f83baae26fbb",
+    "productId": "2",
+    "authorName": "Покупатель DRIVEX",
+    "rating": 5,
+    "comment": "Хорошая резина за свои деньги",
+    "createdAt": "2026-06-12T06:41:33.335Z"
+  },
+  {
+    "id": "review-1781243485100-5173ecb8457268",
+    "productId": "3",
+    "authorName": "Фаррух",
+    "rating": 4,
+    "comment": "Поставил на Camry — встали как родные",
+    "createdAt": "2026-06-12T05:51:25.100Z"
+  },
+  {
+    "id": "review-1781243423508-a582a17fb18f9",
+    "productId": "3",
+    "authorName": "Шохрух",
+    "rating": 5,
+    "comment": "Отличные колодки, тормозят уверенно!",
+    "createdAt": "2026-06-12T05:50:23.509Z"
+  }
+]

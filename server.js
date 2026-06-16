@@ -155,9 +155,34 @@ function mergeArrayById(existingValue, nextValue) {
   return Array.from(merged.values());
 }
 
+function mergeOrderChats(existingValue, nextValue) {
+  const existing = existingValue && typeof existingValue === "object" && !Array.isArray(existingValue) ? existingValue : {};
+  const incoming = nextValue && typeof nextValue === "object" && !Array.isArray(nextValue) ? nextValue : {};
+  const merged = { ...existing };
+  for (const [orderId, thread] of Object.entries(incoming)) {
+    if (!thread) continue;
+    const existingThread = merged[orderId];
+    if (!existingThread) { merged[orderId] = thread; continue; }
+    const existingMsgs = Array.isArray(existingThread.messages) ? existingThread.messages : [];
+    const incomingMsgs = Array.isArray(thread.messages) ? thread.messages : [];
+    const msgsById = new Map();
+    for (const m of existingMsgs) { if (m && m.id) msgsById.set(m.id, m); }
+    for (const m of incomingMsgs) { if (m && m.id) msgsById.set(m.id, m); }
+    const messages = Array.from(msgsById.values()).sort((a, b) =>
+      (a.sentAt || "") < (b.sentAt || "") ? -1 : 1
+    );
+    merged[orderId] = { ...existingThread, ...thread, messages };
+  }
+  return merged;
+}
+
 function mergeAppStateValue(key, existingEntry, nextValue) {
   if (key === "drivex.maintenance.v1" && nextValue && typeof nextValue === "object") {
     return mergeMaintenanceState(existingEntry && existingEntry.value, nextValue);
+  }
+
+  if (key === "drivex.order-chats.v1" && nextValue && typeof nextValue === "object" && !Array.isArray(nextValue)) {
+    return mergeOrderChats(existingEntry && existingEntry.value, nextValue);
   }
 
   if (mergeByIdAppStateKeys.has(key) && Array.isArray(nextValue)) {
@@ -390,6 +415,87 @@ function normalizeServiceCenter(input) {
     createdAt,
     updatedAt: new Date().toISOString()
   };
+}
+
+// ── Отзывы о товарах маркета ──────────────────────────────────────────────
+
+const marketReviewsFilePath = path.join(dataDir, "market-reviews.json");
+
+function readMarketReviews() {
+  try {
+    if (!fs.existsSync(marketReviewsFilePath)) return [];
+    const parsed = JSON.parse(fs.readFileSync(marketReviewsFilePath, "utf8"));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch { return []; }
+}
+
+function writeMarketReviews(reviews) {
+  ensureDataDir();
+  fs.writeFileSync(marketReviewsFilePath, JSON.stringify(reviews, null, 2), "utf8");
+}
+
+function buildMarketReviewsSummary() {
+  const summary = {};
+  for (const review of readMarketReviews()) {
+    if (!review || !review.productId) continue;
+    const key = String(review.productId);
+    const entry = summary[key] || { count: 0, total: 0 };
+    entry.count += 1;
+    entry.total += Math.max(1, Math.min(5, Number(review.rating) || 0));
+    summary[key] = entry;
+  }
+  const result = {};
+  for (const [key, entry] of Object.entries(summary)) {
+    result[key] = { count: entry.count, rating: Math.round((entry.total / entry.count) * 10) / 10 };
+  }
+  return result;
+}
+
+function normalizeMarketReview(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const productId = cleanString(raw.productId || raw.product_id, 160);
+  const rating = Math.floor(Number(raw.rating));
+  if (!productId || !Number.isFinite(rating) || rating < 1 || rating > 5) return null;
+  return {
+    id: cleanString(raw.id, 80) || `review-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    productId,
+    authorName: cleanString(raw.authorName || raw.author_name, 80) || "Покупатель DRIVEX",
+    rating,
+    comment: cleanString(raw.comment, 1200),
+    verified: Boolean(raw.verified),
+    createdAt: raw.createdAt && !Number.isNaN(Date.parse(raw.createdAt))
+      ? new Date(raw.createdAt).toISOString()
+      : new Date().toISOString()
+  };
+}
+
+async function handleMarketReviewsRoute(req, res, url) {
+  if (req.method === "GET") {
+    if (url.searchParams.get("summary")) {
+      sendJson(res, 200, { summary: buildMarketReviewsSummary() });
+      return;
+    }
+    const productId = cleanString(url.searchParams.get("productId"), 160);
+    const all = readMarketReviews();
+    const reviews = productId ? all.filter((item) => item.productId === productId) : all;
+    sendJson(res, 200, { reviews: reviews.slice(0, 100) });
+    return;
+  }
+  if (req.method === "POST") {
+    try {
+      const body = await readJsonBody(req);
+      const review = normalizeMarketReview(body.review || body);
+      if (!review) { sendJson(res, 400, { error: "Нужны productId и оценка от 1 до 5" }); return; }
+      const all = readMarketReviews();
+      all.unshift(review);
+      writeMarketReviews(all.slice(0, 5000));
+      sendJson(res, 201, { review });
+    } catch (error) {
+      sendJson(res, error.statusCode || 400, { error: error.message || "Review save failed" });
+    }
+    return;
+  }
+  sendJson(res, 405, { error: "Method not allowed" });
 }
 
 async function handleServiceCentersRoute(req, res) {
@@ -743,6 +849,11 @@ const server = http.createServer(async (req, res) => {
 
   if (url.pathname === "/api/service-centers") {
     await handleServiceCentersRoute(req, res);
+    return;
+  }
+
+  if (url.pathname === "/api/market/reviews") {
+    await handleMarketReviewsRoute(req, res, url);
     return;
   }
 

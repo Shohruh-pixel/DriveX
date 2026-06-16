@@ -40,6 +40,11 @@
     'getRelatedMarketProducts','filterMarketProducts','normalizeMarketSearchText',
     'buildMarketplaceRuntimeData','setMarketplaceRuntime',
     'parseMarketCartKey','createMarketCartKey',
+    'marketFavoritesStore','marketRatingsStore',
+    'useMarketFavorites','getMarketFavoriteKey','getMarketFavoriteProducts',
+    'useMarketRatings','getMarketProductRating','getMarketStoreRating',
+    'normalizeProductCompatibility','productMatchesCar','getMarketProductQuestionThreadId','getMarketStoreRating',
+    'normalizeProductCompatibility','productMatchesCar','getMarketStoreRating',
     'createMarketplaceCheckoutDraft','syncMarketplaceCheckoutDraft','normalizeMarketplaceOrder',
     'normalizeMarketplaceOrdersList','normalizeMarketCheckoutDraft',
 
