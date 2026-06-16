@@ -24,7 +24,7 @@
   const SellerTextarea     = function(p){ var F=(window.DX.screens||{}).SellerTextarea; return F ? React.createElement(F, p) : null; };
   const OrderStatusTimeline= function(p){ var F=(window.DX.screens||{}).OrderStatusTimeline||window.DX.OrderStatusTimeline; return F?F(p):null; };
 
-  function ServicesScreen({ serviceDirectory, activeCarId, serviceCrmReady = false, serviceCenterName = "", favorites = [], onToggleFavorite }) {
+  function ServicesScreen({ serviceDirectory, activeCarId, serviceCrmReady = false, serviceCenterName = "" }) {
     const toast = useToast();
     const [serviceSearchQuery, setServiceSearchQuery] = useState("");
     const servicesList =
@@ -70,26 +70,6 @@
       event.preventDefault();
       event.stopPropagation();
       toast.push(`Сравнение ${serviceName} скоро добавим`);
-    };
-
-    const favServiceIds = new Set(
-      (Array.isArray(favorites) ? favorites : [])
-        .filter((f) => f && f.type === "service")
-        .map((f) => f.id)
-    );
-    const handleFavService = (event, service) => {
-      event.preventDefault();
-      event.stopPropagation();
-      if (!onToggleFavorite) return;
-      const added = onToggleFavorite({
-        type: "service",
-        id: service.id,
-        title: service.name,
-        subtitle: service.city || service.category || service.type || "",
-        image: service.image || "",
-        path: "/service/" + service.id
-      });
-      toast.push(added ? "Добавлено в избранное" : "Убрано из избранного");
     };
 
     const normalizedSearchQuery = normalizeServiceCategoryText(serviceSearchQuery);
@@ -314,9 +294,8 @@
               <button
                 type="button"
                 className="services-redesign-save"
-                aria-label=${favServiceIds.has(service.id) ? "Убрать из избранного" : "В избранное"}
-                style=${favServiceIds.has(service.id) ? { color: "var(--drivex-neon-cyan)" } : null}
-                onClick=${(event) => handleFavService(event, service)}
+                aria-label="Сохранить сервис"
+                onClick=${(event) => compareService(event, service.name)}
               >
                 <${Icon} name="star" size=${16} />
               </button>
@@ -945,11 +924,15 @@
   function ProductCard({ product, onAddToCart }) {
     const [addedPulse, setAddedPulse] = useState(false);
     const addedTimerRef = useRef(null);
+    const toast = useToast();
     const store = getMarketStore(product.storeId);
     const badgeColor = getMarketBadgeColor(product);
     const discount = getMarketDiscountPercent(product);
     const categoryMeta = marketCategories.find((category) => category.id === product.categoryId);
     const categoryColor = categoryMeta?.color || "var(--drivex-neon-cyan)";
+    const favorites = typeof useMarketFavorites === "function" ? useMarketFavorites() : { has: () => false, toggle: () => false };
+    const favoriteKey = typeof getMarketFavoriteKey === "function" ? getMarketFavoriteKey(product) : "";
+    const isFavorite = favorites.has(favoriteKey);
 
     useEffect(() => {
       return () => {
@@ -984,6 +967,20 @@
                 -${discount}%
               </span>`
             : null}
+          <button
+            type="button"
+            className=${`market-ui-fav ${isFavorite ? "is-active" : ""}`}
+            style=${{ width: "2rem", height: "2rem", right: "0.4rem", top: "0.4rem" }}
+            onClick=${(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              const added = favorites.toggle(favoriteKey);
+              toast.push(added ? "Добавлено в избранное" : "Убрано из избранного");
+            }}
+            aria-label=${isFavorite ? "Убрать из избранного" : "В избранное"}
+          >
+            <${Icon} name="heart" size=${14} />
+          </button>
           </div>
 
           <div className="market-ui-product-body">
@@ -1284,6 +1281,24 @@
                 </div>
               </a>
             `)}
+          </div>
+
+          <div className="glass-card rounded-2xl p-5 mt-4 mb-6" style=${{ border: "1px solid rgba(6,182,212,0.2)" }}>
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                style=${{ background: "linear-gradient(135deg, var(--drivex-neon-cyan) 0%, var(--drivex-electric-blue) 100%)" }}>
+                <${Icon} name="store" size=${20} />
+              </div>
+              <div>
+                <p className="font-bold text-sm" style=${{ color: "var(--drivex-white)" }}>Хотите продавать на DRIVEX?</p>
+                <p className="text-xs mt-0.5" style=${{ color: "var(--drivex-silver)" }}>Откройте магазин и начните продавать уже сегодня</p>
+              </div>
+            </div>
+            <a href="#/seller-crm"
+              className="block w-full text-center py-3 rounded-xl font-semibold text-sm"
+              style=${{ background: "linear-gradient(135deg, var(--drivex-neon-cyan) 0%, var(--drivex-electric-blue) 100%)", color: "var(--drivex-black)" }}>
+              Зарегистрировать магазин →
+            </a>
           </div>
         </main>
       </div>
@@ -2067,7 +2082,7 @@
 
     const BuyerPhoneAuthScreen = BuyerAuthScreen;
 
-  function ProfileScreen({ notificationsCount, profile, documents, documentsTotalCount, maintenance, ordersCount, favoritesCount, onLogout }) {
+  function ProfileScreen({ notificationsCount, profile, documents, documentsTotalCount, maintenance, ordersCount, onLogout }) {
     const fallbackProfile = createDefaultBuyerProfile();
     const name = profile?.name || fallbackProfile.name;
     const phone = profile?.phone || fallbackProfile.phone;
@@ -2106,7 +2121,6 @@
       {
         title: "Заказы и услуги",
         items: [
-          { icon: "star", label: "Избранное", path: "/favorites", badge: favoritesCount ? String(favoritesCount) : null },
           {
             icon: "bag",
             label: "История заказов",
@@ -2129,7 +2143,7 @@
             icon: "bell",
             label: "Уведомления",
             path: "/notifications",
-            badge: notificationsCount ? String(notificationsCount) : null
+            badge: String(notificationsCount)
           },
           { icon: "card", label: "Платёжные данные", path: "/payment", badge: null },
           { icon: "star", label: "Бонусная программа", path: "/bonus", badge: null },
