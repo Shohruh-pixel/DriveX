@@ -3522,7 +3522,11 @@
 
       try {
         await runSellerBackendAction("recordMarketplaceCheckout", {
-          orders: nextOrders
+          orders: nextOrders,
+          // Передаём id покупателя из уже загруженной сессии — бэкенду не нужно
+          // звать client.auth.getUser() (сетевой вызов + Web Lock), который под
+          // множеством вкладок падает с "Lock broken ... steal" и срывал заказ.
+          buyerUserId: buyerSession?.id || null
         });
         const nextBuyerOrders = createBuyerOrdersFromCheckout({
           orders: nextOrders,
@@ -3535,7 +3539,7 @@
       } catch (error) {
         toast.push(error?.message || "Не удалось отправить заказ продавцу");
       }
-    }, [cartItems, profile, runSellerBackendAction, runtimeMarketStores, sellerOrders, toast]);
+    }, [cartItems, profile, runSellerBackendAction, runtimeMarketStores, sellerOrders, toast, buyerSession]);
 
     const normalized = normalizePath(path);
 

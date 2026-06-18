@@ -1680,8 +1680,19 @@
 
     // RLS на orders требует customer_user_id = auth.uid(). Без id покупателя
     // INSERT падает с "violates row-level security policy" и заказ не оформляется.
-    const { data: authData } = await client.auth.getUser();
-    const buyerUserId = authData?.user?.id || null;
+    // id берём из payload (передан приложением из активной сессии). Фолбэк —
+    // getSession() (локальное чтение из storage, без сети). НЕ зовём getUser():
+    // сетевой вызов + Web Lock, который под множеством вкладок рвётся
+    // ("Lock broken by another request with the 'steal' option") и срывает заказ.
+    let buyerUserId = payload.buyerUserId || null;
+    if (!buyerUserId) {
+      try {
+        const { data: sessionData } = await client.auth.getSession();
+        buyerUserId = sessionData?.session?.user?.id || null;
+      } catch (e) {
+        buyerUserId = null;
+      }
+    }
 
     for (const order of incomingOrders) {
       // Не передаём id — пусть Supabase генерирует UUID автоматически

@@ -49,11 +49,20 @@
             "sentAt": "2026-06-18T09:14:16.452Z",
             "readByBuyer": true,
             "readBySeller": false
+          },
+          {
+            "id": "chat-message-1781776173553-33ddfc37ba6a2",
+            "orderId": "DX-260618-006",
+            "senderRole": "buyer",
+            "text": "авпыап",
+            "sentAt": "2026-06-18T09:49:33.553Z",
+            "readByBuyer": true,
+            "readBySeller": false
           }
         ]
       }
     },
-    "updatedAt": "2026-06-18T09:46:51.574Z"
+    "updatedAt": "2026-06-18T10:55:38.381Z"
   },
   "drivex.market.catalog.v1": {
     "value": {
@@ -305,7 +314,7 @@
         }
       ]
     },
-    "updatedAt": "2026-06-18T09:46:49.733Z"
+    "updatedAt": "2026-06-18T10:55:38.277Z"
   },
   "drivex.seller.orders.v1": {
     "value": [
@@ -378,9 +387,42 @@
         "deliveryMethod": "Доставка",
         "address": "Зафаробод",
         "notes": ""
+      },
+      {
+        "id": "DX-260614-001",
+        "storeId": "dalertjs-худжанд",
+        "storeName": "DalerTJS",
+        "customerName": "Бобочонова Нигина",
+        "customerPhone": "+992927079246",
+        "items": [
+          {
+            "productId": "863420",
+            "title": "Новый товар",
+            "qty": 1,
+            "price": 40
+          },
+          {
+            "productId": "863420",
+            "title": "Новый товар",
+            "qty": 1,
+            "price": 40
+          },
+          {
+            "productId": "863420",
+            "title": "Новый товар",
+            "qty": 1,
+            "price": 40
+          }
+        ],
+        "amount": 40,
+        "status": "delivery",
+        "date": "2026-06-14",
+        "deliveryMethod": "Доставка",
+        "address": "Зафаробод к  в  Шарипов  33",
+        "notes": ""
       }
     ],
-    "updatedAt": "2026-06-18T09:46:49.694Z"
+    "updatedAt": "2026-06-18T10:55:38.218Z"
   },
   "drivex.seller.notifications.v1": {
     "value": [
@@ -526,9 +568,31 @@
         "createdAt": "2026-06-17T16:10:56.654909+00:00",
         "color": "var(--drivex-success)",
         "icon": "bag"
+      },
+      {
+        "id": "a992f560-57c2-4377-a02f-d86315e0779c",
+        "type": "product_published",
+        "title": "Карточка товара обновлена",
+        "body": "Новый товар",
+        "message": "Новый товар",
+        "isRead": false,
+        "createdAt": "2026-06-13T01:42:42.18134+00:00",
+        "color": "var(--drivex-success)",
+        "icon": "bag"
+      },
+      {
+        "id": "449d0b29-a5b0-4de0-9d0f-0ebbf1d1b7a0",
+        "type": "welcome",
+        "title": "Магазин зарегистрирован",
+        "body": "Проверьте карточку магазина и завершите onboarding.",
+        "message": "Проверьте карточку магазина и завершите onboarding.",
+        "isRead": false,
+        "createdAt": "2026-06-13T01:40:03.480261+00:00",
+        "color": "var(--drivex-electric-blue)",
+        "icon": "sparkles"
       }
     ],
-    "updatedAt": "2026-06-18T09:46:49.699Z"
+    "updatedAt": "2026-06-18T10:55:38.224Z"
   },
   "drivex.service.profile.v1": {
     "value": {
@@ -540,7 +604,7 @@
       "position": "Владелец сервиса",
       "registrationCompleted": false
     },
-    "updatedAt": "2026-06-18T09:45:54.046Z"
+    "updatedAt": "2026-06-18T10:16:07.174Z"
   },
   "drivex.service.center.v1": {
     "value": {
@@ -563,30 +627,30 @@
       "registrationCompleted": false,
       "status": "new"
     },
-    "updatedAt": "2026-06-18T09:46:49.702Z"
+    "updatedAt": "2026-06-18T10:55:38.229Z"
   },
   "drivex.service.clients.v1": {
     "value": [],
-    "updatedAt": "2026-06-18T09:46:49.706Z"
+    "updatedAt": "2026-06-18T10:55:38.234Z"
   },
   "drivex.service.orders.v1": {
     "value": [],
-    "updatedAt": "2026-06-18T09:46:49.710Z"
+    "updatedAt": "2026-06-18T10:55:38.240Z"
   },
   "drivex.service.inventory.v1": {
     "value": [],
-    "updatedAt": "2026-06-18T09:46:49.714Z"
+    "updatedAt": "2026-06-18T10:55:38.249Z"
   },
   "drivex.service.finance.v1": {
     "value": [],
-    "updatedAt": "2026-06-18T09:46:49.718Z"
+    "updatedAt": "2026-06-18T10:55:38.254Z"
   },
   "drivex.service.appointments.v1": {
     "value": [],
-    "updatedAt": "2026-06-18T09:46:49.722Z"
+    "updatedAt": "2026-06-18T10:55:38.259Z"
   },
   "drivex.service.requests.v1": {
     "value": [],
-    "updatedAt": "2026-06-18T09:46:49.725Z"
+    "updatedAt": "2026-06-18T10:55:38.264Z"
   }
 }
