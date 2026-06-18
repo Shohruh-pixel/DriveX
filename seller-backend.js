@@ -1478,8 +1478,32 @@
     const client = createSupabaseClient();
     if (!client) return loginLocalPartner(payload);
 
+    const identifier = String(payload.email || payload.phone || "").trim();
+    let email = identifier;
+
+    // Вход по телефону: продавцы регистрируются по email, поэтому резолвим
+    // email по номеру через серверный endpoint (service-role). Если введён email
+    // (содержит @) — используем как есть.
+    if (identifier && identifier.indexOf("@") === -1) {
+      try {
+        const resp = await fetch("/api/partner/email-by-phone", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ phone: identifier })
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (data && data.email) {
+          email = data.email;
+        } else {
+          throw new Error("Не нашли магазин с таким номером. Войдите по email или зарегистрируйтесь.");
+        }
+      } catch (e) {
+        throw new Error(e && e.message ? e.message : "Не удалось войти по номеру телефона");
+      }
+    }
+
     const { error } = await client.auth.signInWithPassword({
-      email: String(payload.email || "").trim(),
+      email,
       password: String(payload.password || "")
     });
     if (error) throw error;

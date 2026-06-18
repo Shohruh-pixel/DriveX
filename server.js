@@ -720,6 +720,34 @@ async function handleOtpSend(req, res) {
   sendJson(res, 200, { ok: true, message: "Код отправлен в Telegram" });
 }
 
+// Находит email продавца по номеру телефона (service-role), чтобы можно было
+// войти в Seller CRM по телефону: продавцы регистрируются по email, телефон лежит
+// в user_metadata.phone. Возвращаем только email (нужен для signInWithPassword).
+async function handlePartnerEmailByPhone(req, res) {
+  if (req.method !== "POST") { sendJson(res, 405, { error: "Method not allowed" }); return; }
+  let body;
+  try { body = await readJsonBody(req); } catch { sendJson(res, 400, { error: "Invalid JSON" }); return; }
+
+  const phoneDigits = String(body.phone || "").replace(/\D/g, "");
+  if (phoneDigits.length < 9) { sendJson(res, 400, { error: "Некорректный номер" }); return; }
+
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY || !process.env.SUPABASE_URL) {
+    sendJson(res, 200, { email: null, configured: false });
+    return;
+  }
+
+  const target = phoneDigits.slice(-9); // сравниваем по последним 9 цифрам (без кода страны)
+  const listRes = await supabaseAdminRequest("GET", "/auth/v1/admin/users?per_page=200").catch(() => null);
+  const users = (listRes && listRes.data && (listRes.data.users || listRes.data)) || [];
+  let email = null;
+  for (const u of (Array.isArray(users) ? users : [])) {
+    const candidates = [u.phone, u.user_metadata && u.user_metadata.phone].filter(Boolean);
+    const hit = candidates.some((p) => String(p).replace(/\D/g, "").slice(-9) === target);
+    if (hit) { email = u.email || null; break; }
+  }
+  sendJson(res, 200, { email });
+}
+
 async function handleOtpVerify(req, res) {
   if (req.method !== "POST") { sendJson(res, 405, { error: "Method not allowed" }); return; }
   let body;
@@ -938,6 +966,11 @@ const server = http.createServer(async (req, res) => {
 
   if (url.pathname === "/api/app-state") {
     await handleAppStateRoute(req, res);
+    return;
+  }
+
+  if (url.pathname === "/api/partner/email-by-phone") {
+    await handlePartnerEmailByPhone(req, res);
     return;
   }
 
