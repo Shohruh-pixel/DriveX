@@ -75,6 +75,8 @@
     arrowUp: "M12 19V5M6 11l6-6 6 6",
     arrowR: "M4 12h15M13 6l6 6-6 6",
     close: "M6 6l12 12M18 6 6 18",
+    back: "M15 5l-7 7 7 7",
+    exit: "M10 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4M16 16l4-4-4-4M20 12H9",
     image: "M4 5h16v14H4zM4 16l4.5-4.5 4 4L16 12l4 4M9 9.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0",
     check: "M4.5 12.5 9.5 17.5 19.5 6.5",
     tag: "M3.5 11.5V4.5h7l9.5 9.5-7 7zM7.5 8a.8.8 0 1 0 0-1.6.8.8 0 0 0 0 1.6",
@@ -159,9 +161,15 @@
           </div>
           <div className="cx-topbar-sub">${subParts.join(" · ") || "Магазин на DRIVEX"}</div>
         </div>
+        <button type="button" className="cx-icon-btn" title="В клиентский маркет" aria-label="В клиентский маркет" onClick=${() => navigateToHash("/market")}>
+          <${Icon} name="back" size=${19} />
+        </button>
         <button type="button" className="cx-icon-btn" onClick=${() => navigateToHash("/seller/orders")}>
           <${Icon} name="bell" size=${19} />
           <span className="cx-bell-dot"></span>
+        </button>
+        <button type="button" className="cx-icon-btn" title="Выйти из кабинета" aria-label="Выйти из кабинета" onClick=${() => navigateToHash("/partner/login?logout=1")}>
+          <${Icon} name="exit" size=${19} color="var(--cx-danger, #ef4444)" />
         </button>
       </div>
     `;

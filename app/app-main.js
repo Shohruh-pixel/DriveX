@@ -27,6 +27,10 @@
   // ── normalizePath и useHashPath: прямые реализации (без DX proxy) ────
   function normalizePath(p) {
     var raw = (String(p || '')).replace(/^#/, '');
+    // Отбрасываем query/fragment для сопоставления маршрута: иначе
+    // "/partner/login?logout=1" не совпадёт с "/partner/login" -> 404 и
+    // не сработает выход. Сам флаг logout читается из raw-хэша отдельно.
+    raw = raw.split('?')[0].split('#')[0];
     var clean = raw.startsWith('/') ? raw : '/' + raw;
     return clean.replace(/\/+$/, '') || '/';
   }
