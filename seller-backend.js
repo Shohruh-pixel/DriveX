@@ -1734,8 +1734,19 @@
         status: order.status || "new",
         items: Array.isArray(order.items) ? order.items : []
       };
-      const { data: insertedOrder, error: orderError } = await client
-        .from("orders").insert(orderRow).select("id").single();
+      // Повтор при транзиентной сетевой ошибке (TypeError: Failed to fetch),
+      // которая случается под множеством вкладок при фоновом refresh токена.
+      let insertedOrder = null;
+      let orderError = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const res = await client.from("orders").insert(orderRow).select("id").single();
+        orderError = res.error;
+        insertedOrder = res.data;
+        if (!orderError) break;
+        const transient = /Failed to fetch|NetworkError|fetch/i.test(String(orderError.message || ""));
+        if (!transient) break; // RLS и прочие — не ретраим
+        await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+      }
       if (orderError) throw orderError;
       const createdOrderId = insertedOrder?.id || makeId("order");
 
@@ -1753,16 +1764,29 @@
         if (itemsError) console.warn("[seller-backend] order_items insert:", itemsError.message);
       }
 
-      await client.from("seller_notifications").insert({
-        store_id: order.storeId,
-        type: "order_new",
-        title: `Новый заказ ${createdOrderId}`,
-        message: `${order.customerName || "Клиент DRIVEX"} • ${order.amount || 0} TJS`
-      });
+      // Уведомление продавцу — best-effort: заказ уже создан, ошибка тут не должна
+      // ронять оформление (иначе покупатель видит "Failed to fetch" при успешном заказе).
+      try {
+        await client.from("seller_notifications").insert({
+          store_id: order.storeId,
+          type: "order_new",
+          title: `Новый заказ ${createdOrderId}`,
+          message: `${order.customerName || "Клиент DRIVEX"} • ${order.amount || 0} TJS`
+        });
+      } catch (e) {
+        console.warn("[seller-backend] order notification:", e && e.message);
+      }
     }
 
     emitSync("marketplace-checkout");
-    return loadSupabaseAppState();
+    // Перечитывание состояния — тоже best-effort: заказ(ы) уже в БД. Если SELECT'ы
+    // упадут по транзиентной сети, не срываем успешное оформление.
+    try {
+      return await loadSupabaseAppState();
+    } catch (e) {
+      console.warn("[seller-backend] loadSupabaseAppState after checkout:", e && e.message);
+      return { ok: true };
+    }
   }
 
   const api = {
