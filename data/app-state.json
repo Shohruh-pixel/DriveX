@@ -62,7 +62,7 @@
         ]
       }
     },
-    "updatedAt": "2026-06-18T15:26:39.657Z"
+    "updatedAt": "2026-06-18T19:29:03.583Z"
   },
   "drivex.market.catalog.v1": {
     "value": {
@@ -360,7 +360,7 @@
         }
       ]
     },
-    "updatedAt": "2026-06-18T15:26:36.951Z"
+    "updatedAt": "2026-06-18T19:29:00.892Z"
   },
   "drivex.seller.orders.v1": {
     "value": [
@@ -466,9 +466,93 @@
         "deliveryMethod": "Доставка",
         "address": "Зафаробод к  в  Шарипов  33",
         "notes": ""
+      },
+      {
+        "id": "6d89c015-2cc5-4a21-8981-26ebd36b6fcf",
+        "storeId": "rizo-tj-худжанд",
+        "storeName": "rizo-tj-худжанд",
+        "customerName": "Рахмонкулов  Илёсбек",
+        "customerPhone": "+992927400828",
+        "items": [
+          {
+            "productId": "628299",
+            "title": "Подшибкник",
+            "qty": 1,
+            "price": 50
+          }
+        ],
+        "amount": 50,
+        "status": "new",
+        "date": "2026-06-18",
+        "deliveryMethod": "Самовывоз",
+        "address": "Сомон",
+        "notes": ""
+      },
+      {
+        "id": "01068414-4d29-4b11-9855-34784adfa554",
+        "storeId": "rizo-tj-худжанд",
+        "storeName": "rizo-tj-худжанд",
+        "customerName": "Рахмонкулов  Илёсбек",
+        "customerPhone": "+992927400828",
+        "items": [
+          {
+            "productId": "628299",
+            "title": "Подшибкник",
+            "qty": 1,
+            "price": 50
+          }
+        ],
+        "amount": 50,
+        "status": "new",
+        "date": "2026-06-18",
+        "deliveryMethod": "Самовывоз",
+        "address": "Сомон",
+        "notes": ""
+      },
+      {
+        "id": "8e24f0d4-6318-48e8-aa8c-7965e09d0070",
+        "storeId": "rizo-tj-худжанд",
+        "storeName": "rizo-tj-худжанд",
+        "customerName": "Рахмонкулов  Илёсбек",
+        "customerPhone": "+992927400828",
+        "items": [
+          {
+            "productId": "628299",
+            "title": "Подшибкник",
+            "qty": 1,
+            "price": 50
+          }
+        ],
+        "amount": 50,
+        "status": "new",
+        "date": "2026-06-18",
+        "deliveryMethod": "Самовывоз",
+        "address": "Сомон",
+        "notes": ""
+      },
+      {
+        "id": "70f4b6ad-71bf-4653-ae52-db04a5631587",
+        "storeId": "rizo-tj-худжанд",
+        "storeName": "rizo-tj-худжанд",
+        "customerName": "Рахмонкулов  Илёсбек",
+        "customerPhone": "+992927400828",
+        "items": [
+          {
+            "productId": "628299",
+            "title": "Подшибкник",
+            "qty": 1,
+            "price": 50
+          }
+        ],
+        "amount": 50,
+        "status": "new",
+        "date": "2026-06-18",
+        "deliveryMethod": "Самовывоз",
+        "address": "Сомон",
+        "notes": ""
       }
     ],
-    "updatedAt": "2026-06-18T15:26:36.632Z"
+    "updatedAt": "2026-06-18T19:29:00.806Z"
   },
   "drivex.seller.notifications.v1": {
     "value": [
@@ -658,9 +742,20 @@
         "createdAt": "2026-06-18T14:37:40.691137+00:00",
         "color": "var(--drivex-danger)",
         "icon": "scan"
+      },
+      {
+        "id": "4f496235-3a7b-44b6-81b9-6878ac40f3b1",
+        "type": "order_status",
+        "title": "Заказ 6d89c015-2cc5-4a21-8981-26ebd36b6fcf обновлен",
+        "body": "Новый статус: confirmed",
+        "message": "Новый статус: confirmed",
+        "isRead": false,
+        "createdAt": "2026-06-18T19:28:28.18174+00:00",
+        "color": "var(--drivex-neon-cyan)",
+        "icon": "truck"
       }
     ],
-    "updatedAt": "2026-06-18T15:26:36.642Z"
+    "updatedAt": "2026-06-18T19:29:00.814Z"
   },
   "drivex.service.profile.v1": {
     "value": {
@@ -672,7 +767,7 @@
       "position": "Владелец сервиса",
       "registrationCompleted": false
     },
-    "updatedAt": "2026-06-18T14:45:19.618Z"
+    "updatedAt": "2026-06-18T19:28:34.313Z"
   },
   "drivex.service.center.v1": {
     "value": {
@@ -695,30 +790,30 @@
       "registrationCompleted": false,
       "status": "new"
     },
-    "updatedAt": "2026-06-18T15:26:36.810Z"
+    "updatedAt": "2026-06-18T19:29:00.818Z"
   },
   "drivex.service.clients.v1": {
     "value": [],
-    "updatedAt": "2026-06-18T15:26:36.815Z"
+    "updatedAt": "2026-06-18T19:29:00.822Z"
   },
   "drivex.service.orders.v1": {
     "value": [],
-    "updatedAt": "2026-06-18T15:26:36.867Z"
+    "updatedAt": "2026-06-18T19:29:00.826Z"
   },
   "drivex.service.inventory.v1": {
     "value": [],
-    "updatedAt": "2026-06-18T15:26:36.872Z"
+    "updatedAt": "2026-06-18T19:29:00.832Z"
   },
   "drivex.service.finance.v1": {
     "value": [],
-    "updatedAt": "2026-06-18T15:26:36.906Z"
+    "updatedAt": "2026-06-18T19:29:00.852Z"
   },
   "drivex.service.appointments.v1": {
     "value": [],
-    "updatedAt": "2026-06-18T15:26:36.911Z"
+    "updatedAt": "2026-06-18T19:29:00.868Z"
   },
   "drivex.service.requests.v1": {
     "value": [],
-    "updatedAt": "2026-06-18T15:26:36.946Z"
+    "updatedAt": "2026-06-18T19:29:00.878Z"
   }
 }

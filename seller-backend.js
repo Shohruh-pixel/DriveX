@@ -404,6 +404,18 @@
     };
   }
 
+  // Нормализуем позицию заказа из JSONB-колонки orders.items (фолбэк, если в
+  // таблице order_items пусто — напр. product_id был не-uuid и вставка не прошла).
+  function normalizeJsonbOrderItem(it) {
+    const src = it && typeof it === "object" ? it : {};
+    return {
+      productId: src.productId || src.product_id || "",
+      title: src.title || src.product_title || "Товар",
+      qty: Math.max(1, Number(src.qty || src.quantity || 1)),
+      price: Math.max(0, Number(src.price || src.unit_price || 0))
+    };
+  }
+
   function mapOrderRowsToFrontend(orderRows, itemRows) {
     const itemsByOrder = {};
     for (const item of itemRows || []) {
@@ -422,7 +434,9 @@
       storeId: row.store_id,
       customerName: row.customer_name || "Клиент DRIVEX",
       customerPhone: row.customer_phone || "",
-      items: itemsByOrder[row.id] || [],
+      items: (itemsByOrder[row.id] && itemsByOrder[row.id].length)
+        ? itemsByOrder[row.id]
+        : (Array.isArray(row.items) ? row.items.map(normalizeJsonbOrderItem) : []),
       amount: Math.max(0, Number(row.total_amount || 0)),
       status: row.status || "new",
       date: String(row.created_at || nowIso()).slice(0, 10),
@@ -1752,7 +1766,9 @@
 
       const orderItems = (order.items || []).map((item) => ({
         order_id: createdOrderId,
-        product_id: item.productId || null,
+        // product_id — uuid-FK на products. Рантайм-id каталога ("628299") не uuid,
+        // поэтому пишем null (название всё равно сохраняется в product_title).
+        product_id: isUuid(item.productId) ? item.productId : null,
         product_title: item.title || "Товар",
         quantity: Math.max(1, Number(item.qty || 1)),
         unit_price: Math.max(0, Number(item.price || 0)),
