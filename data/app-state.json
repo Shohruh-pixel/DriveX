@@ -37,9 +37,23 @@
             "readBySeller": true
           }
         ]
+      },
+      "DX-260618-006": {
+        "orderId": "DX-260618-006",
+        "messages": [
+          {
+            "id": "chat-message-1781774056452-8e34c2d0c86768",
+            "orderId": "DX-260618-006",
+            "senderRole": "buyer",
+            "text": "Здравствуйте, резина в наличии? Хочу забрать сегодня.",
+            "sentAt": "2026-06-18T09:14:16.452Z",
+            "readByBuyer": true,
+            "readBySeller": false
+          }
+        ]
       }
     },
-    "updatedAt": "2026-06-17T17:18:26.139Z"
+    "updatedAt": "2026-06-18T09:45:07.431Z"
   },
   "drivex.market.catalog.v1": {
     "value": {
@@ -291,7 +305,7 @@
         }
       ]
     },
-    "updatedAt": "2026-06-17T17:18:19.135Z"
+    "updatedAt": "2026-06-18T09:45:07.426Z"
   },
   "drivex.seller.orders.v1": {
     "value": [
@@ -366,7 +380,7 @@
         "notes": ""
       }
     ],
-    "updatedAt": "2026-06-17T17:18:19.085Z"
+    "updatedAt": "2026-06-18T09:45:07.367Z"
   },
   "drivex.seller.notifications.v1": {
     "value": [
@@ -514,7 +528,7 @@
         "icon": "bag"
       }
     ],
-    "updatedAt": "2026-06-17T17:18:19.089Z"
+    "updatedAt": "2026-06-18T09:45:07.372Z"
   },
   "drivex.service.profile.v1": {
     "value": {
@@ -526,7 +540,7 @@
       "position": "Владелец сервиса",
       "registrationCompleted": false
     },
-    "updatedAt": "2026-06-17T16:19:03.121Z"
+    "updatedAt": "2026-06-18T09:11:37.881Z"
   },
   "drivex.service.center.v1": {
     "value": {
@@ -549,30 +563,30 @@
       "registrationCompleted": false,
       "status": "new"
     },
-    "updatedAt": "2026-06-17T17:18:19.094Z"
+    "updatedAt": "2026-06-18T09:45:07.378Z"
   },
   "drivex.service.clients.v1": {
     "value": [],
-    "updatedAt": "2026-06-17T17:18:19.098Z"
+    "updatedAt": "2026-06-18T09:45:07.383Z"
   },
   "drivex.service.orders.v1": {
     "value": [],
-    "updatedAt": "2026-06-17T17:18:19.103Z"
+    "updatedAt": "2026-06-18T09:45:07.389Z"
   },
   "drivex.service.inventory.v1": {
     "value": [],
-    "updatedAt": "2026-06-17T17:18:19.108Z"
+    "updatedAt": "2026-06-18T09:45:07.394Z"
   },
   "drivex.service.finance.v1": {
     "value": [],
-    "updatedAt": "2026-06-17T17:18:19.113Z"
+    "updatedAt": "2026-06-18T09:45:07.400Z"
   },
   "drivex.service.appointments.v1": {
     "value": [],
-    "updatedAt": "2026-06-17T17:18:19.118Z"
+    "updatedAt": "2026-06-18T09:45:07.406Z"
   },
   "drivex.service.requests.v1": {
     "value": [],
-    "updatedAt": "2026-06-17T17:18:19.123Z"
+    "updatedAt": "2026-06-18T09:45:07.412Z"
   }
 }

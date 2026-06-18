@@ -1678,12 +1678,17 @@
     const incomingOrders = Array.isArray(payload.orders) ? payload.orders : [];
     if (!incomingOrders.length) return loadSupabaseAppState();
 
+    // RLS на orders требует customer_user_id = auth.uid(). Без id покупателя
+    // INSERT падает с "violates row-level security policy" и заказ не оформляется.
+    const { data: authData } = await client.auth.getUser();
+    const buyerUserId = authData?.user?.id || null;
+
     for (const order of incomingOrders) {
       // Не передаём id — пусть Supabase генерирует UUID автоматически
       // Это исправляет ошибку "invalid input syntax for type uuid"
       const orderRow = {
         store_id: order.storeId,
-        customer_user_id: null,
+        customer_user_id: buyerUserId,
         customer_name: order.customerName || "Клиент DRIVEX",
         customer_phone: order.customerPhone || "",
         delivery_type: String(order.deliveryMethod || "Доставка").toLowerCase().includes("самовывоз")
