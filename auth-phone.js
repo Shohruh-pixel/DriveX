@@ -4,12 +4,33 @@
 (() => {
   const BOT_NAME = "DriiiveX_Bot";
 
+  // In-memory lock auth-операций (общий с остальным приложением через
+  // window.__DRIVEX_AUTH_LOCK__) — вместо navigator.locks, который под множеством
+  // вкладок воруется и роняет запросы ("Failed to fetch" / "Lock broken ... steal").
+  function getDrivexAuthLock() {
+    if (window.__DRIVEX_AUTH_LOCK__) return window.__DRIVEX_AUTH_LOCK__;
+    const chains = {};
+    window.__DRIVEX_AUTH_LOCK__ = function (name, _acquireTimeout, fn) {
+      const prev = chains[name] || Promise.resolve();
+      const run = prev.then(() => fn(), () => fn());
+      chains[name] = run.then(() => {}, () => {});
+      return run;
+    };
+    return window.__DRIVEX_AUTH_LOCK__;
+  }
+
   function getSupabaseClient() {
     if (window.__DRIVEX_SUPABASE_CLIENT__) return window.__DRIVEX_SUPABASE_CLIENT__;
     const cfg = window.DRIVEX_SUPABASE_CONFIG || {};
     if (!cfg.url || !cfg.anonKey || !window.supabase) return null;
     window.__DRIVEX_SUPABASE_CLIENT__ = window.supabase.createClient(cfg.url, cfg.anonKey, {
-      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+        storageKey: "drivex-auth",
+        lock: getDrivexAuthLock()
+      }
     });
     return window.__DRIVEX_SUPABASE_CLIENT__;
   }

@@ -2175,6 +2175,23 @@
     });
   }
 
+  // Внутривкладочный лок auth-операций вместо navigator.locks. При множестве
+  // открытых вкладок дефолтный navigatorLock воруется (steal) другой вкладкой,
+  // и запрос (signInWithPassword/getUser) падает с "Failed to fetch" /
+  // "Lock broken ... steal". Сериализуем операции в памяти этой вкладки —
+  // никакой кросс-вкладочной гонки и прерывания запросов.
+  function getDrivexAuthLock() {
+    if (window.__DRIVEX_AUTH_LOCK__) return window.__DRIVEX_AUTH_LOCK__;
+    const chains = {};
+    window.__DRIVEX_AUTH_LOCK__ = function (name, _acquireTimeout, fn) {
+      const prev = chains[name] || Promise.resolve();
+      const run = prev.then(() => fn(), () => fn());
+      chains[name] = run.then(() => {}, () => {});
+      return run;
+    };
+    return window.__DRIVEX_AUTH_LOCK__;
+  }
+
   function getSupabaseClient() {
     if (!window.supabase || typeof window.supabase.createClient !== "function") return null;
     const config = window.DRIVEX_SUPABASE_CONFIG || {};
@@ -2186,7 +2203,8 @@
           persistSession: true,
           autoRefreshToken: true,
           detectSessionInUrl: true,
-          storageKey: "drivex-auth"  // единый ключ — предотвращает Lock conflicts
+          storageKey: "drivex-auth",  // единый ключ — предотвращает Lock conflicts
+          lock: getDrivexAuthLock()   // in-memory lock вместо navigator.locks (см. выше)
         }
       });
     }
