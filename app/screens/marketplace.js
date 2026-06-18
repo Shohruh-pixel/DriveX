@@ -526,7 +526,9 @@
   }
 
   function MarketStoreScreen({ storeId, onAddToCart }) {
+    useMarketRatings(); // подписка: рейтинг магазина обновляется при новых отзывах
     const store = getMarketStore(storeId);
+    const storeRating = getMarketStoreRating(storeId);
 
     if (!store) {
       return html`
@@ -586,7 +588,7 @@
                   Рейтинг
                 </p>
                 <p className="font-bold mt-2" style=${{ color: "var(--drivex-white)" }}>
-                  ${store.rating}
+                  ${storeRating.has ? `★ ${storeRating.rating}` : "—"}
                 </p>
               </div>
               <div className="glass-card-light rounded-2xl p-3">
@@ -594,7 +596,7 @@
                   Отзывы
                 </p>
                 <p className="font-bold mt-2" style=${{ color: "var(--drivex-white)" }}>
-                  ${store.reviews}
+                  ${storeRating.count}
                 </p>
               </div>
               <div className="glass-card-light rounded-2xl p-3">
@@ -639,11 +641,329 @@
     `;
   }
 
-  function ProductDetailScreen({ productId, onAddToCart }) {
+  // ── Отзывы о товаре: список + форма (Supabase + серверный fallback) ──
+  function MarketReviewStars({ value, size = 14, onSelect }) {
+    return html`
+      <div className="flex items-center gap-1">
+        ${[1, 2, 3, 4, 5].map((star) => html`
+          <button
+            key=${star}
+            type="button"
+            disabled=${!onSelect}
+            onClick=${onSelect ? () => onSelect(star) : undefined}
+            style=${{
+              color: star <= value ? "var(--drivex-warning)" : "rgba(148, 163, 184, 0.35)",
+              cursor: onSelect ? "pointer" : "default",
+              background: "none",
+              border: "none",
+              padding: onSelect ? "0.15rem" : "0"
+            }}
+            aria-label=${onSelect ? `Оценка ${star}` : undefined}
+          >
+            <${Icon} name="star" size=${size} />
+          </button>
+        `)}
+      </div>
+    `;
+  }
+
+  // Покупал ли пользователь этот товар (для бейджа «Проверенная покупка»)
+  function hasBoughtProduct(buyerOrders, product) {
+    const productId = normalizeMarketProductId(product && product.id);
+    const productTitle = String(product?.name || product?.title || "").trim().toLowerCase();
+    return (Array.isArray(buyerOrders) ? buyerOrders : []).some((order) => {
+      if (!order || order.status === "cancelled") return false;
+      return (Array.isArray(order.items) ? order.items : []).some((item) => {
+        if (!item) return false;
+        if (productId && normalizeMarketProductId(item.productId) === productId) return true;
+        const itemTitle = String(item.title || "").trim().toLowerCase();
+        return Boolean(productTitle && itemTitle && itemTitle === productTitle);
+      });
+    });
+  }
+
+  function MarketReviewsSection({ product, buyerOrders }) {
+    const toast = useToast();
+    const productKey = String(product.id);
+    const isVerifiedBuyer = useMemo(
+      () => hasBoughtProduct(buyerOrders, product),
+      [buyerOrders, product]
+    );
+    const [reviews, setReviews] = useState(null); // null = загрузка
+    const [rating, setRating] = useState(5);
+    const [comment, setComment] = useState("");
+    const [authorName, setAuthorName] = useState("");
+    const [submitting, setSubmitting] = useState(false);
+
+    useEffect(() => {
+      let cancelled = false;
+      // Смена товара — сбрасываем форму (имя оставляем: это тот же пользователь)
+      setReviews(null);
+      setRating(5);
+      setComment("");
+      const api = window.DrivexMarketReviews;
+      if (!api) {
+        setReviews([]);
+        return undefined;
+      }
+      api
+        .loadProductReviews(productKey)
+        .then((list) => {
+          if (cancelled) return;
+          setReviews(list);
+          // Реальная оценка — сразу во все карточки каталога
+          marketRatingsStore.set(productKey, api.summarizeReviews(list));
+        })
+        .catch(() => {
+          if (!cancelled) setReviews([]);
+        });
+      return () => {
+        cancelled = true;
+      };
+    }, [productKey]);
+
+    const summary = useMemo(() => {
+      const api = window.DrivexMarketReviews;
+      if (api && Array.isArray(reviews) && reviews.length) {
+        return api.summarizeReviews(reviews);
+      }
+      return { count: 0, rating: 0 };
+    }, [reviews]);
+
+    const handleSubmit = async () => {
+      const api = window.DrivexMarketReviews;
+      if (!api) {
+        toast.push("Отзывы недоступны без сервера");
+        return;
+      }
+      try {
+        setSubmitting(true);
+        const review = await api.addProductReview({
+          productId: productKey,
+          rating,
+          comment,
+          authorName,
+          verified: isVerifiedBuyer
+        });
+        setReviews((prev) => {
+          const nextList = [review, ...(prev || []).filter((item) => item.id !== review.id)];
+          marketRatingsStore.set(productKey, api.summarizeReviews(nextList));
+          return nextList;
+        });
+        setComment("");
+        toast.push("Спасибо за отзыв!");
+      } catch (error) {
+        toast.push(error?.message || "Не удалось сохранить отзыв");
+      } finally {
+        setSubmitting(false);
+      }
+    };
+
+    const formatReviewDate = (value) => {
+      const parsed = Date.parse(value);
+      if (Number.isNaN(parsed)) return "";
+      return new Date(parsed).toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" });
+    };
+
+    return html`
+      <div className="glass-card-light rounded-3xl p-5">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-xl font-bold" style=${{ color: "var(--drivex-white)" }}>
+            Отзывы
+          </h2>
+          ${summary.count
+            ? html`<div className="flex items-center gap-2 text-sm" style=${{ color: "var(--drivex-warning)" }}>
+                <${Icon} name="star" size=${14} />
+                ${summary.rating}
+                <span style=${{ color: "var(--drivex-silver)" }}>· ${summary.count}</span>
+              </div>`
+            : null}
+        </div>
+
+        ${reviews === null
+          ? html`<p className="text-sm mt-4" style=${{ color: "var(--drivex-silver)" }}>Загружаем отзывы…</p>`
+          : reviews.length
+            ? html`<div className="space-y-3 mt-4">
+                ${reviews.map((review) => html`
+                  <div key=${review.id} className="glass-card rounded-2xl p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <p className="font-semibold text-sm truncate" style=${{ color: "var(--drivex-white)" }}>
+                          ${review.authorName}
+                        </p>
+                        ${review.verified
+                          ? html`<span
+                              className="px-2 py-0.5 rounded-lg text-xs font-semibold flex-shrink-0"
+                              style=${{
+                                background: "rgba(34, 197, 94, 0.14)",
+                                color: "var(--drivex-success)"
+                              }}
+                            >
+                              ✓ Покупка
+                            </span>`
+                          : null}
+                      </div>
+                      <${MarketReviewStars} value=${review.rating} size=${12} />
+                    </div>
+                    ${review.comment
+                      ? html`<p className="text-sm mt-2" style=${{ color: "var(--drivex-light-silver)" }}>
+                          ${review.comment}
+                        </p>`
+                      : null}
+                    <p className="text-xs mt-2" style=${{ color: "var(--drivex-silver)" }}>
+                      ${formatReviewDate(review.createdAt)}
+                    </p>
+                  </div>
+                `)}
+              </div>`
+            : html`<p className="text-sm mt-4" style=${{ color: "var(--drivex-silver)" }}>
+                Отзывов пока нет — станьте первым!
+              </p>`}
+
+        <div className="glass-card rounded-2xl p-4 mt-4">
+          <p className="font-semibold text-sm" style=${{ color: "var(--drivex-white)" }}>
+            Оставить отзыв
+          </p>
+          <div className="mt-3">
+            <${MarketReviewStars} value=${rating} size=${22} onSelect=${setRating} />
+          </div>
+          <input
+            className="dx-input w-full mt-3"
+            placeholder="Ваше имя (необязательно)"
+            value=${authorName}
+            maxLength=${60}
+            onInput=${(e) => setAuthorName(e.target.value)}
+          />
+          <textarea
+            className="dx-input w-full mt-3"
+            rows="3"
+            placeholder="Поделитесь впечатлением о товаре"
+            value=${comment}
+            maxLength=${1200}
+            onInput=${(e) => setComment(e.target.value)}
+          ></textarea>
+          <button
+            type="button"
+            className="w-full mt-3 py-3 rounded-2xl text-sm font-bold dx-btn"
+            disabled=${submitting}
+            onClick=${handleSubmit}
+          >
+            ${submitting ? "Отправляем…" : "Отправить отзыв"}
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  // ── Чат с продавцом до заказа: вопрос о товаре ──────────────────────
+  function MarketProductChat({ product, store, orderChats, onSendChatMessage, onMarkChatRead }) {
+    const toast = useToast();
+    const threadId = getMarketProductQuestionThreadId(store?.id, product?.id);
+    const thread = getOrderChatThread(orderChats, threadId);
+    const [draft, setDraft] = useState("");
+    const messagesEndRef = useRef(null);
+
+    useEffect(() => {
+      if (threadId && onMarkChatRead) onMarkChatRead(threadId, "buyer");
+    }, [onMarkChatRead, threadId, thread.messages.length]);
+
+    useEffect(() => {
+      if (messagesEndRef.current) {
+        messagesEndRef.current.scrollIntoView({ block: "nearest" });
+      }
+    }, [thread.messages.length]);
+
+    const handleSend = () => {
+      const text = draft.trim();
+      if (!text) return;
+      if (!threadId) {
+        toast.push("У товара нет магазина — вопрос задать нельзя");
+        return;
+      }
+      onSendChatMessage && onSendChatMessage(threadId, "buyer", text);
+      setDraft("");
+    };
+
+    return html`
+      <div className="glass-card-light rounded-3xl p-5">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-xl font-bold" style=${{ color: "var(--drivex-white)" }}>
+            Вопрос продавцу
+          </h2>
+          <span className="text-xs" style=${{ color: "var(--drivex-silver)" }}>
+            ${store?.name || ""}
+          </span>
+        </div>
+
+        ${thread.messages.length
+          ? html`<div
+              className="space-y-2 mt-4"
+              style=${{ maxHeight: "16rem", overflowY: "auto" }}
+            >
+              ${thread.messages.map((message) => html`
+                <div
+                  key=${message.id || message.sentAt}
+                  className="flex"
+                  style=${{ justifyContent: message.senderRole === "buyer" ? "flex-end" : "flex-start" }}
+                >
+                  <div
+                    className="rounded-2xl px-4 py-2.5 text-sm"
+                    style=${{
+                      maxWidth: "85%",
+                      background:
+                        message.senderRole === "buyer"
+                          ? "rgba(6, 182, 212, 0.16)"
+                          : "var(--glass-bg)",
+                      color: "var(--drivex-white)"
+                    }}
+                  >
+                    <p className="text-xs mb-1" style=${{ color: "var(--drivex-silver)" }}>
+                      ${message.senderRole === "buyer" ? "Вы" : store?.name || "Продавец"}
+                    </p>
+                    ${message.text}
+                  </div>
+                </div>
+              `)}
+              <div ref=${messagesEndRef}></div>
+            </div>`
+          : html`<p className="text-sm mt-4" style=${{ color: "var(--drivex-silver)" }}>
+              Спросите о наличии, совместимости или доставке — продавец ответит в этом чате.
+            </p>`}
+
+        <div className="flex gap-2 mt-4">
+          <input
+            className="dx-input flex-1"
+            placeholder="Ваш вопрос о товаре"
+            value=${draft}
+            maxLength=${800}
+            onInput=${(e) => setDraft(e.target.value)}
+            onKeyDown=${(e) => {
+              if (e.key === "Enter") handleSend();
+            }}
+          />
+          <button
+            type="button"
+            className="px-4 rounded-2xl text-sm font-bold dx-btn"
+            onClick=${handleSend}
+          >
+            Отправить
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  function ProductDetailScreen({ productId, onAddToCart, buyerOrders, orderChats, onSendChatMessage, onMarkChatRead }) {
     const toast = useToast();
     const [addedPulse, setAddedPulse] = useState(false);
     const addedTimerRef = useRef(null);
+    const favorites = useMarketFavorites();
+    useMarketRatings(); // подписка: оценка обновляется при новых отзывах
+    const [chatOpen, setChatOpen] = useState(false);
     const product = getMarketProduct(productId);
+    const favoriteKey = getMarketFavoriteKey(product);
+    const isFavorite = favorites.has(favoriteKey);
+    const ratingInfo = getMarketProductRating(product);
 
     useEffect(() => {
       return () => {
@@ -653,22 +973,10 @@
       };
     }, []);
 
-    if (!product) {
-      return html`
-        <${SimplePage} title="Товар не найден" backPath="/market">
-          <div className="px-6 py-6">
-            <div className="glass-card-light rounded-2xl p-5" style=${{ color: "var(--drivex-white)" }}>
-              Попробуйте открыть другой товар.
-            </div>
-          </div>
-        </${SimplePage}>
-      `;
-    }
-
-    const store = getMarketStore(product.storeId);
-    const badgeBg = getMarketBadgeColor(product);
-    const relatedProducts = getRelatedMarketProducts(product, 4);
+    // ВСЕ хуки выше раннего return — иначе при асинхронной загрузке каталога
+    // меняется число хуков между рендерами (React #310, белый экран)
     const handleAddToCart = useCallback(() => {
+      if (!product) return;
       onAddToCart && onAddToCart(product);
       setAddedPulse(true);
       if (addedTimerRef.current) {
@@ -679,6 +987,25 @@
         addedTimerRef.current = null;
       }, 1200);
     }, [onAddToCart, product]);
+
+    if (!product) {
+      const catalogStillLoading = !marketplaceData.products.length;
+      return html`
+        <${SimplePage} title=${catalogStillLoading ? "Загружаем товар" : "Товар не найден"} backPath="/market">
+          <div className="px-6 py-6">
+            <div className="glass-card-light rounded-2xl p-5" style=${{ color: "var(--drivex-white)" }}>
+              ${catalogStillLoading
+                ? "Каталог загружается, секунду…"
+                : "Попробуйте открыть другой товар."}
+            </div>
+          </div>
+        </${SimplePage}>
+      `;
+    }
+
+    const store = getMarketStore(product.storeId);
+    const badgeBg = getMarketBadgeColor(product);
+    const relatedProducts = getRelatedMarketProducts(product, 4);
 
     return html`
       <${SimplePage} title=${product.name} backPath="/market">
@@ -694,6 +1021,19 @@
                     ${product.badge}
                   </div>`
                 : null}
+              <button
+                type="button"
+                className=${`market-ui-fav ${isFavorite ? "is-active" : ""}`}
+                style=${{ width: "2.5rem", height: "2.5rem", right: "0.75rem", top: "0.75rem" }}
+                onClick=${() => {
+                  const added = favorites.toggle(favoriteKey);
+                  toast.push(added ? "Добавлено в избранное" : "Убрано из избранного");
+                }}
+                aria-label=${isFavorite ? "Убрать из избранного" : "В избранное"}
+                aria-pressed=${isFavorite ? "true" : "false"}
+              >
+                <${Icon} name="heart" size=${19} />
+              </button>
             </div>
 
             <div className="p-5">
@@ -753,11 +1093,16 @@
                           </span>
                         </div>
                         <div className="flex items-center gap-2 mt-3 text-sm">
-                          <span style=${{ color: "var(--drivex-warning)" }}>
-                            <${Icon} name="star" size=${13} />
-                          </span>
-                          <span style=${{ color: "var(--drivex-warning)" }}>${store.rating}</span>
-                          <span style=${{ color: "var(--drivex-silver)" }}>(${store.reviews})</span>
+                          ${(() => {
+                            const storeRating = getMarketStoreRating(store.id);
+                            return storeRating.has
+                              ? html`<span style=${{ color: "var(--drivex-warning)" }}>
+                                    <${Icon} name="star" size=${13} />
+                                  </span>
+                                  <span style=${{ color: "var(--drivex-warning)" }}>${storeRating.rating}</span>
+                                  <span style=${{ color: "var(--drivex-silver)" }}>(${storeRating.count})</span>`
+                              : html`<span style=${{ color: "var(--drivex-silver)" }}>Нет отзывов</span>`;
+                          })()}
                           <span style=${{ color: "var(--drivex-silver)" }}>• ${product.delivery}</span>
                         </div>
                       </div>
@@ -776,11 +1121,18 @@
                   : null}
               </div>
 
-              <div className="flex items-center gap-2 text-sm mb-4" style=${{ color: "var(--drivex-warning)" }}>
-                <${Icon} name="star" size=${14} />
-                ${product.rating}
-                <span style=${{ color: "var(--drivex-silver)" }}>(${product.reviewsCount || product.reviews})</span>
-              </div>
+              ${ratingInfo.has
+                ? html`<div className="flex items-center gap-2 text-sm mb-4" style=${{ color: "var(--drivex-warning)" }}>
+                    <${Icon} name="star" size=${14} />
+                    ${ratingInfo.rating}
+                    <span style=${{ color: "var(--drivex-silver)" }}>
+                      (${ratingInfo.count} ${ratingInfo.count === 1 ? "отзыв" : ratingInfo.count < 5 ? "отзыва" : "отзывов"})
+                    </span>
+                  </div>`
+                : html`<div className="flex items-center gap-2 text-sm mb-4" style=${{ color: "var(--drivex-silver)" }}>
+                    <${Icon} name="star" size=${14} />
+                    Отзывов пока нет
+                  </div>`}
 
               <div className="glass-card rounded-2xl p-4 mb-4">
                 <p className="text-sm" style=${{ color: "var(--drivex-light-silver)" }}>
@@ -820,6 +1172,60 @@
                   </div>`
                 : null}
 
+              ${(() => {
+                const compat = normalizeProductCompatibility(product.compatibility);
+                if (!compat || compat.universal) {
+                  return html`<div className="glass-card rounded-2xl p-4 mb-4">
+                    <p className="text-sm" style=${{ color: "var(--drivex-light-silver)" }}>
+                      <span style=${{ color: "var(--drivex-success)" }}>✓</span>
+                      ${" "}Универсальный товар — подходит для любого автомобиля
+                    </p>
+                  </div>`;
+                }
+                return html`<div className="glass-card-light rounded-2xl p-4 mb-4">
+                  <p className="font-semibold" style=${{ color: "var(--drivex-white)" }}>
+                    Подходит для
+                  </p>
+                  <div className="flex gap-2 flex-wrap mt-3">
+                    ${compat.brands.map((brand) => html`
+                      <span
+                        key=${brand}
+                        className="px-3 py-1.5 rounded-xl text-xs font-semibold"
+                        style=${{
+                          background: "rgba(6, 182, 212, 0.12)",
+                          color: "var(--drivex-neon-cyan)"
+                        }}
+                      >
+                        ${brand}
+                      </span>
+                    `)}
+                    ${compat.models.map((model) => html`
+                      <span
+                        key=${`model-${model}`}
+                        className="px-3 py-1.5 rounded-xl text-xs font-semibold"
+                        style=${{
+                          background: "var(--glass-bg)",
+                          color: "var(--drivex-light-silver)"
+                        }}
+                      >
+                        ${model}
+                      </span>
+                    `)}
+                    ${compat.years.length === 2
+                      ? html`<span
+                          className="px-3 py-1.5 rounded-xl text-xs font-semibold"
+                          style=${{
+                            background: "rgba(245, 158, 11, 0.12)",
+                            color: "var(--drivex-warning)"
+                          }}
+                        >
+                          ${compat.years[0]}–${compat.years[1]} г.
+                        </span>`
+                      : null}
+                  </div>
+                </div>`;
+              })()}
+
               <div className="grid grid-cols-3 gap-3">
                 ${store
                   ? html`<a
@@ -839,7 +1245,13 @@
                   type="button"
                   className="py-3 rounded-2xl text-sm font-semibold"
                   style=${{ background: "rgba(6, 182, 212, 0.12)", color: "var(--drivex-neon-cyan)" }}
-                  onClick=${() => toast.push("Чат с продавцом появится после оформления заказа")}
+                  onClick=${() => {
+                    if (!store) {
+                      toast.push("У товара нет магазина — вопрос задать нельзя");
+                      return;
+                    }
+                    setChatOpen(true);
+                  }}
                 >
                   Написать
                 </button>
@@ -853,6 +1265,20 @@
               </div>
             </div>
           </div>
+
+          ${store &&
+          (chatOpen ||
+            getOrderChatThread(orderChats, getMarketProductQuestionThreadId(store.id, product.id)).messages.length)
+            ? html`<${MarketProductChat}
+                product=${product}
+                store=${store}
+                orderChats=${orderChats}
+                onSendChatMessage=${onSendChatMessage}
+                onMarkChatRead=${onMarkChatRead}
+              />`
+            : null}
+
+          <${MarketReviewsSection} product=${product} buyerOrders=${buyerOrders} />
 
           ${relatedProducts.length
             ? html`<div className="pt-2">

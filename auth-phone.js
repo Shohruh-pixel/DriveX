@@ -185,13 +185,29 @@
     const payload = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(payload.error || "Неверный код");
 
-    // Если сервер вернул Supabase-сессию — устанавливаем
+    // Если сервер вернул готовые токены — устанавливаем сессию напрямую.
     if (payload.access_token && client) {
       const { data: sessionData } = await client.auth.setSession({
         access_token: payload.access_token,
         refresh_token: payload.refresh_token || ""
       }).catch(() => ({ data: {} }));
-      return { userId: sessionData?.user?.id, session: sessionData?.session };
+      if (sessionData?.session) return { userId: sessionData.user?.id, session: sessionData.session };
+    }
+
+    // Сервер (service-role) вернул одноразовый magic-link токен — обмениваем его на
+    // НАСТОЯЩУЮ Supabase-сессию. Только так RLS пропускает запись в user_app_state,
+    // и данные пользователя доступны на всех устройствах (стабильный uid по телефону).
+    if (client && payload.tokenHash) {
+      const { data, error } = await client.auth
+        .verifyOtp({ token_hash: payload.tokenHash, type: "email" })
+        .catch((e) => ({ error: e }));
+      if (!error && data?.session) return { userId: data.user?.id, session: data.session };
+    }
+    if (client && payload.email && payload.emailOtp) {
+      const { data, error } = await client.auth
+        .verifyOtp({ email: payload.email, token: payload.emailOtp, type: "magiclink" })
+        .catch((e) => ({ error: e }));
+      if (!error && data?.session) return { userId: data.user?.id, session: data.session };
     }
 
     return { userId: payload.userId, session: null };

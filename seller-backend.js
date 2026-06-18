@@ -34,6 +34,25 @@
     return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   }
 
+  // Колонки id в Supabase имеют тип uuid. Клиентские id вида "seller-product-…"
+  // не проходят валидацию. Возвращаем валидный uuid: либо исходный (если он уже uuid),
+  // либо новый. Используется только в Supabase-режиме — локальная БД принимает любые строки.
+  function makeUuid() {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+      return crypto.randomUUID();
+    }
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+      const r = (Math.random() * 16) | 0;
+      const v = c === "x" ? r : (r & 0x3) | 0x8;
+      return v.toString(16);
+    });
+  }
+
+  function isUuid(value) {
+    return typeof value === "string" &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+  }
+
   function slugify(value, fallback = "item") {
     return (
       String(value || fallback)
@@ -233,6 +252,10 @@
   }
 
   function getBackendMode() {
+    if (window.__DRIVEX_SELLER_LOCAL_MODE__) return "local";
+    try {
+      if (window.localStorage && window.localStorage.getItem('drivex.seller.force.local') === '1') return "local";
+    } catch(e) {}
     return createSupabaseClient() ? "supabase" : "local";
   }
 
@@ -616,8 +639,10 @@
   }
 
   function toDbProductPayload(payload, storeId) {
+    // По умолчанию товар публикуется (active) — именно это видит продавец ("Активен")
+    // и ожидает увидеть покупатель. Черновик/архив — только если явно задан.
     const publishStatus =
-      payload.status === "active" ? "active" : payload.status === "archived" ? "archived" : "draft";
+      payload.status === "draft" ? "draft" : payload.status === "archived" ? "archived" : "active";
     return {
       id: payload.id || makeId("product"),
       store_id: storeId,
@@ -1556,6 +1581,9 @@
       ...toDbProductPayload(payload, storeRow.id),
       store_id: storeRow.id
     };
+    // products.id — это uuid в БД. Клиентские id ("seller-product-…") не валидны:
+    // для нового товара генерируем uuid, при редактировании сохраняем существующий uuid.
+    if (!isUuid(productRow.id)) productRow.id = makeUuid();
 
     const { error } = await client.from("products").upsert(productRow);
     if (error) throw error;

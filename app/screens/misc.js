@@ -9,107 +9,228 @@
   const Icon    = function(p){ return DX.Icon ? DX.Icon(p) : null; };
   const alphaBg = function(){ return DX.alphaBg ? DX.alphaBg(...arguments) : arguments[0]; };
   function useToast(){ return DX.useToast ? DX.useToast() : {push: function(){}}; }
+  function useConfirm(){ return DX.ConfirmContext && React.useContext ? React.useContext(DX.ConfirmContext) : { confirm: function(){ return Promise.resolve(true); } }; }
+  const Toggle = function(p){ var F=DX.Toggle; return F ? F(p) : null; };
   const navigateToHash = function(p){ DX.navigateToHash && DX.navigateToHash(p); };
   const SimplePage = function(p){ var F=DX.SimplePage; return F ? F(p) : (p.children||null); };
   const formatTjsPrice = function(n){ return DX.formatTjsPrice ? DX.formatTjsPrice(n) : (String(n)+' сом.'); };
   const genId = function(p){ return DX.genId ? DX.genId(p) : (p+'-'+Date.now()); };
 
+  // ── Уведомления: статический список + состояние прочитано/скрыто ─────────
+  const NOTIF_STORE_KEY = "drivex.notifications.v1";
+  const STATIC_BUYER_NOTIFICATIONS = [
+    { id: "promo-oil", title: "Скидка 15% на замену масла", body: "Акция действует до конца недели в партнёрских сервисах.", time: "2 часа назад", color: "var(--drivex-warning)", icon: "star" },
+    { id: "inspection-reminder", title: "Напоминание: техосмотр", body: "До планового техосмотра осталось 30 дней.", time: "Вчера", color: "var(--drivex-electric-blue)", icon: "scan" },
+    { id: "market-order", title: "Ваш заказ в пути", body: "Товар ‘Shell Helix Ultra 5W-40’ будет доставлен сегодня.", time: "Сегодня", color: "var(--drivex-neon-cyan)", icon: "bag" }
+  ];
+  function readNotifState() {
+    try {
+      const raw = window.localStorage ? window.localStorage.getItem(NOTIF_STORE_KEY) : null;
+      if (!raw) return { read: [], dismissed: [] };
+      const p = JSON.parse(raw);
+      return { read: Array.isArray(p.read) ? p.read : [], dismissed: Array.isArray(p.dismissed) ? p.dismissed : [] };
+    } catch { return { read: [], dismissed: [] }; }
+  }
+  function writeNotifState(state) {
+    try {
+      window.localStorage && window.localStorage.setItem(
+        NOTIF_STORE_KEY,
+        JSON.stringify({ read: state.read || [], dismissed: state.dismissed || [] })
+      );
+    } catch { /* ignore */ }
+  }
+  function visibleBuyerNotifications(serviceRequests) {
+    const dynamic = (typeof buildBuyerServiceNotifications === "function") ? buildBuyerServiceNotifications(serviceRequests) : [];
+    const st = readNotifState();
+    return [...dynamic, ...STATIC_BUYER_NOTIFICATIONS].filter((n) => !st.dismissed.includes(n.id));
+  }
+  function countUnreadBuyerNotifications(serviceRequests) {
+    const st = readNotifState();
+    return visibleBuyerNotifications(serviceRequests).filter((n) => !st.read.includes(n.id)).length;
+  }
+  try { DX.visibleBuyerNotifications = visibleBuyerNotifications; } catch (e) {}
+  try { DX.countUnreadBuyerNotifications = countUnreadBuyerNotifications; } catch (e) {}
+
   function NotificationsScreen({ serviceRequests }) {
-    const notifications = [
-      {
-        id: "promo-oil",
-        title: "Скидка 15% на замену масла",
-        body: "Акция действует до конца недели в партнёрских сервисах.",
-        time: "2 часа назад",
-        color: "var(--drivex-warning)",
-        icon: "star"
-      },
-      {
-        id: "inspection-reminder",
-        title: "Напоминание: техосмотр",
-        body: "До планового техосмотра осталось 30 дней.",
-        time: "Вчера",
-        color: "var(--drivex-electric-blue)",
-        icon: "scan"
-      },
-      {
-        id: "market-order",
-        title: "Ваш заказ в пути",
-        body: "Товар ‘Shell Helix Ultra 5W-40’ будет доставлен сегодня.",
-        time: "Сегодня",
-        color: "var(--drivex-neon-cyan)",
-        icon: "bag"
-      }
-    ];
-    const dynamicNotifications = buildBuyerServiceNotifications(serviceRequests);
-    const mergedNotifications = [...dynamicNotifications, ...notifications];
+    const toast = useToast();
+    const { confirm } = useConfirm();
+    const [, setTick] = useState(0);
+    const items = visibleBuyerNotifications(serviceRequests);
+
+    // Какие были непрочитаны на момент открытия — для значка «новое»
+    const unreadOnOpenRef = useRef(null);
+    if (unreadOnOpenRef.current === null) {
+      const st = readNotifState();
+      unreadOnOpenRef.current = new Set(items.filter((n) => !st.read.includes(n.id)).map((n) => n.id));
+    }
+
+    // Отметить все видимые как прочитанные при открытии экрана
+    useEffect(() => {
+      const st = readNotifState();
+      const ids = visibleBuyerNotifications(serviceRequests).map((n) => n.id);
+      const merged = Array.from(new Set([...st.read, ...ids]));
+      if (merged.length !== st.read.length) writeNotifState({ read: merged, dismissed: st.dismissed });
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    const handleClear = useCallback(async () => {
+      if (!visibleBuyerNotifications(serviceRequests).length) return;
+      const ok = await confirm({
+        title: "Очистить уведомления?",
+        message: "Все текущие уведомления будут скрыты.",
+        confirmLabel: "Очистить",
+        danger: true
+      });
+      if (!ok) return;
+      const st = readNotifState();
+      const ids = visibleBuyerNotifications(serviceRequests).map((n) => n.id);
+      writeNotifState({ read: st.read, dismissed: Array.from(new Set([...st.dismissed, ...ids])) });
+      setTick((t) => t + 1);
+      toast.push("Уведомления очищены");
+    }, [confirm, serviceRequests, toast]);
 
     return html`
       <${SimplePage} title="Уведомления" backPath="/profile">
         <div className="px-6 py-6">
-          <div className="space-y-3">
-            ${mergedNotifications.map((n, idx) => html`
-              <div key=${n.id || idx} className="glass-card-light rounded-2xl p-4">
-                <div className="flex items-start gap-4">
-                  <div
-                    className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0"
-                    style=${{ background: alphaBg(n.color, 0.2), color: n.color }}
+          ${items.length
+            ? html`
+                <div className="flex justify-end mb-3">
+                  <button
+                    type="button"
+                    onClick=${handleClear}
+                    className="text-sm font-semibold"
+                    style=${{ color: "var(--drivex-silver)" }}
                   >
-                    <${Icon} name=${n.icon} size=${22} />
-                  </div>
-
-                  <div className="flex-1">
-                    <div className="flex items-start justify-between gap-3">
-                      <h3 className="font-bold" style=${{ color: "var(--drivex-white)" }}>
-                        ${n.title}
-                      </h3>
-                      <span className="text-xs" style=${{ color: "var(--drivex-silver)" }}>
-                        ${n.time}
-                      </span>
-                    </div>
-                    <p className="text-sm mt-2" style=${{ color: "var(--drivex-silver)" }}>
-                      ${n.body}
-                    </p>
-                  </div>
+                    Очистить
+                  </button>
                 </div>
-              </div>
-            `)}
-          </div>
+                <div className="space-y-3">
+                  ${items.map((n, idx) => html`
+                    <div key=${n.id || idx} className="glass-card-light rounded-2xl p-4">
+                      <div className="flex items-start gap-4">
+                        <div
+                          className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0"
+                          style=${{ background: alphaBg(n.color, 0.2), color: n.color }}
+                        >
+                          <${Icon} name=${n.icon} size=${22} />
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-start justify-between gap-3">
+                            <h3 className="font-bold flex items-center gap-2" style=${{ color: "var(--drivex-white)" }}>
+                              ${n.title}
+                              ${unreadOnOpenRef.current.has(n.id)
+                                ? html`<span style=${{ width: "8px", height: "8px", borderRadius: "9999px", background: "var(--drivex-neon-cyan)", display: "inline-block", flexShrink: 0 }}></span>`
+                                : null}
+                            </h3>
+                            <span className="text-xs" style=${{ color: "var(--drivex-silver)" }}>
+                              ${n.time}
+                            </span>
+                          </div>
+                          <p className="text-sm mt-2" style=${{ color: "var(--drivex-silver)" }}>
+                            ${n.body}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  `)}
+                </div>
+              `
+            : html`
+                <div className="glass-card-light rounded-2xl text-center" style=${{ padding: "48px" }}>
+                  <div style=${{ fontSize: "48px", marginBottom: "12px" }}>🔔</div>
+                  <p className="font-semibold" style=${{ color: "var(--drivex-white)", marginBottom: "6px" }}>
+                    Нет уведомлений
+                  </p>
+                  <p className="text-sm" style=${{ color: "var(--drivex-silver)" }}>
+                    Здесь появятся акции, статусы заказов и напоминания
+                  </p>
+                </div>
+              `}
         </div>
       </${SimplePage}>
     `;
   }
 
-  function SettingsScreen() {
+  function SettingsScreen({ session }) {
+    const toast = useToast();
+    const userId = session && session.id ? session.id : "";
+
     const initial = useMemo(() => {
       try {
         const raw = window.localStorage ? window.localStorage.getItem("drivex.settings.v1") : null;
-        if (!raw) return { pushEnabled: true, geoEnabled: true };
+        if (!raw) return { pushEnabled: false, geoEnabled: true };
         const parsed = JSON.parse(raw);
         return {
-          pushEnabled: typeof parsed?.pushEnabled === "boolean" ? parsed.pushEnabled : true,
+          pushEnabled: typeof parsed?.pushEnabled === "boolean" ? parsed.pushEnabled : false,
           geoEnabled: typeof parsed?.geoEnabled === "boolean" ? parsed.geoEnabled : true
         };
       } catch {
-        return { pushEnabled: true, geoEnabled: true };
+        return { pushEnabled: false, geoEnabled: true };
       }
     }, []);
 
     const [pushEnabled, setPushEnabled] = useState(initial.pushEnabled);
     const [geoEnabled, setGeoEnabled] = useState(initial.geoEnabled);
+    const [busy, setBusy] = useState(false);
 
-    useEffect(() => {
-      // lightweight demo persistence
+    const persist = useCallback((next) => {
       try {
         window.localStorage &&
-          window.localStorage.setItem(
-            "drivex.settings.v1",
-            JSON.stringify({ pushEnabled, geoEnabled })
-          );
+          window.localStorage.setItem("drivex.settings.v1", JSON.stringify(next));
       } catch {
         // ignore
       }
-    }, [pushEnabled, geoEnabled]);
+      // Best-effort синхронизация в Supabase users.preferences
+      try {
+        const client = window.__DRIVEX_SUPABASE_CLIENT__;
+        if (client && userId) {
+          client.from("users").update({ preferences: next }).eq("id", userId).then(function(){}, function(){});
+        }
+      } catch {
+        // ignore
+      }
+    }, [userId]);
+
+    const handlePushToggle = useCallback(async (next) => {
+      if (busy) return;
+      if (!next) {
+        setPushEnabled(false);
+        persist({ pushEnabled: false, geoEnabled });
+        toast.push("Push-уведомления выключены");
+        return;
+      }
+      const push = window.DrivexPush;
+      if (!push || !push.isConfigured) {
+        toast.push("Push недоступны в этой сборке");
+        return;
+      }
+      setBusy(true);
+      try {
+        const token = await push.requestPermission();
+        if (!token) {
+          setPushEnabled(false);
+          toast.push("Разрешите уведомления в браузере");
+          return;
+        }
+        if (userId && push.registerTokenForUser) {
+          await push.registerTokenForUser(userId);
+        }
+        setPushEnabled(true);
+        persist({ pushEnabled: true, geoEnabled });
+        toast.push("Push-уведомления включены");
+      } catch (e) {
+        setPushEnabled(false);
+        toast.push("Не удалось включить уведомления");
+      } finally {
+        setBusy(false);
+      }
+    }, [busy, geoEnabled, persist, toast, userId]);
+
+    const handleGeoToggle = useCallback((next) => {
+      setGeoEnabled(next);
+      persist({ pushEnabled, geoEnabled: next });
+      toast.push(next ? "Геолокация включена" : "Геолокация выключена");
+    }, [persist, pushEnabled, toast]);
 
     return html`
       <${SimplePage} title="Настройки" backPath="/profile">
@@ -133,17 +254,11 @@
                       Push-уведомления
                     </p>
                     <p className="text-xs" style=${{ color: "var(--drivex-silver)" }}>
-                      Акции и статусы заказов
+                      ${busy ? "Запрашиваем разрешение…" : "Акции и статусы заказов"}
                     </p>
                   </div>
                 </div>
-                <label className="inline-flex items-center gap-2" style=${{ color: "var(--drivex-white)" }}>
-                  <input
-                    type="checkbox"
-                    checked=${pushEnabled}
-                    onChange=${(e) => setPushEnabled(Boolean(e.target.checked))}
-                  />
-                </label>
+                <${Toggle} checked=${pushEnabled} disabled=${busy} onChange=${handlePushToggle} />
               </div>
 
               <div className="flex items-center justify-between gap-4">
@@ -163,22 +278,18 @@
                     </p>
                   </div>
                 </div>
-                <label className="inline-flex items-center gap-2" style=${{ color: "var(--drivex-white)" }}>
-                  <input
-                    type="checkbox"
-                    checked=${geoEnabled}
-                    onChange=${(e) => setGeoEnabled(Boolean(e.target.checked))}
-                  />
-                </label>
+                <${Toggle} checked=${geoEnabled} onChange=${handleGeoToggle} />
               </div>
             </div>
           </div>
 
           <div className="glass-card-light rounded-2xl overflow-hidden">
             ${[
+              { label: "Профиль и безопасность", path: "/profile-security", icon: "lock" },
               { label: "Платёжные данные", path: "/payment", icon: "card" },
               { label: "Бонусная программа", path: "/bonus", icon: "star" },
-              { label: "Пригласить друзей", path: "/invite", icon: "copy" }
+              { label: "Пригласить друзей", path: "/invite", icon: "copy" },
+              { label: "Помощь и поддержка", path: "/help", icon: "bell" }
             ].map((item, idx, arr) => {
               const divider = idx < arr.length - 1 ? { borderBottom: "1px solid var(--glass-border)" } : null;
               return html`
@@ -221,9 +332,26 @@
     ];
 
     const contacts = [
-      { icon: "bell", label: "Чат поддержки", value: "24/7", toast: "Открыть чат (демо)" },
-      { icon: "phone", label: "Телефон", value: "+7 (800) 555-35-35", toast: "Звонок (демо)" },
-      { icon: "user", label: "Email", value: "support@drivex.app", toast: "Письмо (демо)" }
+      {
+        label: "Телефон", value: "+992 92 712 59 89", href: "tel:+992927125989",
+        color: "var(--drivex-neon-cyan)", bg: "rgba(6, 182, 212, 0.16)",
+        path: "M6.62 10.79c1.44 2.83 3.76 5.15 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"
+      },
+      {
+        label: "Telegram", value: "@shoxrux15080", href: "https://t.me/shoxrux15080", external: true,
+        color: "#2AABEE", bg: "rgba(42, 171, 238, 0.16)",
+        path: "M21.94 4.66a1.2 1.2 0 0 0-1.2-.18L3.4 11.2c-.86.33-.85 1.57.02 1.88l4.27 1.5 1.65 5.24c.2.62.97.83 1.46.4l2.38-2.07 4.2 3.1c.5.36 1.2.1 1.35-.5l3.27-15.2a1.2 1.2 0 0 0-.46-1.39zM9.5 14.3l8.2-5.05c.16-.1.33.12.19.25l-6.66 6.03c-.2.18-.32.43-.36.7l-.23 1.66-1.14-3.59z"
+      },
+      {
+        label: "WhatsApp", value: "+992 92 712 59 89", href: "https://wa.me/992927125989", external: true,
+        color: "#25D366", bg: "rgba(37, 211, 102, 0.16)",
+        path: "M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.86 9.86 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2zm5.8 14.13c-.24.68-1.42 1.31-1.96 1.36-.5.05-1.14.07-1.84-.12-.42-.13-.97-.31-1.67-.61-2.94-1.27-4.86-4.23-5.01-4.42-.15-.2-1.2-1.59-1.2-3.03 0-1.44.76-2.15 1.03-2.44.27-.29.58-.36.77-.36.19 0 .39 0 .56.01.18.01.42-.07.66.5.24.59.82 2.03.89 2.18.07.15.12.32.02.51-.34.68-.7.65-.51.98.29.5 1.28 2.11 2.76 2.96.42.24.86.45 1.16.27.29-.18.73-.85.92-1.14.19-.29.39-.24.66-.15.27.1 1.71.81 2 .96.29.15.49.22.56.34.07.12.07.7-.17 1.38z"
+      },
+      {
+        label: "Email", value: "shohruh15082006@gmail.com", href: "mailto:shohruh15082006@gmail.com",
+        color: "#cbd5e1", bg: "rgba(148, 163, 184, 0.16)",
+        path: "M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4-8 5-8-5V6l8 5 8-5v2z"
+      }
     ];
 
     return html`
@@ -252,32 +380,143 @@
 
           <div className="space-y-3">
             ${contacts.map((c, idx) => {
-              const iconName = c.icon === "phone" ? "sos" : c.icon;
-              return html`
-                <button
-                  key=${idx}
-                  type="button"
-                  className="w-full glass-card-light rounded-2xl p-5 flex items-center gap-4 text-left"
-                  onClick=${() => toast.push(c.toast)}
+              const inner = html`
+                <div
+                  className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0"
+                  style=${{ background: c.bg || "var(--gradient-primary)" }}
                 >
-                  <div
-                    className="w-12 h-12 rounded-xl flex items-center justify-center"
-                    style=${{ background: "var(--gradient-primary)", color: "var(--drivex-white)" }}
-                  >
-                    <${Icon} name=${iconName} size=${24} />
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-semibold mb-1" style=${{ color: "var(--drivex-white)" }}>
-                      ${c.label}
-                    </p>
-                    <p className="text-sm" style=${{ color: "var(--drivex-silver)" }}>
-                      ${c.value}
-                    </p>
-                  </div>
-                </button>
+                  <svg viewBox="0 0 24 24" width="24" height="24" fill=${c.color || "var(--drivex-white)"} aria-hidden="true">
+                    <path d=${c.path}></path>
+                  </svg>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold mb-1" style=${{ color: "var(--drivex-white)" }}>
+                    ${c.label}
+                  </p>
+                  <p className="text-sm truncate" style=${{ color: "var(--drivex-silver)" }}>
+                    ${c.value}
+                  </p>
+                </div>
+                <span style=${{ color: "var(--drivex-silver)" }}>›</span>
               `;
+              const extraProps = c.external ? { target: "_blank", rel: "noopener noreferrer" } : {};
+              return c.href
+                ? html`<a key=${idx} href=${c.href} ...${extraProps} className="w-full glass-card-light rounded-2xl p-4 flex items-center gap-4 text-left">${inner}</a>`
+                : html`<button key=${idx} type="button" className="w-full glass-card-light rounded-2xl p-4 flex items-center gap-4 text-left" onClick=${() => toast.push(c.toast)}>${inner}</button>`;
             })}
           </div>
+        </div>
+      </${SimplePage}>
+    `;
+  }
+
+  // Универсальный экран-заглушка «Скоро» — честная замена демо-разделов
+  function ComingSoonScreen({ title, emoji, subtitle }) {
+    return html`
+      <${SimplePage} title=${title || "Скоро"} backPath="/profile">
+        <div className="px-4 py-6">
+          <div
+            className="glass-card-light rounded-2xl text-center"
+            style=${{ margin: "24px 16px", padding: "48px" }}
+          >
+            <div style=${{ fontSize: "56px", marginBottom: "16px" }}>${emoji || "🚧"}</div>
+            <p
+              className="font-semibold"
+              style=${{ color: "var(--drivex-white)", marginBottom: "8px" }}
+            >
+              Скоро
+            </p>
+            <p className="text-sm" style=${{ color: "var(--drivex-silver)" }}>
+              ${subtitle || "Раздел в разработке"}
+            </p>
+          </div>
+        </div>
+      </${SimplePage}>
+    `;
+  }
+
+  function FavoritesScreen({ favorites = [], onRemove }) {
+    const toast = useToast();
+    const { confirm } = useConfirm();
+    const list = Array.isArray(favorites) ? favorites : [];
+    const services = list.filter((f) => f.type === "service");
+    const products = list.filter((f) => f.type === "product");
+
+    const handleRemove = useCallback(async (item) => {
+      const ok = await confirm({
+        title: "Убрать из избранного?",
+        message: item.title,
+        confirmLabel: "Убрать",
+        cancelLabel: "Отмена",
+        danger: true,
+        icon: "star"
+      });
+      if (!ok) return;
+      onRemove && onRemove(item.type, item.id);
+      toast.push("Убрано из избранного");
+    }, [confirm, onRemove, toast]);
+
+    const renderItem = (item) => html`
+      <div key=${item.type + ":" + item.id} className="glass-card-light rounded-2xl p-4 flex items-center gap-3">
+        <button
+          type="button"
+          className="flex items-center gap-3 flex-1 text-left min-w-0"
+          onClick=${() => { if (item.path) navigateToHash(item.path); }}
+        >
+          <div
+            className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 overflow-hidden"
+            style=${{ background: "rgba(6, 182, 212, 0.15)", color: "var(--drivex-neon-cyan)" }}
+          >
+            ${item.image
+              ? html`<img src=${item.image} alt="" style=${{ width: "100%", height: "100%", objectFit: "cover" }} />`
+              : html`<${Icon} name=${item.type === "product" ? "bag" : "wrench"} size=${22} />`}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-bold truncate" style=${{ color: "var(--drivex-white)" }}>${item.title}</p>
+            ${item.subtitle ? html`<p className="text-sm truncate" style=${{ color: "var(--drivex-silver)" }}>${item.subtitle}</p>` : null}
+          </div>
+        </button>
+        <button
+          type="button"
+          className="px-3 py-1 rounded-xl text-xs font-bold whitespace-nowrap"
+          style=${{ background: "rgba(239, 68, 68, 0.12)", color: "var(--drivex-danger)" }}
+          onClick=${() => handleRemove(item)}
+          aria-label="Убрать из избранного"
+        >
+          Убрать
+        </button>
+      </div>
+    `;
+
+    return html`
+      <${SimplePage} title="Избранное" backPath="/profile">
+        <div className="px-6 py-6 space-y-5">
+          ${!list.length
+            ? html`
+                <div className="glass-card-light rounded-2xl text-center" style=${{ padding: "48px" }}>
+                  <div style=${{ fontSize: "56px", marginBottom: "16px" }}>⭐</div>
+                  <p className="font-semibold" style=${{ color: "var(--drivex-white)", marginBottom: "8px" }}>
+                    Пока пусто
+                  </p>
+                  <p className="text-sm" style=${{ color: "var(--drivex-silver)" }}>
+                    Добавляйте сервисы и товары в избранное кнопкой ♡ на карточке
+                  </p>
+                </div>
+              `
+            : html`
+                ${services.length
+                  ? html`<div className="space-y-3">
+                      <h3 className="text-sm font-semibold px-2" style=${{ color: "var(--drivex-silver)" }}>Сервисы</h3>
+                      ${services.map(renderItem)}
+                    </div>`
+                  : null}
+                ${products.length
+                  ? html`<div className="space-y-3">
+                      <h3 className="text-sm font-semibold px-2" style=${{ color: "var(--drivex-silver)" }}>Товары</h3>
+                      ${products.map(renderItem)}
+                    </div>`
+                  : null}
+              `}
         </div>
       </${SimplePage}>
     `;
@@ -693,31 +932,30 @@
   function ProfileSecurityScreen({ profile }) {
     const toast = useToast();
 
-    const initial = useMemo(() => {
-      try {
-        const raw = window.localStorage ? window.localStorage.getItem("drivex.security.v1") : null;
-        if (!raw) return { twoFactor: false, biometric: false };
-        const parsed = JSON.parse(raw);
-        return {
-          twoFactor: typeof parsed?.twoFactor === "boolean" ? parsed.twoFactor : false,
-          biometric: typeof parsed?.biometric === "boolean" ? parsed.biometric : false
-        };
-      } catch {
-        return { twoFactor: false, biometric: false };
-      }
-    }, []);
+    const { confirm } = useConfirm();
 
-    const [twoFactor, setTwoFactor] = useState(initial.twoFactor);
-    const [biometric, setBiometric] = useState(initial.biometric);
-
-    useEffect(() => {
+    const handleLogoutEverywhere = useCallback(async () => {
+      const ok = await confirm({
+        title: "Выйти на всех устройствах?",
+        message: "Активные сессии будут завершены на всех устройствах.",
+        confirmLabel: "Выйти",
+        cancelLabel: "Отмена",
+        danger: true,
+        icon: "lock"
+      });
+      if (!ok) return;
       try {
-        window.localStorage &&
-          window.localStorage.setItem("drivex.security.v1", JSON.stringify({ twoFactor, biometric }));
-      } catch {
+        const client = window.__DRIVEX_SUPABASE_CLIENT__;
+        if (client && client.auth && client.auth.signOut) {
+          await client.auth.signOut({ scope: "global" });
+        }
+      } catch (e) {
         // ignore
       }
-    }, [twoFactor, biometric]);
+      toast.push("Сессии завершены");
+      navigateToHash("/login");
+      window.setTimeout(() => { try { window.location.reload(); } catch (e) {} }, 300);
+    }, [confirm, toast]);
 
     const fallbackProfile = createDefaultBuyerProfile();
     const name = profile?.name || fallbackProfile.name;
@@ -771,63 +1009,21 @@
               Безопасность
             </h2>
 
-            <div className="space-y-3">
-              <div className="flex items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <div
-                    className="w-10 h-10 rounded-xl flex items-center justify-center"
-                    style=${{ background: "rgba(14, 165, 233, 0.2)", color: "var(--drivex-electric-blue)" }}
-                  >
-                    <${Icon} name="lock" size=${20} />
-                  </div>
-                  <div>
-                    <p className="font-semibold" style=${{ color: "var(--drivex-white)" }}>
-                      Двухфакторная защита
-                    </p>
-                    <p className="text-xs" style=${{ color: "var(--drivex-silver)" }}>
-                      Дополнительная проверка входа
-                    </p>
-                  </div>
-                </div>
-                <input
-                  type="checkbox"
-                  checked=${twoFactor}
-                  onChange=${(e) => setTwoFactor(Boolean(e.target.checked))}
-                />
-              </div>
-
-              <div className="flex items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <div
-                    className="w-10 h-10 rounded-xl flex items-center justify-center"
-                    style=${{ background: "rgba(6, 182, 212, 0.2)", color: "var(--drivex-neon-cyan)" }}
-                  >
-                    <${Icon} name="scan" size=${20} />
-                  </div>
-                  <div>
-                    <p className="font-semibold" style=${{ color: "var(--drivex-white)" }}>
-                      Биометрия
-                    </p>
-                    <p className="text-xs" style=${{ color: "var(--drivex-silver)" }}>
-                      Touch ID / Face ID (демо)
-                    </p>
-                  </div>
-                </div>
-                <input
-                  type="checkbox"
-                  checked=${biometric}
-                  onChange=${(e) => setBiometric(Boolean(e.target.checked))}
-                />
-              </div>
-
-              <button
-                type="button"
-                className="w-full py-3 rounded-2xl font-bold"
-                style=${{ background: "var(--glass-bg)", color: "var(--drivex-white)" }}
-                onClick=${() => toast.push("Смена пароля (демо)")}
+            <div className="flex items-center gap-3">
+              <div
+                className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                style=${{ background: "rgba(14, 165, 233, 0.2)", color: "var(--drivex-electric-blue)" }}
               >
-                Сменить пароль
-              </button>
+                <${Icon} name="lock" size=${20} />
+              </div>
+              <div>
+                <p className="font-semibold" style=${{ color: "var(--drivex-white)" }}>
+                  Вход по одноразовому коду
+                </p>
+                <p className="text-xs mt-1" style=${{ color: "var(--drivex-silver)" }}>
+                  Аккаунт защищён OTP-кодом на телефон. Биометрия и 2FA — скоро.
+                </p>
+              </div>
             </div>
           </div>
 
@@ -839,7 +1035,7 @@
               type="button"
               className="w-full py-3 rounded-2xl font-bold"
               style=${{ background: "rgba(239, 68, 68, 0.15)", color: "var(--drivex-danger)" }}
-              onClick=${() => toast.push("Выход на всех устройствах (демо)")}
+              onClick=${handleLogoutEverywhere}
             >
               Выйти на всех устройствах
             </button>
@@ -1081,6 +1277,8 @@
   // ── Export to DX.screens (chain: app-main.js читает отсюда) ──
   DX.screens = DX.screens || {};
   if (typeof BonusProgramScreen !== 'undefined') DX.screens['BonusProgramScreen'] = BonusProgramScreen;
+  if (typeof ComingSoonScreen !== 'undefined') DX.screens['ComingSoonScreen'] = ComingSoonScreen;
+  if (typeof FavoritesScreen !== 'undefined') DX.screens['FavoritesScreen'] = FavoritesScreen;
   if (typeof HelpScreen !== 'undefined') DX.screens['HelpScreen'] = HelpScreen;
   if (typeof InviteFriendsScreen !== 'undefined') DX.screens['InviteFriendsScreen'] = InviteFriendsScreen;
   if (typeof NotificationsScreen !== 'undefined') DX.screens['NotificationsScreen'] = NotificationsScreen;

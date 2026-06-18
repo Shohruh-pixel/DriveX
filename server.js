@@ -117,7 +117,24 @@ function readAppState() {
 
 function writeAppState(state) {
   ensureDataDir();
-  fs.writeFileSync(appStateFilePath, JSON.stringify(state, null, 2), "utf8");
+  // Атомарная запись: пишем во временный файл и переименовываем. rename атомарен
+  // в пределах одной ФС, поэтому читатели никогда не видят пустой/частичный файл
+  // (раньше параллельные POST'ы оставляли app-state.json обрезанным до 0 байт).
+  const tmpPath = appStateFilePath + "." + process.pid + ".tmp";
+  fs.writeFileSync(tmpPath, JSON.stringify(state, null, 2), "utf8");
+  fs.renameSync(tmpPath, appStateFilePath);
+}
+
+// Последовательная очередь записи: handleAppStateRoute читает состояние после
+// `await readJsonBody`, поэтому два параллельных POST'а могли прочитать одно и то
+// же состояние и затереть изменения друг друга (lost update). Сериализуем секцию
+// read-modify-write через цепочку промисов.
+let appStateWriteChain = Promise.resolve();
+function runExclusiveAppStateWrite(task) {
+  const run = appStateWriteChain.then(task, task);
+  // Не даём ошибке одной задачи порвать всю цепочку.
+  appStateWriteChain = run.then(() => {}, () => {});
+  return run;
 }
 
 const mergeByIdAppStateKeys = new Set([
@@ -130,6 +147,17 @@ const mergeByIdAppStateKeys = new Set([
   "drivex.buyer.orders.v1",
   "drivex.seller.orders.v1",
   "drivex.seller.notifications.v1"
+]);
+
+// Идентичность продавца принадлежит seller-бэкенду (локальная БД / Supabase), а не
+// общему app-state.json. Сервер игнорирует попытки записать эти ключи, чтобы
+// устаревшие/непавильно залогиненные клиенты не загрязняли общее состояние
+// (видимость товаров для покупателей идёт через drivex.market.catalog.v1).
+const rejectedAppStateKeys = new Set([
+  "drivex.seller.session.v1",
+  "drivex.seller.profile.v1",
+  "drivex.seller.store.v1",
+  "drivex.seller.products.v1"
 ]);
 
 function mergeArrayById(existingValue, nextValue) {
@@ -155,9 +183,34 @@ function mergeArrayById(existingValue, nextValue) {
   return Array.from(merged.values());
 }
 
+function mergeOrderChats(existingValue, nextValue) {
+  const existing = existingValue && typeof existingValue === "object" && !Array.isArray(existingValue) ? existingValue : {};
+  const incoming = nextValue && typeof nextValue === "object" && !Array.isArray(nextValue) ? nextValue : {};
+  const merged = { ...existing };
+  for (const [orderId, thread] of Object.entries(incoming)) {
+    if (!thread) continue;
+    const existingThread = merged[orderId];
+    if (!existingThread) { merged[orderId] = thread; continue; }
+    const existingMsgs = Array.isArray(existingThread.messages) ? existingThread.messages : [];
+    const incomingMsgs = Array.isArray(thread.messages) ? thread.messages : [];
+    const msgsById = new Map();
+    for (const m of existingMsgs) { if (m && m.id) msgsById.set(m.id, m); }
+    for (const m of incomingMsgs) { if (m && m.id) msgsById.set(m.id, m); }
+    const messages = Array.from(msgsById.values()).sort((a, b) =>
+      (a.sentAt || "") < (b.sentAt || "") ? -1 : 1
+    );
+    merged[orderId] = { ...existingThread, ...thread, messages };
+  }
+  return merged;
+}
+
 function mergeAppStateValue(key, existingEntry, nextValue) {
   if (key === "drivex.maintenance.v1" && nextValue && typeof nextValue === "object") {
     return mergeMaintenanceState(existingEntry && existingEntry.value, nextValue);
+  }
+
+  if (key === "drivex.order-chats.v1" && nextValue && typeof nextValue === "object" && !Array.isArray(nextValue)) {
+    return mergeOrderChats(existingEntry && existingEntry.value, nextValue);
   }
 
   if (mergeByIdAppStateKeys.has(key) && Array.isArray(nextValue)) {
@@ -392,6 +445,87 @@ function normalizeServiceCenter(input) {
   };
 }
 
+// ── Отзывы о товарах маркета ──────────────────────────────────────────────
+
+const marketReviewsFilePath = path.join(dataDir, "market-reviews.json");
+
+function readMarketReviews() {
+  try {
+    if (!fs.existsSync(marketReviewsFilePath)) return [];
+    const parsed = JSON.parse(fs.readFileSync(marketReviewsFilePath, "utf8"));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch { return []; }
+}
+
+function writeMarketReviews(reviews) {
+  ensureDataDir();
+  fs.writeFileSync(marketReviewsFilePath, JSON.stringify(reviews, null, 2), "utf8");
+}
+
+function buildMarketReviewsSummary() {
+  const summary = {};
+  for (const review of readMarketReviews()) {
+    if (!review || !review.productId) continue;
+    const key = String(review.productId);
+    const entry = summary[key] || { count: 0, total: 0 };
+    entry.count += 1;
+    entry.total += Math.max(1, Math.min(5, Number(review.rating) || 0));
+    summary[key] = entry;
+  }
+  const result = {};
+  for (const [key, entry] of Object.entries(summary)) {
+    result[key] = { count: entry.count, rating: Math.round((entry.total / entry.count) * 10) / 10 };
+  }
+  return result;
+}
+
+function normalizeMarketReview(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const productId = cleanString(raw.productId || raw.product_id, 160);
+  const rating = Math.floor(Number(raw.rating));
+  if (!productId || !Number.isFinite(rating) || rating < 1 || rating > 5) return null;
+  return {
+    id: cleanString(raw.id, 80) || `review-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    productId,
+    authorName: cleanString(raw.authorName || raw.author_name, 80) || "Покупатель DRIVEX",
+    rating,
+    comment: cleanString(raw.comment, 1200),
+    verified: Boolean(raw.verified),
+    createdAt: raw.createdAt && !Number.isNaN(Date.parse(raw.createdAt))
+      ? new Date(raw.createdAt).toISOString()
+      : new Date().toISOString()
+  };
+}
+
+async function handleMarketReviewsRoute(req, res, url) {
+  if (req.method === "GET") {
+    if (url.searchParams.get("summary")) {
+      sendJson(res, 200, { summary: buildMarketReviewsSummary() });
+      return;
+    }
+    const productId = cleanString(url.searchParams.get("productId"), 160);
+    const all = readMarketReviews();
+    const reviews = productId ? all.filter((item) => item.productId === productId) : all;
+    sendJson(res, 200, { reviews: reviews.slice(0, 100) });
+    return;
+  }
+  if (req.method === "POST") {
+    try {
+      const body = await readJsonBody(req);
+      const review = normalizeMarketReview(body.review || body);
+      if (!review) { sendJson(res, 400, { error: "Нужны productId и оценка от 1 до 5" }); return; }
+      const all = readMarketReviews();
+      all.unshift(review);
+      writeMarketReviews(all.slice(0, 5000));
+      sendJson(res, 201, { review });
+    } catch (error) {
+      sendJson(res, error.statusCode || 400, { error: error.message || "Review save failed" });
+    }
+    return;
+  }
+  sendJson(res, 405, { error: "Method not allowed" });
+}
+
 async function handleServiceCentersRoute(req, res) {
   if (req.method === "GET") {
     sendJson(res, 200, { centers: readServiceCenters() });
@@ -429,7 +563,6 @@ async function handleAppStateRoute(req, res) {
 
   try {
     const body = await readJsonBody(req);
-    const current = readAppState();
     const patch = {};
 
     if (body && typeof body.values === "object" && body.values && !Array.isArray(body.values)) {
@@ -438,20 +571,31 @@ async function handleAppStateRoute(req, res) {
       patch[body.key] = body.value ?? null;
     }
 
-    for (const [key, value] of Object.entries(patch)) {
-      const safeKey = cleanString(key, 160);
-      if (!safeKey) continue;
-      if (value === null) {
-        delete current[safeKey];
-      } else {
-        current[safeKey] = {
-          value: mergeAppStateValue(safeKey, current[safeKey], value),
-          updatedAt: new Date().toISOString()
-        };
+    // read-modify-write выполняется эксклюзивно, чтобы параллельные POST'ы не
+    // затирали изменения друг друга. Состояние читаем ВНУТРИ замка (после await).
+    const current = await runExclusiveAppStateWrite(() => {
+      const state = readAppState();
+      // Чистим устаревшие seller-identity ключи, если они просочились ранее.
+      for (const rejected of rejectedAppStateKeys) {
+        if (Object.prototype.hasOwnProperty.call(state, rejected)) delete state[rejected];
       }
-    }
+      for (const [key, value] of Object.entries(patch)) {
+        const safeKey = cleanString(key, 160);
+        if (!safeKey) continue;
+        if (rejectedAppStateKeys.has(safeKey)) continue; // seller-бэкенд владеет этим ключом
+        if (value === null) {
+          delete state[safeKey];
+        } else {
+          state[safeKey] = {
+            value: mergeAppStateValue(safeKey, state[safeKey], value),
+            updatedAt: new Date().toISOString()
+          };
+        }
+      }
+      writeAppState(state);
+      return state;
+    });
 
-    writeAppState(current);
     sendJson(res, 200, { state: current });
   } catch (error) {
     sendJson(res, error.statusCode || 400, { error: error.message || "App state save failed" });
@@ -607,19 +751,21 @@ async function handleOtpVerify(req, res) {
   });
 }
 
-async function createOrSignInSupabaseUser(phone) {
+// Низкоуровневый запрос к Supabase Admin API (GoTrue) с service-role ключом.
+function supabaseAdminRequest(method, pathAndQuery, bodyObj) {
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
   const supabaseUrl = process.env.SUPABASE_URL || "";
-  if (!serviceRoleKey || !supabaseUrl) return null;
+  if (!serviceRoleKey || !supabaseUrl) return Promise.resolve(null);
 
-  // Используем Supabase Admin API для создания/получения пользователя
-  const adminRes = await new Promise((resolve) => {
-    const body = JSON.stringify({ phone, phone_confirm: true });
-    const url = new URL(`${supabaseUrl}/auth/v1/admin/users`);
+  return new Promise((resolve) => {
+    let url;
+    try { url = new URL(`${supabaseUrl}${pathAndQuery}`); }
+    catch { resolve(null); return; }
+    const payload = bodyObj ? JSON.stringify(bodyObj) : null;
     const options = {
       hostname: url.hostname,
       path: url.pathname + url.search,
-      method: "POST",
+      method,
       headers: {
         "Content-Type": "application/json",
         apikey: serviceRoleKey,
@@ -630,18 +776,57 @@ async function createOrSignInSupabaseUser(phone) {
       const chunks = [];
       res.on("data", (c) => chunks.push(c));
       res.on("end", () => {
-        try { resolve({ status: res.statusCode, data: JSON.parse(Buffer.concat(chunks).toString()) }); }
+        try { resolve({ status: res.statusCode, data: JSON.parse(Buffer.concat(chunks).toString() || "{}") }); }
         catch { resolve({ status: res.statusCode, data: {} }); }
       });
     });
     req.on("error", () => resolve(null));
-    req.write(body);
+    if (payload) req.write(payload);
     req.end();
   });
+}
 
-  if (!adminRes) return null;
-  // Возвращаем userId (session токены выдаются через отдельный sign-in)
-  return { userId: adminRes.data?.id || adminRes.data?.user?.id };
+// Создаёт/находит Supabase-пользователя по телефону и возвращает СТАБИЛЬНЫЙ uid
+// + одноразовый токен, по которому клиент установит НАСТОЯЩУЮ сессию. Без реальной
+// сессии RLS блокирует запись в user_app_state, и данные не синхронизируются между
+// устройствами. Требует env SUPABASE_SERVICE_ROLE_KEY и SUPABASE_URL.
+async function createOrSignInSupabaseUser(phone) {
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+  const supabaseUrl = process.env.SUPABASE_URL || "";
+  if (!serviceRoleKey || !supabaseUrl) return null;
+
+  // Детерминированный email → один и тот же телефон всегда даёт один и тот же uid.
+  const digits = String(phone).replace(/\D/g, "");
+  const email = `phone_${digits}@drivex.app`;
+
+  // 1) Идемпотентно создаём пользователя. Если уже есть — GoTrue вернёт 422,
+  //    это нормально; uid возьмём из generate_link ниже.
+  await supabaseAdminRequest("POST", "/auth/v1/admin/users", {
+    email,
+    phone,
+    email_confirm: true,
+    phone_confirm: true,
+    user_metadata: { phone, role: "buyer" }
+  });
+
+  // 2) Генерируем magic-link → одноразовый токен. Клиент обменяет его на сессию
+  //    через supabase.auth.verifyOtp({ token_hash }). Поле hashed_token/email_otp
+  //    лежит либо в properties (новый GoTrue), либо в корне ответа.
+  const linkRes = await supabaseAdminRequest("POST", "/auth/v1/admin/generate_link", {
+    type: "magiclink",
+    email
+  });
+  if (!linkRes || !linkRes.data) return null;
+
+  const root = linkRes.data;
+  const props = root.properties || root;
+  const userId = (root.user && root.user.id) || root.id || null;
+  return {
+    userId,
+    email,
+    tokenHash: props.hashed_token || "",
+    emailOtp: props.email_otp || ""
+  };
 }
 
 // Обработка сообщений от Telegram бота
@@ -743,6 +928,11 @@ const server = http.createServer(async (req, res) => {
 
   if (url.pathname === "/api/service-centers") {
     await handleServiceCentersRoute(req, res);
+    return;
+  }
+
+  if (url.pathname === "/api/market/reviews") {
+    await handleMarketReviewsRoute(req, res, url);
     return;
   }
 

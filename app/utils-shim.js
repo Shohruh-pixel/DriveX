@@ -28,7 +28,7 @@
     // Buyer models
     'normalizeBuyerSession','normalizeBuyerProfile','createDefaultBuyerProfile',
     'buyerSessionToProfile','makeBuyerSessionFromSupabaseUser','makeBuyerSessionFromLocalUser',
-    'makeBuyerId','normalizeSavedPlacesList',
+    'makeBuyerId','normalizeSavedPlacesList','normalizeFavorite','normalizeFavoritesList',
     'readBuyerLocalStorage','writeBuyerLocalStorage','readLocalBuyerUsers','writeLocalBuyerUsers',
     'getBuyerLocalStorageKey','clearBuyerLocalStorageForSession',
     'fetchProfileFromSupabase','syncProfileToSupabase','uploadAvatarToStorage',
@@ -40,6 +40,11 @@
     'getRelatedMarketProducts','filterMarketProducts','normalizeMarketSearchText',
     'buildMarketplaceRuntimeData','setMarketplaceRuntime',
     'parseMarketCartKey','createMarketCartKey',
+    'marketFavoritesStore','marketRatingsStore',
+    'useMarketFavorites','getMarketFavoriteKey','getMarketFavoriteProducts',
+    'useMarketRatings','getMarketProductRating','getMarketStoreRating',
+    'normalizeProductCompatibility','productMatchesCar','getMarketProductQuestionThreadId','getMarketStoreRating',
+    'normalizeProductCompatibility','productMatchesCar','getMarketStoreRating',
     'createMarketplaceCheckoutDraft','syncMarketplaceCheckoutDraft','normalizeMarketplaceOrder',
     'normalizeMarketplaceOrdersList','normalizeMarketCheckoutDraft',
 

@@ -1,0 +1,250 @@
+/* ═══════════════════════════════════════════════════════════════════
+   DRIVEX Seller — редизайн онбординга/входа/регистрации (.sx scope)
+   Дизайн-токены из design_handoff_drivex_seller. Зелёный акцент + Manrope.
+   ═══════════════════════════════════════════════════════════════════ */
+.sx {
+  --sx-bg: #0B0E15;
+  --sx-card: #141927;
+  --sx-field: #1B2133;
+  --sx-border: rgba(255, 255, 255, 0.08);
+  --sx-text: #F2F4F9;
+  --sx-dim: #9AA3B5;
+  --sx-faint: #6B7488;
+  --sx-acc1: #10B981;
+  --sx-acc2: #0D9488;
+  --sx-link: #6EE7B7;
+  --sx-glow: rgba(16, 185, 129, 0.6);
+  --r: 20px;
+}
+
+.sx-screen {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--sx-bg);
+  color: var(--sx-text);
+  font-family: 'Manrope', sans-serif;
+  padding: 24px 28px 28px;
+  box-sizing: border-box;
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+.sx-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--sx-faint);
+  font-size: 13px;
+  font-weight: 600;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  align-self: flex-start;
+}
+
+.sx-logo {
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: #fff;
+  background: linear-gradient(135deg, var(--sx-acc1), var(--sx-acc2));
+  box-shadow: 0 8px 24px -8px var(--sx-glow);
+}
+
+.sx-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  margin-top: 22px;
+}
+
+.sx-eyebrow {
+  margin-top: 16px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  color: var(--sx-link);
+}
+
+.sx-h1 {
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+.sx-h1-onb { margin-top: 10px; font-size: 27px; line-height: 1.2; }
+.sx-h1-login { margin-top: 18px; font-size: 24px; }
+.sx-h1-step { margin-top: 18px; font-size: 23px; }
+
+.sx-sub {
+  margin: 10px 0 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--sx-dim);
+  font-weight: 500;
+}
+
+/* Карточка шагов онбординга */
+.sx-steps-card {
+  margin-top: 24px;
+  background: var(--sx-card);
+  border: 1px solid var(--sx-border);
+  border-radius: 20px;
+  padding: 22px 22px 20px;
+}
+.sx-step-row { display: flex; gap: 14px; align-items: stretch; }
+.sx-step-rail { display: flex; flex-direction: column; align-items: center; }
+.sx-step-num {
+  width: 30px; height: 30px; border-radius: 10px; flex-shrink: 0;
+  background: linear-gradient(135deg, var(--sx-acc1), var(--sx-acc2));
+  display: grid; place-items: center; font-size: 13px; font-weight: 800; color: #fff;
+}
+.sx-step-line { width: 2px; flex: 1; min-height: 14px; background: var(--sx-border); border-radius: 1px; margin-top: 6px; }
+.sx-step-body { padding-bottom: 18px; }
+.sx-step-body-last { padding-bottom: 0; }
+.sx-step-title { font-size: 15px; font-weight: 700; line-height: 1.2; }
+.sx-step-desc { font-size: 13px; color: var(--sx-dim); margin-top: 3px; line-height: 1.45; }
+
+/* Низ экрана */
+.sx-bottom { margin-top: auto; padding-top: 24px; display: flex; flex-direction: column; gap: 16px; }
+
+/* CTA */
+.sx-cta {
+  width: 100%; height: 54px; border: none; border-radius: var(--r);
+  background: linear-gradient(95deg, var(--sx-acc1), var(--sx-acc2));
+  color: #fff; font-family: 'Manrope', sans-serif; font-size: 16px; font-weight: 700;
+  letter-spacing: 0.01em; cursor: pointer; box-shadow: 0 10px 28px -10px var(--sx-glow);
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  transition: filter 0.15s ease, transform 0.15s ease;
+}
+.sx-cta:hover { filter: brightness(1.06); }
+.sx-cta:active { transform: scale(0.98); }
+.sx-cta:disabled { opacity: 0.6; cursor: default; }
+
+/* Ghost-кнопка */
+.sx-ghost {
+  width: 100%; height: 50px; border-radius: var(--r); background: transparent;
+  border: 1px solid var(--sx-border); color: var(--sx-text);
+  font-family: 'Manrope', sans-serif; font-size: 15px; font-weight: 600; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+}
+.sx-google-g {
+  width: 20px; height: 20px; border-radius: 50%; background: #fff; color: #1a1a1a;
+  display: grid; place-items: center; font-size: 12px; font-weight: 800;
+}
+
+/* Foot-link */
+.sx-foot { text-align: center; font-size: 14px; color: var(--sx-faint); font-weight: 500; }
+.sx-foot-action { color: var(--sx-link); font-weight: 700; cursor: pointer; }
+
+/* Подсказка + акцентная ghost-кнопка регистрации на экране входа */
+.sx-reg-prompt { text-align: center; font-size: 13.5px; color: var(--sx-dim); font-weight: 500; }
+.sx-ghost-accent {
+  border-color: rgba(16, 185, 129, 0.5);
+  color: var(--sx-link);
+  font-weight: 700;
+}
+.sx-ghost-accent:active { transform: scale(0.98); }
+
+/* Поля */
+.sx-form { display: flex; flex-direction: column; gap: 16px; }
+.sx-field { display: flex; flex-direction: column; gap: 7px; }
+.sx-field > label, .sx-field-label { font-size: 13px; font-weight: 600; color: var(--sx-dim); }
+.sx-field-box {
+  height: 50px; border-radius: var(--r); background: var(--sx-field);
+  border: 1px solid var(--sx-border); display: flex; align-items: center; padding: 0 16px; gap: 10px;
+}
+.sx-input {
+  flex: 1; min-width: 0; background: none; border: none; outline: none;
+  font-family: 'Manrope', sans-serif; font-size: 15px; font-weight: 500; color: var(--sx-text);
+}
+.sx-input::placeholder { color: var(--sx-faint); }
+.sx-select { appearance: none; -webkit-appearance: none; cursor: pointer; }
+.sx-select option { background: var(--sx-card); color: var(--sx-text); }
+.sx-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+/* Префикс телефона +992 */
+.sx-phone-prefix {
+  font-size: 15px; font-weight: 600; color: var(--sx-dim); flex-shrink: 0;
+  padding-right: 10px; border-right: 1px solid var(--sx-border); margin-right: 2px;
+}
+
+/* Поле времени работы (нативный time picker) */
+.sx-time-box { gap: 8px; }
+.sx-time {
+  flex: 1; text-align: center; cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+.sx-time::-webkit-calendar-picker-indicator { filter: invert(0.7); cursor: pointer; }
+.sx-time-dash { color: var(--sx-faint); font-weight: 700; flex-shrink: 0; }
+
+.sx-link-btn { font-size: 13px; font-weight: 700; color: var(--sx-link); cursor: pointer; white-space: nowrap; }
+
+.sx-row-between { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+
+/* Switch «Запомнить» */
+.sx-switch-row { display: flex; align-items: center; gap: 9px; cursor: pointer; }
+.sx-switch-row span { font-size: 13.5px; font-weight: 600; color: var(--sx-dim); }
+.sx-switch { width: 36px; height: 21px; border-radius: 11px; background: rgba(255,255,255,0.12); position: relative; transition: background 0.15s ease; }
+.sx-switch.is-on { background: linear-gradient(95deg, var(--sx-acc1), var(--sx-acc2)); }
+.sx-switch-knob { position: absolute; top: 2.5px; left: 2.5px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform 0.15s ease; }
+.sx-switch.is-on .sx-switch-knob { transform: translateX(15px); }
+
+/* Разделитель «или» */
+.sx-divider { display: flex; align-items: center; gap: 12px; color: var(--sx-faint); font-size: 12px; font-weight: 600; }
+.sx-divider span { flex: 1; height: 1px; background: var(--sx-border); }
+
+.sx-error { margin: 12px 0 0; font-size: 13px; font-weight: 600; color: #f87171; }
+.sx-hint-center { text-align: center; font-size: 13px; color: var(--sx-faint); font-weight: 600; }
+
+/* Прогресс-бар регистрации */
+.sx-stepper { margin-top: 20px; }
+.sx-stepper-bars { display: flex; gap: 6px; }
+.sx-stepper-bar { flex: 1; height: 4px; border-radius: 2px; background: rgba(255,255,255,0.10); transition: background 0.3s ease; }
+.sx-stepper-bar.is-done { background: linear-gradient(95deg, var(--sx-acc1), var(--sx-acc2)); }
+.sx-stepper-label { margin-top: 10px; font-size: 13px; font-weight: 700; color: var(--sx-dim); }
+.sx-stepper-label b { color: var(--sx-text); }
+
+/* Логотип-пикер (шаг 2) */
+.sx-logo-pick { display: flex; align-items: center; gap: 14px; cursor: pointer; }
+.sx-logo-drop {
+  width: 58px; height: 58px; border-radius: 18px; border: 1.5px dashed rgba(255,255,255,0.22);
+  display: grid; place-items: center; color: var(--sx-faint); flex-shrink: 0; overflow: hidden;
+}
+.sx-logo-title { font-size: 14.5px; font-weight: 700; }
+.sx-logo-hint { font-size: 13px; color: var(--sx-dim); margin-top: 2px; }
+
+/* Карта (шаг 3) */
+.sx-map-wrap { position: relative; height: 160px; border-radius: 18px; overflow: hidden; border: 1px solid var(--sx-border); }
+.sx-map { width: 100%; height: 100%; }
+.sx-map-hint {
+  position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none;
+  background: rgba(11, 14, 21, 0.45);
+}
+.sx-map-hint span { font-size: 12.5px; font-weight: 600; color: var(--sx-text); background: rgba(20,25,39,0.85); padding: 6px 12px; border-radius: 12px; }
+.sx-landmark {
+  width: 100%; height: 46px; border-radius: var(--r); background: var(--sx-field);
+  border: 1px solid var(--sx-border); padding: 0 16px; box-sizing: border-box;
+  font-family: 'Manrope', sans-serif; font-size: 14px; font-weight: 500; color: var(--sx-text); outline: none;
+}
+.sx-landmark::placeholder { color: var(--sx-faint); }
+
+/* Чипы «Доставка / Самовывоз» */
+.sx-chips { display: flex; gap: 10px; }
+.sx-chip {
+  flex: 1; height: 46px; border-radius: var(--r); border: 1px solid var(--sx-border); background: var(--sx-field);
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  font-family: 'Manrope', sans-serif; font-size: 14.5px; font-weight: 700; color: var(--sx-dim); cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+.sx-chip.is-active { border: 1.5px solid var(--sx-acc1); background: rgba(16, 185, 129, 0.14); color: var(--sx-text); }
+
+.sx-textarea {
+  height: 84px; border-radius: var(--r); background: var(--sx-field); border: 1px solid var(--sx-border);
+  padding: 13px 16px; font-family: 'Manrope', sans-serif; font-size: 14.5px; color: var(--sx-text);
+  box-sizing: border-box; line-height: 1.45; resize: none; outline: none;
+}
+.sx-textarea::placeholder { color: var(--sx-faint); }

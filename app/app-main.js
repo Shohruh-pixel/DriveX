@@ -14,10 +14,15 @@
   const BottomNav   = function(p){ return window.DX.BottomNav ? window.DX.BottomNav(p) : null; };
   const SimplePage  = function(p){ var F=window.DX.SimplePage; return F ? F(p) : (p.children||null); };
   const ToastProvider = function(p){ var F=window.DX.ToastProvider; return F ? F(p) : (p.children||null); };
+  const ConfirmProvider = function(p){ var F=window.DX.ConfirmProvider; return F ? F(p) : (p.children||null); };
 
   // ── useToast: напрямую через context (не через DX wrapper) ───────────
   const ToastContext = window.DX.ToastContext || createContext({ push: function(){} });
   function useToast(){ return useContext(ToastContext); }
+
+  // ── useConfirm: внутри-приложенческое модальное подтверждение ─────────
+  const ConfirmContext = window.DX.ConfirmContext || createContext({ confirm: function(){ return Promise.resolve(true); } });
+  function useConfirm(){ return useContext(ConfirmContext); }
 
   // ── normalizePath и useHashPath: прямые реализации (без DX proxy) ────
   function normalizePath(p) {
@@ -200,11 +205,18 @@
   function App() {
     const path = useHashPath();
     const toast = useToast();
+    const { confirm } = useConfirm();
     const sellerSyncChannelRef = useRef(null);
     const sharedAppStateReadyRef = useRef(false);
     const sharedAppStateUpdatedAtRef = useRef({});
     const buyerStateReadyRef = useRef(!getSupabaseClient());
     const recentBuyerSavesRef = useRef({});
+    // Метки недавних локальных изменений seller-заказов/уведомлений. Продавец —
+    // владелец этих данных; сразу после его правки (напр. смены статуса заказа)
+    // фоновый polling НЕ должен применить устаревший общий снапшот и откатить статус.
+    const recentSellerSavesRef = useRef({});
+    // Индикатор загрузки личных данных из облака (после входа / при старте)
+    const [buyerStateLoading, setBuyerStateLoading] = useState(false);
     // Stable refs — позволяют useEffect([]) читать актуальные функции без перезапуска
     const applySharedStateSnapshotRef = useRef(null);
     const applyBuyerAppStateRef      = useRef(null);
@@ -277,6 +289,14 @@
     });
     savedPlaces = userSavedPlaces;
     if (window.DX && window.DX._savedPlacesRef) window.DX._savedPlacesRef.val = userSavedPlaces;
+    const [favorites, setFavorites] = useState(() => {
+      try {
+        const raw = readBuyerLocalStorage(drivexStorageKeys.favorites, buyerSession);
+        return normalizeFavoritesList(raw ? raw : []);
+      } catch {
+        return [];
+      }
+    });
     const [buyerAuthStatus, setBuyerAuthStatus] = useState(() => getBuyerAuthStatus());
     const [profile, setProfile] = useState(() => {
       const fallback = createDefaultBuyerProfile();
@@ -678,6 +698,13 @@
           return;
         }
 
+        if (key === drivexStorageKeys.favorites) {
+          const normalized = normalizeFavoritesList(nextValue);
+          setFavorites(normalized);
+          try { if (typeof marketFavoritesStore !== "undefined") marketFavoritesStore.setAll(normalized, { silent: true }); } catch {}
+          return;
+        }
+
         if (key === drivexStorageKeys.documents) {
           // Supabase хранит только HTTPS URL (data URL вырезаются при сохранении)
           // localStorage хранит полные данные включая data URL
@@ -734,11 +761,15 @@
         if (key === drivexStorageKeys.maintenance) {
           const source = nextValue && typeof nextValue === "object" ? nextValue : createEmptyMaintenanceState();
           const next = createEmptyMaintenanceState();
-          for (const car of garageCars) {
-            const carState = source.cars && source.cars[car.id] && typeof source.cars[car.id] === "object"
-              ? source.cars[car.id]
+          // Берём car id и из облака (source.cars), и из гаража — иначе при входе,
+          // когда гараж ещё не загрузился, записи ТО терялись.
+          const sourceCars = source.cars && typeof source.cars === "object" ? source.cars : {};
+          const carIds = new Set([...Object.keys(sourceCars), ...garageCars.map((c) => c.id)]);
+          for (const carId of carIds) {
+            const carState = sourceCars[carId] && typeof sourceCars[carId] === "object"
+              ? sourceCars[carId]
               : {};
-            next.cars[car.id] = {
+            next.cars[carId] = {
               records: (Array.isArray(carState.records) ? carState.records : [])
                 .map((item) => normalizeMaintenanceRecord(item))
                 .filter(Boolean)
@@ -880,7 +911,27 @@
         }
 
         if (key === drivexStorageKeys.orderChats) {
-          setOrderChats(nextValue === null ? {} : normalizeOrderChatsMap(nextValue));
+          setOrderChats((prev) => {
+            if (nextValue === null) return {};
+            const incoming = normalizeOrderChatsMap(nextValue);
+            if (!prev || !Object.keys(prev).length) return incoming;
+            const merged = { ...prev };
+            for (const [orderId, thread] of Object.entries(incoming)) {
+              if (!thread) continue;
+              const existingThread = merged[orderId];
+              if (!existingThread) { merged[orderId] = thread; continue; }
+              const existingMsgs = Array.isArray(existingThread.messages) ? existingThread.messages : [];
+              const incomingMsgs = Array.isArray(thread.messages) ? thread.messages : [];
+              const msgsById = new Map();
+              for (const m of existingMsgs) { if (m && m.id) msgsById.set(m.id, m); }
+              for (const m of incomingMsgs) { if (m && m.id) msgsById.set(m.id, m); }
+              const messages = Array.from(msgsById.values()).sort((a, b) =>
+                (a.sentAt || "") < (b.sentAt || "") ? -1 : 1
+              );
+              merged[orderId] = { ...existingThread, ...thread, messages };
+            }
+            return merged;
+          });
           return;
         }
 
@@ -924,12 +975,6 @@
     const pushBuyerState = useCallback(
       (key, nextValue) => {
         try {
-          recentBuyerSavesRef.current = recentBuyerSavesRef.current || {};
-          recentBuyerSavesRef.current[key] = Date.now();
-        } catch {
-          // ignore
-        }
-        try {
           if (typeof window !== "undefined" && window.localStorage) {
             console.debug && console.debug("[pushBuyerState]", { key, buyerId: buyerSession?.id || null });
             if (buyerSession?.authenticated && buyerSession.id) {
@@ -950,9 +995,20 @@
           // local cache is best effort
         }
 
-        if (buyerSession?.authenticated && buyerSession.id) {
-          // Всегда сохраняем в Supabase если авторизованы
-          // buyerStateReadyRef убран — иначе изменения до fetchBuyerAppState теряются
+        if (buyerSession?.authenticated && buyerSession.id && buyerStateReadyRef.current) {
+          // Сохраняем в Supabase ТОЛЬКО после первичной загрузки серверного состояния
+          // (buyerStateReadyRef === true). Иначе сброс к дефолтам при логине/перезагрузке
+          // успевает перезаписать реальные данные пользователя пустыми значениями.
+          // localStorage пишется выше без гейта — локальные правки не теряются.
+          // Метку «недавнего сохранения» ставим ТОЛЬКО при реальной отправке на сервер —
+          // иначе сброс к дефолтам (gated) помечал бы ключи и блокировал применение
+          // серверных данных (skipRecent) при первичной загрузке → пустой гараж.
+          try {
+            recentBuyerSavesRef.current = recentBuyerSavesRef.current || {};
+            recentBuyerSavesRef.current[key] = Date.now();
+          } catch {
+            // ignore
+          }
           saveBuyerAppState(buyerSession, key, nextValue).catch(() => {
             // Supabase sync should not break the current in-memory session.
           });
@@ -968,8 +1024,21 @@
         const onlyLiveKeys = Boolean(options.onlyLiveKeys);
         const includeBuyerPersonal = Boolean(options.includeBuyerPersonal);
 
+        // Идентичность продавца (сессия/профиль/магазин/товары) принадлежит
+        // seller-бэкенду (локальная БД в local-режиме, Supabase иначе), а не общему
+        // app-state.json. Видимость товаров для покупателей идёт через marketplaceCatalog.
+        // Если применять эти ключи из общего снапшота, устаревшие данные затирают
+        // корректное состояние, восстановленное из seller-бэкенда. Поэтому пропускаем их.
+        const sellerBackendOwnedKeys = new Set([
+          drivexStorageKeys.sellerSession,
+          drivexStorageKeys.sellerProfile,
+          drivexStorageKeys.sellerStore,
+          drivexStorageKeys.sellerProducts
+        ]);
+
         for (const [key, entry] of Object.entries(sharedState)) {
           if (!includeBuyerPersonal && buyerPersonalStorageKeys.has(key)) continue;
+          if (sellerBackendOwnedKeys.has(key)) continue;
           if (onlyLiveKeys && !liveSharedAppStateKeys.has(key)) continue;
           const value = entry && typeof entry === "object" && Object.prototype.hasOwnProperty.call(entry, "value")
             ? entry.value
@@ -997,6 +1066,15 @@
           const skipRecent = buyerPersonalStorageKeys.has(key) && Date.now() - recent < 5000; // 5s grace to avoid race with recent local save
           if (skipRecent) {
             console.debug && console.debug("[applySharedStateSnapshot] skip applying recent buyer key", { key });
+            continue;
+          }
+
+          // Та же защита для seller-заказов/уведомлений: после локальной правки продавца
+          // не даём устаревшему снапшоту откатить статус (напр. «Подтверждён» → «Новый»),
+          // пока POST не долетит до общего состояния.
+          const recentSeller = (recentSellerSavesRef.current && recentSellerSavesRef.current[key]) || 0;
+          if ((key === drivexStorageKeys.sellerOrders || key === drivexStorageKeys.sellerNotifications) && Date.now() - recentSeller < 5000) {
+            console.debug && console.debug("[applySharedStateSnapshot] skip applying recent seller key", { key });
             continue;
           }
 
@@ -1158,6 +1236,16 @@
         }
       }).catch(() => {});
 
+      // Реальные оценки товаров из отзывов покупателей
+      const reviewsApi = window.DrivexMarketReviews;
+      if (reviewsApi && typeof reviewsApi.loadRatingsSummary === "function") {
+        reviewsApi.loadRatingsSummary().then((summaryMap) => {
+          if (!cancelled && summaryMap && typeof marketRatingsStore !== "undefined") {
+            marketRatingsStore.setAll(summaryMap);
+          }
+        }).catch(() => {});
+      }
+
       return () => { cancelled = true; };
     }, []);
 
@@ -1170,6 +1258,7 @@
         setUserGarageCars([]);
         setActiveCarId("");
         setUserSavedPlaces([]);
+        setFavorites([]);
         setDocuments(createEmptyDocumentsState());
         setMaintenance(createEmptyMaintenanceState());
         setBuyerOrders([]);
@@ -1196,9 +1285,40 @@
       (state) => {
         // Всегда ставим ready=true — иначе saveBuyerAppState никогда не вызывается
         if (state && typeof state === "object") {
-          applySharedStateSnapshot(state, { includeBuyerPersonal: true });
+          // Защита от потери данных: НЕ применяем пустые/дефолтные серверные значения
+          // поверх реальных локальных данных (иначе «отравленный» дефолтами сервер
+          // затирал бы машины/профиль покупателя при каждой перезагрузке).
+          const defaultProfileName = createDefaultBuyerProfile().name;
+          const isEmptyStateValue = (key, value) => {
+            if (value === null || value === undefined) return true;
+            if (Array.isArray(value)) return value.length === 0;
+            if (typeof value === "string") return value.trim() === "";
+            if (typeof value === "object") {
+              if (key === drivexStorageKeys.profile) {
+                return (!value.name || value.name === defaultProfileName) && !value.phone && !value.avatar;
+              }
+              const vals = Object.values(value);
+              if (!vals.length) return true;
+              return vals.every((v) =>
+                v === null || v === undefined ||
+                (Array.isArray(v) && v.length === 0) ||
+                (typeof v === "object" && v && Object.keys(v).length === 0) ||
+                (typeof v === "string" && v.trim() === "")
+              );
+            }
+            return false;
+          };
+          const filtered = {};
+          for (const [key, entry] of Object.entries(state)) {
+            const value = entry && typeof entry === "object" && Object.prototype.hasOwnProperty.call(entry, "value")
+              ? entry.value
+              : entry;
+            if (!isEmptyStateValue(key, value)) filtered[key] = entry;
+          }
+          applySharedStateSnapshot(filtered, { includeBuyerPersonal: true });
         }
         buyerStateReadyRef.current = true;
+        setBuyerStateLoading(false); // данные загружены — убираем индикатор
       },
       [applySharedStateSnapshot]
     );
@@ -1221,6 +1341,9 @@
           const fn = applyBuyerSessionRef.current;
           const session = fn && fn(makeBuyerSessionFromSupabaseUser(data.session.user));
           if (!session) return;
+          // Блокирующий оверлей только при первой загрузке. Фоновые ресинки
+          // (token refresh, focus) не должны перекрывать уже отрисованный UI.
+          if (!buyerStateReadyRef.current) setBuyerStateLoading(true);
           fetchBuyerAppState(session)
             .then((state) => {
               if (!cancelled) {
@@ -1228,7 +1351,7 @@
                 applyFn && applyFn(state || {});
               }
             })
-            .catch(() => { buyerStateReadyRef.current = true; });
+            .catch(() => { buyerStateReadyRef.current = true; setBuyerStateLoading(false); });
         })
         .catch(() => {});
 
@@ -1238,6 +1361,8 @@
           const fn = applyBuyerSessionRef.current;
           const nextSession = fn && fn(makeBuyerSessionFromSupabaseUser(session.user));
           if (!nextSession) return;
+          // Блокирующий оверлей только при первой загрузке (см. выше).
+          if (!buyerStateReadyRef.current) setBuyerStateLoading(true);
           fetchBuyerAppState(nextSession)
             .then((state) => {
               if (!cancelled) {
@@ -1245,9 +1370,10 @@
                 applyFn && applyFn(state || {});
               }
             })
-            .catch(() => { buyerStateReadyRef.current = true; });
+            .catch(() => { buyerStateReadyRef.current = true; setBuyerStateLoading(false); });
         } else {
           buyerStateReadyRef.current = !getSupabaseClient();
+          setBuyerStateLoading(false);
           setBuyerSession(createEmptyBuyerSession());
         }
       });
@@ -1292,12 +1418,14 @@
         const nextCars = {};
         for (const car of userGarageCars) {
           const carDocs = current.cars && current.cars[car.id] ? current.cars[car.id] : {};
+          // Документы хранятся двусторонними ({front, back}) — нормализуем тем же
+          // нормализатором, что и при загрузке (normalizeSidedDoc), иначе обнуляются.
           nextCars[car.id] = {
-            registration: normalizeDocumentItem(carDocs.registration, `Техпаспорт ${car.name}`),
-            inspection: normalizeDocumentItem(carDocs.inspection, `Техосмотр ${car.name}`)
+            registration: normalizeSidedDoc(carDocs.registration),
+            inspection: normalizeSidedDoc(carDocs.inspection)
           };
         }
-        return { license: normalizeDocumentItem(current.license, "Права"), cars: nextCars };
+        return { license: normalizeSidedDoc(current.license), cars: nextCars };
       });
 
       setMaintenance((prev) => {
@@ -1321,6 +1449,22 @@
     }, [pushBuyerState, userSavedPlaces]);
 
     useEffect(() => {
+      pushBuyerState(drivexStorageKeys.favorites, favorites);
+    }, [pushBuyerState, favorites]);
+
+    useEffect(() => {
+      try {
+        if (typeof marketFavoritesStore === "undefined") return;
+        marketFavoritesStore.setAll(Array.isArray(favorites) ? favorites : [], { silent: true });
+        return marketFavoritesStore.subscribe(() => {
+          const list = marketFavoritesStore.list();
+          setFavorites(list);
+          pushBuyerState(drivexStorageKeys.favorites, list);
+        });
+      } catch { /* ignore if store not ready */ }
+    }, [buyerSession?.id]);  // eslint-disable-line
+
+    useEffect(() => {
       pushBuyerState(drivexStorageKeys.activeCar, activeCarId);
     }, [activeCarId, pushBuyerState]);
 
@@ -1339,7 +1483,9 @@
       } catch {
         // ignore
       }
-      if (sharedAppStateReadyRef.current) saveSharedAppState(drivexStorageKeys.sellerSession, sellerSession).catch(() => {});
+      // НЕ синхронизируем идентичность продавца в общий app-state.json —
+      // источник истины это seller-бэкенд (локальная БД / Supabase). Иначе
+      // устаревшие данные одного браузера затирают корректное состояние.
     }, [sellerSession]);
 
     useEffect(() => {
@@ -1349,7 +1495,7 @@
       } catch {
         toast.push("Не удалось сохранить seller профиль");
       }
-      if (sharedAppStateReadyRef.current) saveSharedAppState(drivexStorageKeys.sellerProfile, sellerProfile).catch(() => {});
+      // Идентичность продавца не уходит в общий app-state.json (см. sellerSession).
     }, [sellerProfile, toast]);
 
     useEffect(() => {
@@ -1359,7 +1505,7 @@
       } catch {
         toast.push("Не удалось сохранить настройки seller магазина");
       }
-      if (sharedAppStateReadyRef.current) saveSharedAppState(drivexStorageKeys.sellerStore, sellerStore).catch(() => {});
+      // Идентичность продавца не уходит в общий app-state.json (см. sellerSession).
     }, [sellerStore, toast]);
 
     useEffect(() => {
@@ -1373,7 +1519,8 @@
       } catch {
         toast.push("Не удалось сохранить seller товары");
       }
-      if (sharedAppStateReadyRef.current) saveSharedAppState(drivexStorageKeys.sellerProducts, compactProducts).catch(() => {});
+      // Товары продавца видны покупателям через marketplaceCatalog (см. applySellerBackendAppState),
+      // а не через прямую запись в общий app-state.json. Это исключает гонку устаревших данных.
     }, [sellerProducts, sellerSession.sellerStoreId, toast]);
 
     useEffect(() => {
@@ -1592,7 +1739,8 @@
 
     useEffect(() => {
       pushBuyerState(drivexStorageKeys.orderChats, orderChats);
-    }, [orderChats, pushBuyerState]);
+      pushSharedState(drivexStorageKeys.orderChats, orderChats);
+    }, [orderChats, pushBuyerState, pushSharedState]);
 
     useEffect(() => {
       const normalizedCatalog = normalizeMarketplacePartnerCatalog(marketplacePartnerCatalog);
@@ -1759,6 +1907,30 @@
     const removeSavedPlace = useCallback((placeId) => {
       const safeId = String(placeId || "");
       setUserSavedPlaces((prev) => normalizeSavedPlacesList(prev).filter((place) => place.id !== safeId));
+    }, []);
+
+    // ── Избранное ──────────────────────────────────────────────────────────
+    const removeFavorite = useCallback((type, id) => {
+      const safeType = type === "product" ? "product" : "service";
+      const safeId = String(id || "");
+      setFavorites((prev) => normalizeFavoritesList(prev).filter((f) => !(f.type === safeType && f.id === safeId)));
+    }, []);
+
+    const toggleFavorite = useCallback((item) => {
+      const normalized = normalizeFavorite(item);
+      if (!normalized) return false;
+      let added = false;
+      setFavorites((prev) => {
+        const list = normalizeFavoritesList(prev);
+        const exists = list.some((f) => f.type === normalized.type && f.id === normalized.id);
+        if (exists) {
+          added = false;
+          return list.filter((f) => !(f.type === normalized.type && f.id === normalized.id));
+        }
+        added = true;
+        return [normalized, ...list];
+      });
+      return added;
     }, []);
 
     // side = "front" | "back"
@@ -2000,15 +2172,12 @@
           if (user?.id) {
             let userRow = null;
             try {
-              const _r = await client.from("users").select("role,full_name,cars,active_car_id").eq("id", user.id);
+              const _r = await client.from("users").select("role,full_name").eq("id", user.id);
               userRow = Array.isArray(_r.data) ? _r.data[0] : (_r.data || null);
             } catch(_) {}
             if (userRow?.role) actualRole = userRow.role;
-            // Загружаем машины если они уже есть
-            if (Array.isArray(userRow?.cars) && userRow.cars.length > 0) {
-              setUserGarageCars(normalizeGarageList(userRow.cars));
-              if (userRow.active_car_id) setActiveCarId(userRow.active_car_id);
-            }
+            // Машины/документы/ТО грузятся ТОЛЬКО из единого дерева (user_app_state)
+            // через fetchBuyerAppState ниже — не дублируем чтение из users.cars.
           }
 
           const session = user
@@ -2108,7 +2277,9 @@
           // - если передан реальный email → используем его
           // - если только телефон → генерируем phone-email
           const digits = rawPhone.replace(/\D/g, "");
-          const authEmail = email || (digits + "@phone.drivex.app");
+          // Единая схема phone-email во всех путях входа (совпадает с OTP в auth-phone.js),
+          // чтобы один номер всегда давал один и тот же Supabase-аккаунт (без дублей).
+          const authEmail = email || ("phone_" + digits + "@drivex.app");
 
           const { data, error } = await client.auth.signUp({
             email: authEmail,
@@ -2173,64 +2344,69 @@
 
         const client = getSupabaseClient();
         if (client) {
-          let authEmail = email;
-
-          // Вход по телефону: ищем email в public.users по номеру телефона
-          if (phone && !email) {
+          // Собираем кандидатов email и пробуем войти по очереди.
+          // Надёжно даже если в users записан неверный email: детерминированный
+          // phone_<digits>@drivex.app всегда среди кандидатов и будет проверен.
+          let candidateEmails = [];
+          if (email) {
+            candidateEmails = [email];
+          } else if (phone) {
             const digits = phone.replace(/\D/g, "");
-            // Ищем email пользователя по номеру телефона
             const normalizedPhone = phone.startsWith("+") ? phone : ("+" + digits);
-            let profileData = null;
+            let lookedUp = [];
             try {
-              const r1 = await client.from("users").select("email").eq("phone", normalizedPhone);
-              profileData = Array.isArray(r1.data) && r1.data.length ? r1.data[0] : null;
-              if (!profileData && normalizedPhone !== phone) {
-                const r2 = await client.from("users").select("email").eq("phone", phone);
-                profileData = Array.isArray(r2.data) && r2.data.length ? r2.data[0] : null;
-              }
-            } catch(_) {}
-            // Если нашли профиль с email — используем его
-            // Иначе используем phone-derived email (для новых пользователей)
-            authEmail = (profileData?.email) || (digits + "@phone.drivex.app");
+              const variants = Array.from(new Set([normalizedPhone, phone, "+" + digits]));
+              const r1 = await client.from("users").select("email").in("phone", variants);
+              lookedUp = Array.isArray(r1.data) ? r1.data.map((row) => row && row.email).filter(Boolean) : [];
+            } catch (_) {}
+            candidateEmails = Array.from(new Set([...lookedUp, "phone_" + digits + "@drivex.app"]));
           }
 
-          const { data, error } = await client.auth.signInWithPassword({ email: authEmail, password });
-          if (error) throw error;
+          let data = null;
+          let lastError = null;
+          let authEmail = candidateEmails[0] || email;
+          for (const em of candidateEmails) {
+            const r = await client.auth.signInWithPassword({ email: em, password });
+            if (!r.error) { data = r.data; authEmail = em; lastError = null; break; }
+            lastError = r.error;
+          }
+          if (!data) throw lastError || new Error("Неверный номер или пароль");
           const session = makeBuyerSessionFromSupabaseUser(data?.user);
 
-          // Загружаем полный профиль из Supabase
+          // Самолечение реестра: гарантируем строку в public.users с НАШИМ auth-id
+          // (раньше строки создавались с чужими id → дубли и нестабильный поиск по номеру).
+          try {
+            const selfDigits = String(session.phone || phone || "").replace(/\D/g, "");
+            const selfPhone = selfDigits ? ("+" + selfDigits) : "";
+            await client.from("users").upsert({
+              id: session.id,
+              full_name: session.name || "",
+              phone: selfPhone,
+              email: session.email || authEmail,
+              role: session.role || "buyer"
+            }, { onConflict: "id" }).catch(() => {});
+          } catch (_) {}
+
+          // Имя/телефон для подписи сессии берём из мини-реестра public.users.
+          // ВСЕ личные данные (машины, документы, ТО, заказы и т.д.) грузятся ТОЛЬКО
+          // из единого дерева user_app_state (fetchBuyerAppState ниже) — один источник.
           const supa = window.DrivexSupabaseData;
           if (supa && session.id) {
-            const [userProfile, orders, docs] = await Promise.all([
-              supa.loadUserProfile(session.id).catch(() => null),
-              supa.loadBuyerOrders(session.id).catch(() => null),
-              supa.loadDocuments(session.id).catch(() => null)
-            ]);
+            const userProfile = await supa.loadUserProfile(session.id).catch(() => null);
             if (userProfile) {
-              // Применяем имя, телефон из профиля
               session.name = userProfile.full_name || session.name;
               session.phone = userProfile.phone || session.phone;
-              // Загружаем машины
-              if (Array.isArray(userProfile.cars) && userProfile.cars.length) {
-                setUserGarageCars(normalizeGarageList(userProfile.cars));
-                if (userProfile.active_car_id) setActiveCarId(userProfile.active_car_id);
-              }
-            }
-            if (orders) {
-              setBuyerOrders(orders.map((o) => ({
-                id: o.id, storeId: o.store_id, amount: Number(o.total_amount) || 0,
-                status: o.status, date: String(o.created_at || "").slice(0, 10),
-                items: Array.isArray(o.items) ? o.items : []
-              })));
             }
           }
 
           applyBuyerSession(session);
+          setBuyerStateLoading(true);
           const state = await fetchBuyerAppState(session).catch(() => null);
           if (state) {
             applyBuyerAppState(state);
           } else {
             buyerStateReadyRef.current = true;
+            setBuyerStateLoading(false);
           }
           // Push токен
           const push = window.DrivexPush;
@@ -2253,6 +2429,15 @@
     );
 
     const logoutBuyer = useCallback(async () => {
+      const confirmed = await confirm({
+        title: "Выйти из аккаунта?",
+        message: "Ваши данные сохранены в облаке.",
+        confirmLabel: "Выйти",
+        cancelLabel: "Остаться",
+        danger: true,
+        icon: "lock"
+      });
+      if (!confirmed) return;
       const client = getSupabaseClient();
       if (client) {
         await client.auth.signOut().catch(() => {});
@@ -2267,9 +2452,11 @@
       }
       setBuyerSession(createEmptyBuyerSession());
       buyerStateReadyRef.current = !getSupabaseClient();
+      setBuyerStateLoading(false);
       setProfile(createDefaultBuyerProfile());
       setUserGarageCars([]);
       setUserSavedPlaces([]);
+      setFavorites([]);
       setActiveCarId("");
       setDocuments({ license: null, cars: {} });
       setMaintenance({ cars: {} });
@@ -2278,7 +2465,7 @@
       setCart({});
       navigateToHash("/login");
       toast.push("Вы вышли из аккаунта");
-    }, [buyerSession, toast]);
+    }, [buyerSession, toast, confirm]);
 
     const registerSeller = useCallback(
       async (payload) => {
@@ -2504,6 +2691,15 @@
               }
             : previousBridge;
 
+        // Помечаем локальную правку ДО setState, чтобы фоновый polling, который
+        // может сработать между optimistic-обновлением и POST, не откатил статус.
+        try {
+          recentSellerSavesRef.current = recentSellerSavesRef.current || {};
+          recentSellerSavesRef.current[drivexStorageKeys.sellerOrders] = Date.now();
+        } catch {
+          // ignore
+        }
+
         setSellerOrders(nextOrders);
         if (nextBridge !== previousBridge) {
           setSellerRouteBridge(nextBridge);
@@ -2528,8 +2724,12 @@
       const safeText = String(text || "").trim();
       if (!safeOrderId || !safeText) return;
 
-      setOrderChats((prev) => appendOrderChatMessage(prev, safeOrderId, { senderRole, text: safeText }));
-    }, []);
+      setOrderChats((prev) => {
+        const next = appendOrderChatMessage(prev, safeOrderId, { senderRole, text: safeText });
+        try { pushSharedState(drivexStorageKeys.orderChats, next); } catch {}
+        return next;
+      });
+    }, [pushSharedState]);
 
     const markOrderChatRead = useCallback((orderId, viewerRole) => {
       const safeOrderId = String(orderId || "").trim();
@@ -2537,9 +2737,11 @@
 
       setOrderChats((prev) => {
         if (!getOrderChatUnreadCount(prev, safeOrderId, viewerRole)) return prev;
-        return markOrderChatAsRead(prev, safeOrderId, viewerRole);
+        const next = markOrderChatAsRead(prev, safeOrderId, viewerRole);
+        try { pushSharedState(drivexStorageKeys.orderChats, next); } catch {}
+        return next;
       });
-    }, []);
+    }, [pushSharedState]);
 
     const saveSellerStore = useCallback(
       async (nextStore) => {
@@ -3477,7 +3679,9 @@
       .filter((item) => item.centerId === serviceCurrentCenter.id && !isDemoServiceFinanceEntry(item));
     const serviceScopedAppointments = normalizeServiceAppointmentsList(serviceAppointments, serviceCurrentCenter.id)
       .filter((item) => item.centerId === serviceCurrentCenter.id && !isDemoServiceAppointment(item));
-    const notificationsCount = baseNotificationsCount + buildBuyerServiceNotifications(serviceRequests).length;
+    const notificationsCount = (window.DX && typeof window.DX.countUnreadBuyerNotifications === "function")
+      ? window.DX.countUnreadBuyerNotifications(serviceRequests)
+      : (baseNotificationsCount + buildBuyerServiceNotifications(serviceRequests).length);
     const serviceDirectory = buildServiceDirectoryData(serviceCurrentCenter, {
       clients: serviceScopedClients,
       orders: serviceScopedOrders,
@@ -3511,6 +3715,7 @@
             documentsTotalCount=${documentsTotalCount}
             maintenance=${maintenance}
             ordersCount=${buyerActiveOrdersCount || buyerOrders.length}
+            favoritesCount=${favorites.length}
             onLogout=${logoutBuyer}
           />`
         : html`<${getScreen('BuyerAuthScreen')}
@@ -3815,10 +4020,12 @@
         activeCarId=${activeCarId}
         serviceCrmReady=${!serviceNeedsRegistration}
         serviceCenterName=${serviceCurrentCenter.name}
+        favorites=${favorites}
+        onToggleFavorite=${toggleFavorite}
       />`;
     } else if (normalized === "/market") {
       activePath = "/market";
-      content = html`<${getScreen('MarketScreen')} cartCount=${cartCount} onAddToCart=${addToCart} />`;
+      content = html`<${getScreen('MarketScreen')} cartCount=${cartCount} onAddToCart=${addToCart} favorites=${favorites} onToggleFavorite=${toggleFavorite} />`;
     } else if (normalized === "/marketplace/catalog") {
       activePath = "/market";
       content = html`<${getScreen('MarketCatalogScreen')} cartCount=${cartCount} onAddToCart=${addToCart} />`;
@@ -3841,13 +4048,14 @@
         documentsTotalCount=${documentsTotalCount}
         maintenance=${maintenance}
         ordersCount=${buyerActiveOrdersCount || buyerOrders.length}
+        favoritesCount=${favorites.length}
         onLogout=${logoutBuyer}
       />`;
     } else {
       const serviceBookingMatch = normalized.match(/^\/service\/([^/]+)\/book$/);
       const serviceMatch = normalized.match(/^\/service\/([^/]+)$/);
       const productMatch = normalized.match(/^\/(?:marketplace\/product|product)\/([^/]+)$/);
-      const marketStoreMatch = normalized.match(/^\/(?:marketplace\/store|market-store)\/([\w-]+)$/);
+      const marketStoreMatch = normalized.match(/^\/(?:marketplace\/store|market-store)\/([^/]+)$/);
       const categoryMatch = normalized.match(/^\/category\/([\w-]+)$/);
       const documentCarMatch = normalized.match(/^\/documents\/car\/([\w-]+)$/);
 
@@ -3879,7 +4087,7 @@
       } else if (marketStoreMatch) {
         activePath = "/market";
         content = html`<${getScreen('MarketStoreScreen')}
-          storeId=${marketStoreMatch[1]}
+          storeId=${decodeRouteSegment(marketStoreMatch[1])}
           onAddToCart=${addToCart}
         />`;
       } else if (categoryMatch) {
@@ -4003,7 +4211,7 @@
         content = html`<${getScreen('OrdersScreen')} orders=${buyerOrders} orderChats=${orderChats} />`;
       } else if (normalized === "/trips") {
         activePath = "/profile";
-        content = html`<${getScreen('TripsScreen')} />`;
+        content = html`<${getScreen('ComingSoonScreen')} title="История поездок" emoji="🛣️" subtitle="GPS-история поездок появится в одном из ближайших обновлений" />`;
       } else if (normalized === "/saved-locations") {
         activePath = "/profile";
         content = html`<${getScreen('SavedLocationsScreen')}
@@ -4011,21 +4219,27 @@
           onAddPlace=${addSavedPlace}
           onRemovePlace=${removeSavedPlace}
         />`;
+      } else if (normalized === "/favorites") {
+        activePath = "/profile";
+        content = html`<${getScreen('FavoritesScreen')}
+          favorites=${favorites}
+          onRemove=${removeFavorite}
+        />`;
       } else if (normalized === "/settings") {
         activePath = "/profile";
-        content = html`<${getScreen('SettingsScreen')} />`;
+        content = html`<${getScreen('SettingsScreen')} session=${buyerSession} />`;
       } else if (normalized === "/help") {
         activePath = "/profile";
         content = html`<${getScreen('HelpScreen')} />`;
       } else if (normalized === "/payment") {
         activePath = "/profile";
-        content = html`<${getScreen('PaymentDataScreen')} />`;
+        content = html`<${getScreen('ComingSoonScreen')} title="Платёжные данные" emoji="💳" subtitle="Управление картами появится в ближайшем обновлении" />`;
       } else if (normalized === "/bonus") {
         activePath = "/profile";
-        content = html`<${getScreen('BonusProgramScreen')} />`;
+        content = html`<${getScreen('ComingSoonScreen')} title="Бонусная программа" emoji="⭐" subtitle="Баллы и награды появятся в ближайшем обновлении" />`;
       } else if (normalized === "/invite") {
         activePath = "/profile";
-        content = html`<${getScreen('InviteFriendsScreen')} />`;
+        content = html`<${getScreen('ComingSoonScreen')} title="Пригласить друзей" emoji="🎁" subtitle="Реферальная программа появится в ближайшем обновлении" />`;
       } else {
         activePath = "/";
         content = html`<${getScreen('NotFoundScreen')} path=${normalized} />`;
@@ -4036,12 +4250,41 @@
       <div className="min-h-screen relative" style=${{ background: "var(--drivex-black)" }}>
         <main id="main">${content}</main>
         ${isSellerRoute || isPartnerRoute || isServiceCrmRoute ? null : html`<${BottomNav} activePath=${activePath} />`}
+        ${buyerStateLoading
+          ? html`
+              <div
+                className="fixed inset-0 z-50 flex items-center justify-center px-6"
+                style=${{ background: "rgba(2, 6, 12, 0.88)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", maxWidth: "480px", margin: "0 auto" }}
+                aria-live="polite"
+              >
+                <style>${"@keyframes drivexSpin{to{transform:rotate(360deg)}}"}</style>
+                <div className="flex flex-col items-center" style=${{ gap: "16px", textAlign: "center" }}>
+                  <div
+                    style=${{
+                      width: "52px",
+                      height: "52px",
+                      borderRadius: "9999px",
+                      border: "3px solid rgba(6, 182, 212, 0.25)",
+                      borderTopColor: "var(--drivex-neon-cyan)",
+                      animation: "drivexSpin 0.8s linear infinite"
+                    }}
+                  ></div>
+                  <p style=${{ color: "var(--drivex-white)", fontWeight: 700, fontSize: "16px" }}>
+                    Загружаем ваши данные…
+                  </p>
+                  <p style=${{ color: "var(--drivex-silver)", fontSize: "13px" }}>
+                    Синхронизация с облаком
+                  </p>
+                </div>
+              </div>
+            `
+          : null}
       </div>
     `;
   }
 
   function Root() {
-    return html`<${ToastProvider}><${App} /></${ToastProvider}>`;
+    return html`<${ToastProvider}><${ConfirmProvider}><${App} /></${ConfirmProvider}></${ToastProvider}>`;
   }
 
   const rootElement = document.getElementById("root");

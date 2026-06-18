@@ -924,11 +924,15 @@
   function ProductCard({ product, onAddToCart }) {
     const [addedPulse, setAddedPulse] = useState(false);
     const addedTimerRef = useRef(null);
+    const toast = useToast();
     const store = getMarketStore(product.storeId);
     const badgeColor = getMarketBadgeColor(product);
     const discount = getMarketDiscountPercent(product);
     const categoryMeta = marketCategories.find((category) => category.id === product.categoryId);
     const categoryColor = categoryMeta?.color || "var(--drivex-neon-cyan)";
+    const favorites = typeof useMarketFavorites === "function" ? useMarketFavorites() : { has: () => false, toggle: () => false };
+    const favoriteKey = typeof getMarketFavoriteKey === "function" ? getMarketFavoriteKey(product) : "";
+    const isFavorite = favorites.has(favoriteKey);
 
     useEffect(() => {
       return () => {
@@ -963,6 +967,20 @@
                 -${discount}%
               </span>`
             : null}
+          <button
+            type="button"
+            className=${`market-ui-fav ${isFavorite ? "is-active" : ""}`}
+            style=${{ width: "2rem", height: "2rem", right: "0.4rem", top: "0.4rem" }}
+            onClick=${(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              const added = favorites.toggle(favoriteKey);
+              toast.push(added ? "Добавлено в избранное" : "Убрано из избранного");
+            }}
+            aria-label=${isFavorite ? "Убрать из избранного" : "В избранное"}
+          >
+            <${Icon} name="heart" size=${14} />
+          </button>
           </div>
 
           <div className="market-ui-product-body">
@@ -1263,6 +1281,24 @@
                 </div>
               </a>
             `)}
+          </div>
+
+          <div className="glass-card rounded-2xl p-5 mt-4 mb-6" style=${{ border: "1px solid rgba(6,182,212,0.2)" }}>
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                style=${{ background: "linear-gradient(135deg, var(--drivex-neon-cyan) 0%, var(--drivex-electric-blue) 100%)" }}>
+                <${Icon} name="store" size=${20} />
+              </div>
+              <div>
+                <p className="font-bold text-sm" style=${{ color: "var(--drivex-white)" }}>Хотите продавать на DRIVEX?</p>
+                <p className="text-xs mt-0.5" style=${{ color: "var(--drivex-silver)" }}>Откройте магазин и начните продавать уже сегодня</p>
+              </div>
+            </div>
+            <a href="#/seller/register"
+              className="block w-full text-center py-3 rounded-xl font-semibold text-sm"
+              style=${{ background: "linear-gradient(135deg, var(--drivex-neon-cyan) 0%, var(--drivex-electric-blue) 100%)", color: "var(--drivex-black)" }}>
+              Зарегистрировать магазин →
+            </a>
           </div>
         </main>
       </div>
