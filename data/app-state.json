@@ -90,7 +90,7 @@
         ]
       }
     },
-    "updatedAt": "2026-06-19T11:12:45.140Z"
+    "updatedAt": "2026-06-19T14:07:09.311Z"
   },
   "drivex.market.catalog.v1": {
     "value": {
@@ -388,7 +388,7 @@
         }
       ]
     },
-    "updatedAt": "2026-06-19T11:12:41.833Z"
+    "updatedAt": "2026-06-19T14:07:07.280Z"
   },
   "drivex.seller.orders.v1": {
     "value": [
@@ -832,7 +832,7 @@
         "notes": ""
       }
     ],
-    "updatedAt": "2026-06-19T11:12:43.002Z"
+    "updatedAt": "2026-06-19T14:07:07.193Z"
   },
   "drivex.seller.notifications.v1": {
     "value": [
@@ -1266,7 +1266,7 @@
         "icon": "bag"
       }
     ],
-    "updatedAt": "2026-06-19T11:12:43.006Z"
+    "updatedAt": "2026-06-19T14:07:07.198Z"
   },
   "drivex.service.profile.v1": {
     "value": {
@@ -1278,7 +1278,7 @@
       "position": "Владелец сервиса",
       "registrationCompleted": false
     },
-    "updatedAt": "2026-06-19T11:02:53.564Z"
+    "updatedAt": "2026-06-19T14:05:59.810Z"
   },
   "drivex.service.center.v1": {
     "value": {
@@ -1301,30 +1301,30 @@
       "registrationCompleted": false,
       "status": "new"
     },
-    "updatedAt": "2026-06-19T11:12:43.010Z"
+    "updatedAt": "2026-06-19T14:07:07.204Z"
   },
   "drivex.service.clients.v1": {
     "value": [],
-    "updatedAt": "2026-06-19T11:12:43.012Z"
+    "updatedAt": "2026-06-19T14:07:07.212Z"
   },
   "drivex.service.orders.v1": {
     "value": [],
-    "updatedAt": "2026-06-19T11:12:43.015Z"
+    "updatedAt": "2026-06-19T14:07:07.216Z"
   },
   "drivex.service.inventory.v1": {
     "value": [],
-    "updatedAt": "2026-06-19T11:12:43.017Z"
+    "updatedAt": "2026-06-19T14:07:07.219Z"
   },
   "drivex.service.finance.v1": {
     "value": [],
-    "updatedAt": "2026-06-19T11:12:41.816Z"
+    "updatedAt": "2026-06-19T14:07:07.242Z"
   },
   "drivex.service.appointments.v1": {
     "value": [],
-    "updatedAt": "2026-06-19T11:12:41.820Z"
+    "updatedAt": "2026-06-19T14:07:07.245Z"
   },
   "drivex.service.requests.v1": {
     "value": [],
-    "updatedAt": "2026-06-19T11:12:41.822Z"
+    "updatedAt": "2026-06-19T14:07:07.254Z"
   }
 }
