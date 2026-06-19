@@ -74,9 +74,23 @@
             "readBySeller": false
           }
         ]
+      },
+      "6d89c015-2cc5-4a21-8981-26ebd36b6fcf": {
+        "orderId": "6d89c015-2cc5-4a21-8981-26ebd36b6fcf",
+        "messages": [
+          {
+            "id": "chat-message-1781865751842-7ab8d306f35e58",
+            "orderId": "6d89c015-2cc5-4a21-8981-26ebd36b6fcf",
+            "senderRole": "seller",
+            "text": "Салом",
+            "sentAt": "2026-06-19T10:42:31.842Z",
+            "readByBuyer": false,
+            "readBySeller": true
+          }
+        ]
       }
     },
-    "updatedAt": "2026-06-19T09:06:11.004Z"
+    "updatedAt": "2026-06-19T11:12:45.140Z"
   },
   "drivex.market.catalog.v1": {
     "value": {
@@ -374,7 +388,7 @@
         }
       ]
     },
-    "updatedAt": "2026-06-19T07:55:30.739Z"
+    "updatedAt": "2026-06-19T11:12:41.833Z"
   },
   "drivex.seller.orders.v1": {
     "value": [
@@ -748,7 +762,7 @@
           }
         ],
         "amount": 50,
-        "status": "new",
+        "status": "cancelled",
         "date": "2026-06-19",
         "deliveryMethod": "Самовывоз",
         "address": "Сомон",
@@ -769,14 +783,56 @@
           }
         ],
         "amount": 50,
-        "status": "new",
+        "status": "cancelled",
         "date": "2026-06-19",
         "deliveryMethod": "Доставка",
         "address": "ул. Сомони 25, кв. 10",
         "notes": ""
+      },
+      {
+        "id": "0ccd2b93-f8d3-4c0d-9f59-1ad2590e5e56",
+        "storeId": "rizo-tj-худжанд",
+        "storeName": "Rizo Tj",
+        "customerName": "Рахмонкулов  Илёсбек",
+        "customerPhone": "+992927400828",
+        "items": [
+          {
+            "productId": "628299",
+            "title": "Подшибкник",
+            "qty": 1,
+            "price": 50
+          }
+        ],
+        "amount": 50,
+        "status": "cancelled",
+        "date": "2026-06-19",
+        "deliveryMethod": "Доставка",
+        "address": "Спитамен",
+        "notes": ""
+      },
+      {
+        "id": "37606fe1-1b8e-491d-8385-8792f23fec3c",
+        "storeId": "rizo-tj-худжанд",
+        "storeName": "Rizo Tj",
+        "customerName": "Махкамов  Шохрух",
+        "customerPhone": "+992 927145989",
+        "items": [
+          {
+            "productId": "628299",
+            "title": "Подшибкник",
+            "qty": 1,
+            "price": 50
+          }
+        ],
+        "amount": 50,
+        "status": "new",
+        "date": "2026-06-19",
+        "deliveryMethod": "Самовывоз",
+        "address": "Сомон",
+        "notes": ""
       }
     ],
-    "updatedAt": "2026-06-19T07:55:30.695Z"
+    "updatedAt": "2026-06-19T11:12:43.002Z"
   },
   "drivex.seller.notifications.v1": {
     "value": [
@@ -1153,9 +1209,64 @@
         "createdAt": "2026-06-19T07:38:48.967444+00:00",
         "color": "var(--drivex-electric-blue)",
         "icon": "bag"
+      },
+      {
+        "id": "6264a091-537f-4812-9368-cf1fa32b45b8",
+        "type": "order_status",
+        "title": "Заказ c31ebfb9-f0be-4140-96de-759d5feca030 обновлен",
+        "body": "Новый статус: cancelled",
+        "message": "Новый статус: cancelled",
+        "isRead": false,
+        "createdAt": "2026-06-19T10:35:34.10609+00:00",
+        "color": "var(--drivex-neon-cyan)",
+        "icon": "truck"
+      },
+      {
+        "id": "b845dc67-233e-40b1-8ae5-1a5db0c2ed3a",
+        "type": "order_status",
+        "title": "Заказ 3c104ee2-6662-4b49-ac5e-a57f6bbeb7bf обновлен",
+        "body": "Новый статус: cancelled",
+        "message": "Новый статус: cancelled",
+        "isRead": false,
+        "createdAt": "2026-06-19T10:35:31.665741+00:00",
+        "color": "var(--drivex-neon-cyan)",
+        "icon": "truck"
+      },
+      {
+        "id": "2e205d0a-942e-49f7-9913-e45f7f95c806",
+        "type": "order_status",
+        "title": "Заказ 0ccd2b93-f8d3-4c0d-9f59-1ad2590e5e56 обновлен",
+        "body": "Новый статус: cancelled",
+        "message": "Новый статус: cancelled",
+        "isRead": false,
+        "createdAt": "2026-06-19T10:35:48.318287+00:00",
+        "color": "var(--drivex-neon-cyan)",
+        "icon": "truck"
+      },
+      {
+        "id": "8c614bf2-a783-4cea-beae-0ffeccd1c0f1",
+        "type": "order_status",
+        "title": "Заказ 0ccd2b93-f8d3-4c0d-9f59-1ad2590e5e56 обновлен",
+        "body": "Новый статус: cancelled",
+        "message": "Новый статус: cancelled",
+        "isRead": false,
+        "createdAt": "2026-06-19T10:35:50.874856+00:00",
+        "color": "var(--drivex-neon-cyan)",
+        "icon": "truck"
+      },
+      {
+        "id": "2f781603-39e8-4084-8acd-5e53feaaccd8",
+        "type": "order_new",
+        "title": "Новый заказ 37606fe1-1b8e-491d-8385-8792f23fec3c",
+        "body": "Махкамов  Шохрух • 50 TJS",
+        "message": "Махкамов  Шохрух • 50 TJS",
+        "isRead": false,
+        "createdAt": "2026-06-19T11:02:47.506538+00:00",
+        "color": "var(--drivex-electric-blue)",
+        "icon": "bag"
       }
     ],
-    "updatedAt": "2026-06-19T07:55:30.698Z"
+    "updatedAt": "2026-06-19T11:12:43.006Z"
   },
   "drivex.service.profile.v1": {
     "value": {
@@ -1167,7 +1278,7 @@
       "position": "Владелец сервиса",
       "registrationCompleted": false
     },
-    "updatedAt": "2026-06-19T07:38:52.159Z"
+    "updatedAt": "2026-06-19T11:02:53.564Z"
   },
   "drivex.service.center.v1": {
     "value": {
@@ -1190,30 +1301,30 @@
       "registrationCompleted": false,
       "status": "new"
     },
-    "updatedAt": "2026-06-19T07:55:30.703Z"
+    "updatedAt": "2026-06-19T11:12:43.010Z"
   },
   "drivex.service.clients.v1": {
     "value": [],
-    "updatedAt": "2026-06-19T07:55:30.705Z"
+    "updatedAt": "2026-06-19T11:12:43.012Z"
   },
   "drivex.service.orders.v1": {
     "value": [],
-    "updatedAt": "2026-06-19T07:55:30.713Z"
+    "updatedAt": "2026-06-19T11:12:43.015Z"
   },
   "drivex.service.inventory.v1": {
     "value": [],
-    "updatedAt": "2026-06-19T07:55:30.719Z"
+    "updatedAt": "2026-06-19T11:12:43.017Z"
   },
   "drivex.service.finance.v1": {
     "value": [],
-    "updatedAt": "2026-06-19T07:55:30.724Z"
+    "updatedAt": "2026-06-19T11:12:41.816Z"
   },
   "drivex.service.appointments.v1": {
     "value": [],
-    "updatedAt": "2026-06-19T07:55:30.727Z"
+    "updatedAt": "2026-06-19T11:12:41.820Z"
   },
   "drivex.service.requests.v1": {
     "value": [],
-    "updatedAt": "2026-06-19T07:55:30.731Z"
+    "updatedAt": "2026-06-19T11:12:41.822Z"
   }
 }

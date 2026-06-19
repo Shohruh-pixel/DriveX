@@ -53,6 +53,15 @@
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
   }
 
+  // Таймаут для сетевых вызовов: под множеством вкладок запрос Supabase иногда
+  // зависает навсегда (нет встроенного таймаута) — и кнопка "Оформляем…" висит вечно.
+  function withTimeout(promise, ms, label) {
+    return Promise.race([
+      Promise.resolve(promise),
+      new Promise((_, reject) => setTimeout(() => reject(new Error(label || "Таймаут сети")), ms))
+    ]);
+  }
+
   function slugify(value, fallback = "item") {
     return (
       String(value || fallback)
@@ -1754,11 +1763,21 @@
       let insertedOrder = null;
       let orderError = null;
       for (let attempt = 0; attempt < 3; attempt++) {
-        const res = await client.from("orders").insert(orderRow).select("id").single();
+        let res;
+        try {
+          // Таймаут 8с на попытку: иначе зависший запрос держит кнопку "Оформляем…" вечно.
+          res = await withTimeout(
+            client.from("orders").insert(orderRow).select("id").single(),
+            8000,
+            "Таймаут оформления заказа"
+          );
+        } catch (e) {
+          res = { error: e };
+        }
         orderError = res.error;
         insertedOrder = res.data;
         if (!orderError) break;
-        const transient = /Failed to fetch|NetworkError|fetch/i.test(String(orderError.message || ""));
+        const transient = /Failed to fetch|NetworkError|fetch|[Тт]аймаут|timeout/i.test(String(orderError.message || ""));
         if (!transient) break; // RLS и прочие — не ретраим
         await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
       }
@@ -1777,31 +1796,33 @@
         total_price: Math.max(1, Number(item.qty || 1)) * Math.max(0, Number(item.price || 0))
       }));
 
+      // Позиции и уведомление — best-effort + таймаут: заказ уже создан, эти шаги
+      // не должны держать кнопку "Оформляем…", если зависнут под множеством вкладок.
       if (orderItems.length) {
-        const { error: itemsError } = await client.from("order_items").insert(orderItems);
-        if (itemsError) console.warn("[seller-backend] order_items insert:", itemsError.message);
+        try {
+          const { error: itemsError } = await withTimeout(client.from("order_items").insert(orderItems), 6000, "order_items timeout");
+          if (itemsError) console.warn("[seller-backend] order_items insert:", itemsError.message);
+        } catch (e) { console.warn("[seller-backend] order_items:", e && e.message); }
       }
 
-      // Уведомление продавцу — best-effort: заказ уже создан, ошибка тут не должна
-      // ронять оформление (иначе покупатель видит "Failed to fetch" при успешном заказе).
       try {
-        await client.from("seller_notifications").insert({
+        await withTimeout(client.from("seller_notifications").insert({
           store_id: order.storeId,
           type: "order_new",
           title: `Новый заказ ${createdOrderId}`,
           message: `${order.customerName || "Клиент DRIVEX"} • ${order.amount || 0} TJS`
-        });
+        }), 6000, "notification timeout");
       } catch (e) {
         console.warn("[seller-backend] order notification:", e && e.message);
       }
     }
 
     emitSync("marketplace-checkout");
-    // Перечитывание состояния — тоже best-effort: заказ(ы) уже в БД. Если SELECT'ы
-    // упадут по транзиентной сети, не срываем успешное оформление.
+    // Перечитывание состояния — best-effort + таймаут: заказ(ы) уже в БД. Если
+    // SELECT'ы зависнут/упадут, не держим кнопку и не срываем успешное оформление.
     let nextState;
     try {
-      nextState = await loadSupabaseAppState();
+      nextState = await withTimeout(loadSupabaseAppState(), 8000, "loadAppState timeout");
     } catch (e) {
       console.warn("[seller-backend] loadSupabaseAppState after checkout:", e && e.message);
       nextState = { ok: true };
