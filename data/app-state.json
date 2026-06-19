@@ -76,7 +76,7 @@
         ]
       }
     },
-    "updatedAt": "2026-06-19T02:47:08.703Z"
+    "updatedAt": "2026-06-19T09:06:11.004Z"
   },
   "drivex.market.catalog.v1": {
     "value": {
@@ -374,7 +374,7 @@
         }
       ]
     },
-    "updatedAt": "2026-06-19T02:47:08.562Z"
+    "updatedAt": "2026-06-19T07:55:30.739Z"
   },
   "drivex.seller.orders.v1": {
     "value": [
@@ -732,9 +732,51 @@
         "deliveryMethod": "Самовывоз",
         "address": "Сомон",
         "notes": ""
+      },
+      {
+        "id": "c31ebfb9-f0be-4140-96de-759d5feca030",
+        "storeId": "rizo-tj-худжанд",
+        "storeName": "Rizo Tj",
+        "customerName": "Махкамов  Шохрух",
+        "customerPhone": "+992 927145989",
+        "items": [
+          {
+            "productId": "628299",
+            "title": "Подшибкник",
+            "qty": 1,
+            "price": 50
+          }
+        ],
+        "amount": 50,
+        "status": "new",
+        "date": "2026-06-19",
+        "deliveryMethod": "Самовывоз",
+        "address": "Сомон",
+        "notes": ""
+      },
+      {
+        "id": "3c104ee2-6662-4b49-ac5e-a57f6bbeb7bf",
+        "storeId": "rizo-tj-худжанд",
+        "storeName": "Rizo Tj",
+        "customerName": "Махкамов  Шохрух",
+        "customerPhone": "+992 927145989",
+        "items": [
+          {
+            "productId": "628299",
+            "title": "Подшибкник",
+            "qty": 1,
+            "price": 50
+          }
+        ],
+        "amount": 50,
+        "status": "new",
+        "date": "2026-06-19",
+        "deliveryMethod": "Доставка",
+        "address": "ул. Сомони 25, кв. 10",
+        "notes": ""
       }
     ],
-    "updatedAt": "2026-06-19T02:47:08.546Z"
+    "updatedAt": "2026-06-19T07:55:30.695Z"
   },
   "drivex.seller.notifications.v1": {
     "value": [
@@ -1089,9 +1131,31 @@
         "createdAt": "2026-06-19T02:46:29.115168+00:00",
         "color": "var(--drivex-electric-blue)",
         "icon": "bag"
+      },
+      {
+        "id": "3c9f1e1a-b10b-454d-aa7b-3a824f066297",
+        "type": "order_new",
+        "title": "Новый заказ c31ebfb9-f0be-4140-96de-759d5feca030",
+        "body": "Махкамов  Шохрух • 50 TJS",
+        "message": "Махкамов  Шохрух • 50 TJS",
+        "isRead": false,
+        "createdAt": "2026-06-19T07:31:33.970246+00:00",
+        "color": "var(--drivex-electric-blue)",
+        "icon": "bag"
+      },
+      {
+        "id": "c9dab73b-737c-42a0-aa13-964eb66cdda8",
+        "type": "order_new",
+        "title": "Новый заказ 3c104ee2-6662-4b49-ac5e-a57f6bbeb7bf",
+        "body": "Махкамов  Шохрух • 50 TJS",
+        "message": "Махкамов  Шохрух • 50 TJS",
+        "isRead": false,
+        "createdAt": "2026-06-19T07:38:48.967444+00:00",
+        "color": "var(--drivex-electric-blue)",
+        "icon": "bag"
       }
     ],
-    "updatedAt": "2026-06-19T02:47:08.549Z"
+    "updatedAt": "2026-06-19T07:55:30.698Z"
   },
   "drivex.service.profile.v1": {
     "value": {
@@ -1103,7 +1167,7 @@
       "position": "Владелец сервиса",
       "registrationCompleted": false
     },
-    "updatedAt": "2026-06-19T02:46:33.034Z"
+    "updatedAt": "2026-06-19T07:38:52.159Z"
   },
   "drivex.service.center.v1": {
     "value": {
@@ -1126,30 +1190,30 @@
       "registrationCompleted": false,
       "status": "new"
     },
-    "updatedAt": "2026-06-19T02:47:08.552Z"
+    "updatedAt": "2026-06-19T07:55:30.703Z"
   },
   "drivex.service.clients.v1": {
     "value": [],
-    "updatedAt": "2026-06-19T02:47:08.556Z"
+    "updatedAt": "2026-06-19T07:55:30.705Z"
   },
   "drivex.service.orders.v1": {
     "value": [],
-    "updatedAt": "2026-06-19T02:47:08.559Z"
+    "updatedAt": "2026-06-19T07:55:30.713Z"
   },
   "drivex.service.inventory.v1": {
     "value": [],
-    "updatedAt": "2026-06-19T02:47:07.698Z"
+    "updatedAt": "2026-06-19T07:55:30.719Z"
   },
   "drivex.service.finance.v1": {
     "value": [],
-    "updatedAt": "2026-06-19T02:47:07.719Z"
+    "updatedAt": "2026-06-19T07:55:30.724Z"
   },
   "drivex.service.appointments.v1": {
     "value": [],
-    "updatedAt": "2026-06-19T02:47:07.726Z"
+    "updatedAt": "2026-06-19T07:55:30.727Z"
   },
   "drivex.service.requests.v1": {
     "value": [],
-    "updatedAt": "2026-06-19T02:47:07.729Z"
+    "updatedAt": "2026-06-19T07:55:30.731Z"
   }
 }

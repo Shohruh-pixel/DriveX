@@ -1743,6 +1743,7 @@
                                 </span>
                                 <input
                                   type="text"
+                                  data-store-address=${storeId}
                                   className="w-full p-3 rounded-xl outline-none dx-input mt-2"
                                   style=${{ background: "var(--glass-bg)", color: "var(--drivex-white)" }}
                                   value=${storeDraft.address}
@@ -1820,6 +1821,16 @@
                     if (missingAddressStore) {
                       const store = getMarketStore(missingAddressStore[0]);
                       toast.push(`Введите адрес доставки для ${store?.name || "магазина"}`);
+                      // Прокручиваем к полю адреса и фокусируем — иначе пользователь не понимает,
+                      // почему заказ "не оформляется" (для доставки нужен адрес).
+                      try {
+                        const addrInput = document.querySelector('input[data-store-address="' + missingAddressStore[0] + '"]')
+                          || document.querySelector('input[placeholder^="Например: Зарафшон"]');
+                        if (addrInput) {
+                          addrInput.scrollIntoView({ behavior: "smooth", block: "center" });
+                          setTimeout(() => addrInput.focus(), 300);
+                        }
+                      } catch (e) { /* ignore */ }
                       return;
                     }
 
