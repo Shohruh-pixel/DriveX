@@ -175,6 +175,10 @@
     const [remember, setRemember] = useState(true);
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState("");
+    const [forgotMode, setForgotMode] = useState(false);
+    const [forgotPassword, setForgotPassword] = useState("");
+    const [forgotBusy, setForgotBusy] = useState(false);
+    const [forgotMsg, setForgotMsg] = useState("");
 
     const handleSubmit = useCallback(async () => {
       if (!String(identifier).trim()) { setError("Введите email или телефон"); return; }
@@ -190,18 +194,35 @@
       }
     }, [identifier, password, remember, onLogin]);
 
-    const handleForgot = useCallback(async () => {
-      if (!onResetPassword) { toast.push("Восстановление пароля пока недоступно"); return; }
-      const next = window.prompt && window.prompt("Новый пароль (минимум 6 символов):", "");
-      if (!next || String(next).trim().length < 6) { toast.push("Пароль слишком короткий"); return; }
-      try {
-        await onResetPassword({ identifier, email: identifier, phone: identifier, newPassword: next });
-        setPassword(next);
-        toast.push("Пароль обновлён — войдите");
-      } catch (e) {
-        toast.push(e?.message || "Не удалось сбросить пароль");
+    // Открыть форму сброса пароля (на странице, без системного prompt).
+    const openForgot = useCallback(() => {
+      setError("");
+      setForgotMsg("");
+      if (!String(identifier).trim()) {
+        setError("Сначала введите email или телефон, потом «Забыли пароль?»");
+        return;
       }
-    }, [identifier, onResetPassword, toast]);
+      setForgotPassword("");
+      setForgotMode(true);
+    }, [identifier]);
+
+    const submitForgot = useCallback(async () => {
+      setForgotMsg("");
+      if (!onResetPassword) { setForgotMsg("Сброс пароля недоступен"); return; }
+      if (String(forgotPassword).trim().length < 6) { setForgotMsg("Минимум 6 символов"); return; }
+      try {
+        setForgotBusy(true);
+        await onResetPassword({ identifier, email: identifier, phone: identifier, newPassword: forgotPassword.trim() });
+        setPassword(forgotPassword.trim());
+        setForgotMode(false);
+        setForgotPassword("");
+        toast.push("Пароль обновлён — теперь войдите");
+      } catch (e) {
+        setForgotMsg(e?.message || "Не удалось сбросить пароль");
+      } finally {
+        setForgotBusy(false);
+      }
+    }, [identifier, forgotPassword, onResetPassword, toast]);
 
     return html`
       <div className="sx sx-screen">
@@ -241,8 +262,36 @@
             <div className=${`sx-switch ${remember ? "is-on" : ""}`}><div className="sx-switch-knob"></div></div>
             <span>Запомнить</span>
           </div>
-          <span className="sx-link-btn" onClick=${handleForgot}>Забыли пароль?</span>
+          <span className="sx-link-btn" onClick=${openForgot}>Забыли пароль?</span>
         </div>
+
+        ${forgotMode
+          ? html`<div
+              style=${{
+                marginTop: "16px",
+                padding: "16px",
+                borderRadius: "16px",
+                background: "rgba(255,255,255,0.04)",
+                border: "1px solid rgba(255,255,255,0.08)"
+              }}
+            >
+              <div style=${{ fontSize: "13px", fontWeight: 600, marginBottom: "10px", color: "var(--drivex-white, #fff)" }}>
+                Новый пароль для ${identifier}
+              </div>
+              <${SxField}
+                label="Новый пароль"
+                type="text"
+                placeholder="Минимум 6 символов"
+                value=${forgotPassword}
+                onInput=${(e) => { setForgotPassword(e.target.value); setForgotMsg(""); }}
+              />
+              ${forgotMsg ? html`<p className="sx-error" style=${{ marginTop: "8px" }}>${forgotMsg}</p>` : null}
+              <div style=${{ display: "flex", gap: "10px", marginTop: "12px" }}>
+                <${SxCta} onClick=${submitForgot} disabled=${forgotBusy}>${forgotBusy ? "Сохраняем…" : "Сбросить пароль"}</${SxCta}>
+                <button type="button" className="sx-ghost" onClick=${() => { setForgotMode(false); setForgotMsg(""); }}>Отмена</button>
+              </div>
+            </div>`
+          : null}
 
         <div style=${{ marginTop: "24px", display: "flex", flexDirection: "column", gap: "14px" }}>
           <${SxCta} onClick=${handleSubmit} disabled=${submitting}>${submitting ? "Входим…" : "Войти"}</${SxCta}>
