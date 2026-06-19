@@ -1732,6 +1732,7 @@
       }
     }
 
+    const createdOrders = []; // {storeId, code, id} — чтобы покупатель привязал свой заказ к uuid из БД
     for (const order of incomingOrders) {
       // Не передаём id — пусть Supabase генерирует UUID автоматически
       // Это исправляет ошибку "invalid input syntax for type uuid"
@@ -1763,6 +1764,7 @@
       }
       if (orderError) throw orderError;
       const createdOrderId = insertedOrder?.id || makeId("order");
+      createdOrders.push({ storeId: order.storeId, code: order.id || null, id: createdOrderId });
 
       const orderItems = (order.items || []).map((item) => ({
         order_id: createdOrderId,
@@ -1797,12 +1799,18 @@
     emitSync("marketplace-checkout");
     // Перечитывание состояния — тоже best-effort: заказ(ы) уже в БД. Если SELECT'ы
     // упадут по транзиентной сети, не срываем успешное оформление.
+    let nextState;
     try {
-      return await loadSupabaseAppState();
+      nextState = await loadSupabaseAppState();
     } catch (e) {
       console.warn("[seller-backend] loadSupabaseAppState after checkout:", e && e.message);
-      return { ok: true };
+      nextState = { ok: true };
     }
+    // Возвращаем созданные заказы (uuid), чтобы покупатель привязал свой локальный
+    // заказ к строке в БД — иначе buyer.id (код) != seller/db.id (uuid) и статус,
+    // выставленный продавцом, не доходит до покупателя.
+    if (nextState && typeof nextState === "object") nextState.createdOrders = createdOrders;
+    return nextState;
   }
 
   const api = {

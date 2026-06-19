@@ -934,7 +934,7 @@
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="font-bold" style=${{ color: "var(--drivex-white)" }}>
-                        ${order.id}
+                        ${/^DX-/i.test(String(order.id || "")) ? order.id : ("DX-" + String(order.id || "").replace(/-/g, "").slice(0, 6).toUpperCase())}
                       </p>
                       <p className="text-sm mt-1 truncate" style=${{ color: "var(--drivex-silver)" }}>
                         ${formatRuDate(order.date)} • ${order.storeName}

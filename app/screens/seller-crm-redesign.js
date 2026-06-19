@@ -45,6 +45,14 @@
     return formatRuDate(order.date);
   }
 
+  // Человекочитаемый код заказа: уже-код возвращаем как есть, uuid превращаем в DX-XXXXXX.
+  function formatOrderCode(idOrCode) {
+    const s = String(idOrCode || "").trim();
+    if (!s) return "—";
+    if (/^DX-/i.test(s)) return s;
+    return "DX-" + s.replace(/-/g, "").slice(0, 6).toUpperCase();
+  }
+
   // Карта статус заказа → тон pill
   function orderPillTone(statusId) {
     switch (statusId) {
@@ -299,7 +307,7 @@
                       <div style=${{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px" }}>
                         <div style=${{ minWidth: 0 }}>
                           <div className="cx-order-id" style=${{ fontSize: "14px" }}>${order.customerName || "Клиент"}</div>
-                          <div className="cx-order-time">${order.id} · ${formatRuDate(order.date)}</div>
+                          <div className="cx-order-time">${formatOrderCode(order.code || order.id)} · ${formatRuDate(order.date)}</div>
                         </div>
                         <div style=${{ textAlign: "right", flexShrink: 0 }}>
                           <div className="cx-order-total" style=${{ fontSize: "15px" }}>${formatNum(order.amount)} <span>TJS</span></div>
@@ -523,7 +531,7 @@
       <div className=${`cx-order ${justFlash ? "is-flash" : ""}`} data-order-id=${order.id}>
         <div style=${{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "10px" }}>
           <div style=${{ minWidth: 0 }}>
-            <div className="cx-order-id">${order.id}</div>
+            <div className="cx-order-id">${formatOrderCode(order.code || order.id)}</div>
             <div className="cx-order-time">Заказан ${formatOrderWhen(order)} · ${order.deliveryMethod || "Доставка"}</div>
           </div>
           <${CxPill} tone=${orderPillTone(meta.id)}>${meta.label}</${CxPill}>

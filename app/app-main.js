@@ -3525,15 +3525,22 @@
       }
 
       try {
-        await runSellerBackendAction("recordMarketplaceCheckout", {
+        const checkoutResult = await runSellerBackendAction("recordMarketplaceCheckout", {
           orders: nextOrders,
           // Передаём id покупателя из уже загруженной сессии — бэкенду не нужно
           // звать client.auth.getUser() (сетевой вызов + Web Lock), который под
           // множеством вкладок падает с "Lock broken ... steal" и срывал заказ.
           buyerUserId: buyerSession?.id || null
         });
+        // Привязываем заказ покупателя к uuid из БД (createdOrders), чтобы статус,
+        // который выставит продавец, доходил до покупателя (совпадение по id при сверке).
+        const createdOrders = (checkoutResult && Array.isArray(checkoutResult.createdOrders)) ? checkoutResult.createdOrders : [];
+        const ordersForBuyer = nextOrders.map((o) => {
+          const match = createdOrders.find((c) => (c.code && c.code === o.id) || c.storeId === o.storeId);
+          return match && match.id ? { ...o, id: match.id, code: o.id } : o;
+        });
         const nextBuyerOrders = createBuyerOrdersFromCheckout({
-          orders: nextOrders,
+          orders: ordersForBuyer,
           stores: runtimeMarketStores
         });
         setBuyerOrders((prev) => mergeBuyerOrders(prev, nextBuyerOrders));

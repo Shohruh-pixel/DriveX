@@ -60,9 +60,23 @@
             "readBySeller": false
           }
         ]
+      },
+      "DX-260618-007": {
+        "orderId": "DX-260618-007",
+        "messages": [
+          {
+            "id": "chat-message-1781811120150-4bb91d21e9677",
+            "orderId": "DX-260618-007",
+            "senderRole": "buyer",
+            "text": "Привет",
+            "sentAt": "2026-06-18T19:32:00.150Z",
+            "readByBuyer": true,
+            "readBySeller": false
+          }
+        ]
       }
     },
-    "updatedAt": "2026-06-18T19:29:03.583Z"
+    "updatedAt": "2026-06-19T00:24:15.971Z"
   },
   "drivex.market.catalog.v1": {
     "value": {
@@ -360,7 +374,7 @@
         }
       ]
     },
-    "updatedAt": "2026-06-18T19:29:00.892Z"
+    "updatedAt": "2026-06-19T00:24:13.886Z"
   },
   "drivex.seller.orders.v1": {
     "value": [
@@ -470,7 +484,7 @@
       {
         "id": "6d89c015-2cc5-4a21-8981-26ebd36b6fcf",
         "storeId": "rizo-tj-худжанд",
-        "storeName": "rizo-tj-худжанд",
+        "storeName": "Rizo Tj",
         "customerName": "Рахмонкулов  Илёсбек",
         "customerPhone": "+992927400828",
         "items": [
@@ -482,7 +496,7 @@
           }
         ],
         "amount": 50,
-        "status": "new",
+        "status": "confirmed",
         "date": "2026-06-18",
         "deliveryMethod": "Самовывоз",
         "address": "Сомон",
@@ -491,7 +505,7 @@
       {
         "id": "01068414-4d29-4b11-9855-34784adfa554",
         "storeId": "rizo-tj-худжанд",
-        "storeName": "rizo-tj-худжанд",
+        "storeName": "Rizo Tj",
         "customerName": "Рахмонкулов  Илёсбек",
         "customerPhone": "+992927400828",
         "items": [
@@ -503,7 +517,7 @@
           }
         ],
         "amount": 50,
-        "status": "new",
+        "status": "confirmed",
         "date": "2026-06-18",
         "deliveryMethod": "Самовывоз",
         "address": "Сомон",
@@ -512,7 +526,7 @@
       {
         "id": "8e24f0d4-6318-48e8-aa8c-7965e09d0070",
         "storeId": "rizo-tj-худжанд",
-        "storeName": "rizo-tj-худжанд",
+        "storeName": "Rizo Tj",
         "customerName": "Рахмонкулов  Илёсбек",
         "customerPhone": "+992927400828",
         "items": [
@@ -524,7 +538,7 @@
           }
         ],
         "amount": 50,
-        "status": "new",
+        "status": "confirmed",
         "date": "2026-06-18",
         "deliveryMethod": "Самовывоз",
         "address": "Сомон",
@@ -533,7 +547,7 @@
       {
         "id": "70f4b6ad-71bf-4653-ae52-db04a5631587",
         "storeId": "rizo-tj-худжанд",
-        "storeName": "rizo-tj-худжанд",
+        "storeName": "Rizo Tj",
         "customerName": "Рахмонкулов  Илёсбек",
         "customerPhone": "+992927400828",
         "items": [
@@ -545,14 +559,35 @@
           }
         ],
         "amount": 50,
-        "status": "new",
+        "status": "confirmed",
         "date": "2026-06-18",
+        "deliveryMethod": "Самовывоз",
+        "address": "Сомон",
+        "notes": ""
+      },
+      {
+        "id": "691fc70a-b9c7-4a03-a806-07d851ade0e3",
+        "storeId": "rizo-tj-худжанд",
+        "storeName": "Rizo Tj",
+        "customerName": "Махкамов  Шохрух",
+        "customerPhone": "+992 927145989",
+        "items": [
+          {
+            "productId": "628299",
+            "title": "Подшибкник",
+            "qty": 1,
+            "price": 50
+          }
+        ],
+        "amount": 50,
+        "status": "new",
+        "date": "2026-06-19",
         "deliveryMethod": "Самовывоз",
         "address": "Сомон",
         "notes": ""
       }
     ],
-    "updatedAt": "2026-06-18T19:29:00.806Z"
+    "updatedAt": "2026-06-19T00:24:13.831Z"
   },
   "drivex.seller.notifications.v1": {
     "value": [
@@ -753,9 +788,75 @@
         "createdAt": "2026-06-18T19:28:28.18174+00:00",
         "color": "var(--drivex-neon-cyan)",
         "icon": "truck"
+      },
+      {
+        "id": "d93d7935-5a86-4f00-b07b-cc7bd366c7d7",
+        "type": "order_status",
+        "title": "Заказ 6d89c015-2cc5-4a21-8981-26ebd36b6fcf обновлен",
+        "body": "Новый статус: confirmed",
+        "message": "Новый статус: confirmed",
+        "isRead": false,
+        "createdAt": "2026-06-18T19:31:07.595917+00:00",
+        "color": "var(--drivex-neon-cyan)",
+        "icon": "truck"
+      },
+      {
+        "id": "ba7ed7af-442b-4867-855d-e9241d64ebaf",
+        "type": "order_status",
+        "title": "Заказ 8e24f0d4-6318-48e8-aa8c-7965e09d0070 обновлен",
+        "body": "Новый статус: confirmed",
+        "message": "Новый статус: confirmed",
+        "isRead": false,
+        "createdAt": "2026-06-18T19:31:39.034437+00:00",
+        "color": "var(--drivex-neon-cyan)",
+        "icon": "truck"
+      },
+      {
+        "id": "d7e0d8cd-0d7b-4726-8ce4-b780ce18be5f",
+        "type": "order_status",
+        "title": "Заказ 70f4b6ad-71bf-4653-ae52-db04a5631587 обновлен",
+        "body": "Новый статус: confirmed",
+        "message": "Новый статус: confirmed",
+        "isRead": false,
+        "createdAt": "2026-06-18T19:31:41.022343+00:00",
+        "color": "var(--drivex-neon-cyan)",
+        "icon": "truck"
+      },
+      {
+        "id": "817b79a7-1657-403d-80c3-c9a8509d108a",
+        "type": "order_status",
+        "title": "Заказ 01068414-4d29-4b11-9855-34784adfa554 обновлен",
+        "body": "Новый статус: confirmed",
+        "message": "Новый статус: confirmed",
+        "isRead": false,
+        "createdAt": "2026-06-18T19:31:44.352591+00:00",
+        "color": "var(--drivex-neon-cyan)",
+        "icon": "truck"
+      },
+      {
+        "id": "0590b8b2-c566-42d5-a1c2-9a5bd43391af",
+        "type": "order_new",
+        "title": "Новый заказ 691fc70a-b9c7-4a03-a806-07d851ade0e3",
+        "body": "Махкамов  Шохрух • 50 TJS",
+        "message": "Махкамов  Шохрух • 50 TJS",
+        "isRead": false,
+        "createdAt": "2026-06-19T00:18:26.604148+00:00",
+        "color": "var(--drivex-electric-blue)",
+        "icon": "bag"
+      },
+      {
+        "id": "6d2a8a45-3164-4acf-b81e-93deb66276ec",
+        "type": "order_status",
+        "title": "Заказ 691fc70a-b9c7-4a03-a806-07d851ade0e3 обновлен",
+        "body": "Новый статус: confirmed",
+        "message": "Новый статус: confirmed",
+        "isRead": false,
+        "createdAt": "2026-06-19T00:18:57.284067+00:00",
+        "color": "var(--drivex-neon-cyan)",
+        "icon": "truck"
       }
     ],
-    "updatedAt": "2026-06-18T19:29:00.814Z"
+    "updatedAt": "2026-06-19T00:24:13.835Z"
   },
   "drivex.service.profile.v1": {
     "value": {
@@ -767,7 +868,7 @@
       "position": "Владелец сервиса",
       "registrationCompleted": false
     },
-    "updatedAt": "2026-06-18T19:28:34.313Z"
+    "updatedAt": "2026-06-19T00:19:36.218Z"
   },
   "drivex.service.center.v1": {
     "value": {
@@ -790,30 +891,30 @@
       "registrationCompleted": false,
       "status": "new"
     },
-    "updatedAt": "2026-06-18T19:29:00.818Z"
+    "updatedAt": "2026-06-19T00:24:13.838Z"
   },
   "drivex.service.clients.v1": {
     "value": [],
-    "updatedAt": "2026-06-18T19:29:00.822Z"
+    "updatedAt": "2026-06-19T00:24:13.843Z"
   },
   "drivex.service.orders.v1": {
     "value": [],
-    "updatedAt": "2026-06-18T19:29:00.826Z"
+    "updatedAt": "2026-06-19T00:24:13.847Z"
   },
   "drivex.service.inventory.v1": {
     "value": [],
-    "updatedAt": "2026-06-18T19:29:00.832Z"
+    "updatedAt": "2026-06-19T00:24:13.851Z"
   },
   "drivex.service.finance.v1": {
     "value": [],
-    "updatedAt": "2026-06-18T19:29:00.852Z"
+    "updatedAt": "2026-06-19T00:24:13.854Z"
   },
   "drivex.service.appointments.v1": {
     "value": [],
-    "updatedAt": "2026-06-18T19:29:00.868Z"
+    "updatedAt": "2026-06-19T00:24:13.860Z"
   },
   "drivex.service.requests.v1": {
     "value": [],
-    "updatedAt": "2026-06-18T19:29:00.878Z"
+    "updatedAt": "2026-06-19T00:24:13.864Z"
   }
 }
