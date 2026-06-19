@@ -2031,7 +2031,9 @@
     const contactMeta =
       viewerRole === "seller"
         ? order?.customerPhone || "Номер не указан"
-        : order?.id || "Заказ";
+        : (order?.id
+            ? (/^DX-/i.test(String(order.id)) ? String(order.id) : "DX-" + String(order.id).replace(/-/g, "").slice(0, 6).toUpperCase())
+            : "Заказ");
     const avatarLabel = (
       String(contactName || "")
         .trim()
@@ -2248,7 +2250,10 @@
       order?.customerPhone && String(order.customerPhone).trim()
         ? `tel:${String(order.customerPhone).replace(/[^\d+]/g, "")}`
         : "";
-    const metaChips = [order?.id || "Заказ", order?.deliveryMethod || "Доставка", formatTjsPrice(order?.amount)];
+    const orderCode = order?.id
+      ? (/^DX-/i.test(String(order.id)) ? String(order.id) : "DX-" + String(order.id).replace(/-/g, "").slice(0, 6).toUpperCase())
+      : "Заказ";
+    const metaChips = [orderCode, order?.deliveryMethod || "Доставка", formatTjsPrice(order?.amount)];
     const pageContent = order
       ? html`
           <div className=${safeViewerRole === "seller" ? "space-y-4" : "px-6 py-6 space-y-4"}>
@@ -2446,19 +2451,22 @@
             </div>
 
             <div
-              className="pt-4 mt-2"
+              className="pt-3 pb-3 px-1"
               style=${{
                 borderTop: "1px solid rgba(255, 255, 255, 0.06)",
-                background: "rgba(12, 15, 22, 0.97)"
+                background: "rgba(12, 15, 22, 0.98)",
+                position: "sticky",
+                bottom: 0,
+                zIndex: 5
               }}
             >
               <form onSubmit=${handleSubmit}>
-                <div className="flex items-end gap-3">
+                <div className="flex items-end gap-2">
                   <div
-                    className="flex-1 rounded-[20px] px-4 py-3"
+                    className="flex-1 rounded-[24px] px-4 py-3"
                     style=${{
-                      background: "rgba(255, 255, 255, 0.04)",
-                      border: "1px solid rgba(255, 255, 255, 0.08)"
+                      background: "rgba(255, 255, 255, 0.06)",
+                      border: "1px solid rgba(255, 255, 255, 0.1)"
                     }}
                   >
                     <textarea
@@ -2485,7 +2493,7 @@
                   </div>
                   <button
                     type="submit"
-                    className="w-12 h-12 rounded-[18px] flex-shrink-0 flex items-center justify-center"
+                    className="w-12 h-12 rounded-full flex-shrink-0 flex items-center justify-center"
                     disabled=${!draftMessage.trim()}
                     style=${{
                       background: draftMessage.trim()

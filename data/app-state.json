@@ -102,9 +102,59 @@
             "readBySeller": true
           }
         ]
+      },
+      "70b1dd84-62ba-4382-bc75-7f647aa8d9b5": {
+        "orderId": "70b1dd84-62ba-4382-bc75-7f647aa8d9b5",
+        "messages": [
+          {
+            "id": "chat-message-1781879759551-4d9faf0c3171c",
+            "orderId": "70b1dd84-62ba-4382-bc75-7f647aa8d9b5",
+            "senderRole": "buyer",
+            "text": "Салом",
+            "sentAt": "2026-06-19T14:35:59.551Z",
+            "readByBuyer": true,
+            "readBySeller": true
+          },
+          {
+            "id": "chat-message-1781879772586-fb9979207836a8",
+            "orderId": "70b1dd84-62ba-4382-bc75-7f647aa8d9b5",
+            "senderRole": "seller",
+            "text": "Волекум  Салом",
+            "sentAt": "2026-06-19T14:36:12.586Z",
+            "readByBuyer": true,
+            "readBySeller": true
+          },
+          {
+            "id": "chat-message-1781879792450-7557e2f86c76e",
+            "orderId": "70b1dd84-62ba-4382-bc75-7f647aa8d9b5",
+            "senderRole": "seller",
+            "text": "якта  бас  ми  ако  дига  намегирит  ми",
+            "sentAt": "2026-06-19T14:36:32.450Z",
+            "readByBuyer": true,
+            "readBySeller": true
+          },
+          {
+            "id": "chat-message-1781879808003-63c4de5478815",
+            "orderId": "70b1dd84-62ba-4382-bc75-7f647aa8d9b5",
+            "senderRole": "buyer",
+            "text": "НЕ  ако  даркор  не  дига",
+            "sentAt": "2026-06-19T14:36:48.003Z",
+            "readByBuyer": true,
+            "readBySeller": true
+          },
+          {
+            "id": "chat-message-1781879821362-af0cdd2dcf414",
+            "orderId": "70b1dd84-62ba-4382-bc75-7f647aa8d9b5",
+            "senderRole": "buyer",
+            "text": "кай  ба  досавка  кунем  мешад",
+            "sentAt": "2026-06-19T14:37:01.362Z",
+            "readByBuyer": true,
+            "readBySeller": true
+          }
+        ]
       }
     },
-    "updatedAt": "2026-06-19T14:33:13.994Z"
+    "updatedAt": "2026-06-19T14:50:45.740Z"
   },
   "drivex.market.catalog.v1": {
     "value": {
@@ -448,7 +498,7 @@
         }
       ]
     },
-    "updatedAt": "2026-06-19T14:33:14.001Z"
+    "updatedAt": "2026-06-19T14:50:45.743Z"
   },
   "drivex.seller.orders.v1": {
     "value": [
@@ -890,9 +940,30 @@
         "deliveryMethod": "Самовывоз",
         "address": "Сомон",
         "notes": ""
+      },
+      {
+        "id": "70b1dd84-62ba-4382-bc75-7f647aa8d9b5",
+        "storeId": "mанижа-шоп-худжанд",
+        "storeName": "mанижа-шоп-худжанд",
+        "customerName": "Бобочонова Нигина",
+        "customerPhone": "+992927079246",
+        "items": [
+          {
+            "productId": "495737",
+            "title": "Масла Нур",
+            "qty": 1,
+            "price": 10
+          }
+        ],
+        "amount": 10,
+        "status": "delivery",
+        "date": "2026-06-19",
+        "deliveryMethod": "Доставка",
+        "address": "Худжанд  Спутник",
+        "notes": ""
       }
     ],
-    "updatedAt": "2026-06-19T14:33:13.959Z"
+    "updatedAt": "2026-06-19T14:50:45.708Z"
   },
   "drivex.seller.notifications.v1": {
     "value": [
@@ -1346,9 +1417,31 @@
         "createdAt": "2026-06-19T14:25:35.225346+00:00",
         "color": "var(--drivex-danger)",
         "icon": "scan"
+      },
+      {
+        "id": "c540a7e9-5781-4257-992b-ef04b6d00c45",
+        "type": "order_status",
+        "title": "Заказ 70b1dd84-62ba-4382-bc75-7f647aa8d9b5 обновлен",
+        "body": "Новый статус: confirmed",
+        "message": "Новый статус: confirmed",
+        "isRead": false,
+        "createdAt": "2026-06-19T14:35:51.160646+00:00",
+        "color": "var(--drivex-neon-cyan)",
+        "icon": "truck"
+      },
+      {
+        "id": "bbc6dfec-52ae-4217-89f5-6479db698fa1",
+        "type": "order_status",
+        "title": "Заказ 70b1dd84-62ba-4382-bc75-7f647aa8d9b5 обновлен",
+        "body": "Новый статус: delivery",
+        "message": "Новый статус: delivery",
+        "isRead": false,
+        "createdAt": "2026-06-19T14:37:41.641291+00:00",
+        "color": "var(--drivex-neon-cyan)",
+        "icon": "truck"
       }
     ],
-    "updatedAt": "2026-06-19T14:33:13.965Z"
+    "updatedAt": "2026-06-19T14:50:45.712Z"
   },
   "drivex.service.profile.v1": {
     "value": {
@@ -1360,7 +1453,7 @@
       "position": "Владелец сервиса",
       "registrationCompleted": false
     },
-    "updatedAt": "2026-06-19T14:32:43.499Z"
+    "updatedAt": "2026-06-19T14:48:56.601Z"
   },
   "drivex.service.center.v1": {
     "value": {
@@ -1383,30 +1476,30 @@
       "registrationCompleted": false,
       "status": "new"
     },
-    "updatedAt": "2026-06-19T14:33:13.969Z"
+    "updatedAt": "2026-06-19T14:50:45.717Z"
   },
   "drivex.service.clients.v1": {
     "value": [],
-    "updatedAt": "2026-06-19T14:33:13.973Z"
+    "updatedAt": "2026-06-19T14:50:45.720Z"
   },
   "drivex.service.orders.v1": {
     "value": [],
-    "updatedAt": "2026-06-19T14:33:13.977Z"
+    "updatedAt": "2026-06-19T14:50:45.723Z"
   },
   "drivex.service.inventory.v1": {
     "value": [],
-    "updatedAt": "2026-06-19T14:33:13.980Z"
+    "updatedAt": "2026-06-19T14:50:45.726Z"
   },
   "drivex.service.finance.v1": {
     "value": [],
-    "updatedAt": "2026-06-19T14:33:13.984Z"
+    "updatedAt": "2026-06-19T14:50:45.730Z"
   },
   "drivex.service.appointments.v1": {
     "value": [],
-    "updatedAt": "2026-06-19T14:33:13.986Z"
+    "updatedAt": "2026-06-19T14:50:45.733Z"
   },
   "drivex.service.requests.v1": {
     "value": [],
-    "updatedAt": "2026-06-19T14:33:13.990Z"
+    "updatedAt": "2026-06-19T14:50:45.736Z"
   }
 }
