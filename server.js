@@ -748,6 +748,46 @@ async function handlePartnerEmailByPhone(req, res) {
   sendJson(res, 200, { email });
 }
 
+// Сброс пароля продавца по email ИЛИ телефону (service-role). Продавец вышел из
+// аккаунта — клиентский updateUser недоступен, поэтому меняем пароль через admin API.
+async function handlePartnerResetPassword(req, res) {
+  if (req.method !== "POST") { sendJson(res, 405, { error: "Method not allowed" }); return; }
+  let body;
+  try { body = await readJsonBody(req); } catch { sendJson(res, 400, { error: "Invalid JSON" }); return; }
+
+  const identifier = cleanString(body.identifier || body.email || body.phone || "", 160).trim();
+  const newPassword = String(body.newPassword || "");
+  if (!identifier) { sendJson(res, 400, { error: "Укажите email или телефон" }); return; }
+  if (newPassword.length < 6) { sendJson(res, 400, { error: "Пароль не короче 6 символов" }); return; }
+
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY || !process.env.SUPABASE_URL) {
+    sendJson(res, 200, { ok: false, configured: false });
+    return;
+  }
+
+  const listRes = await supabaseAdminRequest("GET", "/auth/v1/admin/users?per_page=200").catch(() => null);
+  const users = (listRes && listRes.data && (listRes.data.users || listRes.data)) || [];
+  const isEmail = identifier.indexOf("@") !== -1;
+  const target = identifier.replace(/\D/g, "").slice(-9);
+  let userId = null;
+  for (const u of (Array.isArray(users) ? users : [])) {
+    if (isEmail) {
+      if (String(u.email || "").toLowerCase() === identifier.toLowerCase()) { userId = u.id; break; }
+    } else {
+      const candidates = [u.phone, u.user_metadata && u.user_metadata.phone].filter(Boolean);
+      if (target && candidates.some((p) => String(p).replace(/\D/g, "").slice(-9) === target)) { userId = u.id; break; }
+    }
+  }
+  if (!userId) { sendJson(res, 200, { ok: false, notFound: true }); return; }
+
+  const upd = await supabaseAdminRequest("PUT", "/auth/v1/admin/users/" + userId, {
+    password: newPassword,
+    email_confirm: true
+  }).catch(() => null);
+  const ok = Boolean(upd && upd.status >= 200 && upd.status < 300);
+  sendJson(res, 200, { ok, error: ok ? undefined : "Не удалось обновить пароль" });
+}
+
 async function handleOtpVerify(req, res) {
   if (req.method !== "POST") { sendJson(res, 405, { error: "Method not allowed" }); return; }
   let body;
@@ -971,6 +1011,11 @@ const server = http.createServer(async (req, res) => {
 
   if (url.pathname === "/api/partner/email-by-phone") {
     await handlePartnerEmailByPhone(req, res);
+    return;
+  }
+
+  if (url.pathname === "/api/partner/reset-password") {
+    await handlePartnerResetPassword(req, res);
     return;
   }
 

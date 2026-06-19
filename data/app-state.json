@@ -150,11 +150,29 @@
             "sentAt": "2026-06-19T14:37:01.362Z",
             "readByBuyer": true,
             "readBySeller": true
+          },
+          {
+            "id": "chat-message-1781880804381-10de2c9d027d38",
+            "orderId": "70b1dd84-62ba-4382-bc75-7f647aa8d9b5",
+            "senderRole": "seller",
+            "text": "па",
+            "sentAt": "2026-06-19T14:53:24.381Z",
+            "readByBuyer": true,
+            "readBySeller": true
+          },
+          {
+            "id": "chat-message-1781881087969-9f052035dfe8d8",
+            "orderId": "70b1dd84-62ba-4382-bc75-7f647aa8d9b5",
+            "senderRole": "seller",
+            "text": "Кай фурсонам",
+            "sentAt": "2026-06-19T14:58:07.969Z",
+            "readByBuyer": true,
+            "readBySeller": true
           }
         ]
       }
     },
-    "updatedAt": "2026-06-19T14:50:45.740Z"
+    "updatedAt": "2026-06-19T16:23:50.096Z"
   },
   "drivex.market.catalog.v1": {
     "value": {
@@ -498,7 +516,7 @@
         }
       ]
     },
-    "updatedAt": "2026-06-19T14:50:45.743Z"
+    "updatedAt": "2026-06-19T16:23:50.103Z"
   },
   "drivex.seller.orders.v1": {
     "value": [
@@ -963,7 +981,7 @@
         "notes": ""
       }
     ],
-    "updatedAt": "2026-06-19T14:50:45.708Z"
+    "updatedAt": "2026-06-19T16:23:50.019Z"
   },
   "drivex.seller.notifications.v1": {
     "value": [
@@ -1441,7 +1459,7 @@
         "icon": "truck"
       }
     ],
-    "updatedAt": "2026-06-19T14:50:45.712Z"
+    "updatedAt": "2026-06-19T16:23:50.025Z"
   },
   "drivex.service.profile.v1": {
     "value": {
@@ -1453,7 +1471,7 @@
       "position": "Владелец сервиса",
       "registrationCompleted": false
     },
-    "updatedAt": "2026-06-19T14:48:56.601Z"
+    "updatedAt": "2026-06-19T16:22:29.565Z"
   },
   "drivex.service.center.v1": {
     "value": {
@@ -1476,30 +1494,30 @@
       "registrationCompleted": false,
       "status": "new"
     },
-    "updatedAt": "2026-06-19T14:50:45.717Z"
+    "updatedAt": "2026-06-19T16:23:50.036Z"
   },
   "drivex.service.clients.v1": {
     "value": [],
-    "updatedAt": "2026-06-19T14:50:45.720Z"
+    "updatedAt": "2026-06-19T16:23:50.046Z"
   },
   "drivex.service.orders.v1": {
     "value": [],
-    "updatedAt": "2026-06-19T14:50:45.723Z"
+    "updatedAt": "2026-06-19T16:23:50.055Z"
   },
   "drivex.service.inventory.v1": {
     "value": [],
-    "updatedAt": "2026-06-19T14:50:45.726Z"
+    "updatedAt": "2026-06-19T16:23:50.064Z"
   },
   "drivex.service.finance.v1": {
     "value": [],
-    "updatedAt": "2026-06-19T14:50:45.730Z"
+    "updatedAt": "2026-06-19T16:23:50.072Z"
   },
   "drivex.service.appointments.v1": {
     "value": [],
-    "updatedAt": "2026-06-19T14:50:45.733Z"
+    "updatedAt": "2026-06-19T16:23:50.082Z"
   },
   "drivex.service.requests.v1": {
     "value": [],
-    "updatedAt": "2026-06-19T14:50:45.736Z"
+    "updatedAt": "2026-06-19T16:23:50.090Z"
   }
 }

@@ -1537,23 +1537,33 @@
     const client = createSupabaseClient();
     if (!client) return resetLocalPartnerPassword(payload);
 
-    const email = String(payload?.email || payload?.identifier || "").trim();
+    // Идентификатор — email ИЛИ телефон (продавец вышел из аккаунта, сессии нет,
+    // поэтому client.auth.updateUser невозможен). Сбрасываем через серверный
+    // endpoint с service-role: он находит пользователя по email/телефону и меняет пароль.
+    const identifier = String(payload?.identifier || payload?.email || payload?.phone || "").trim();
     const nextPassword = String(payload?.newPassword || "").trim();
-    if (!email) {
-      throw new Error("Для Supabase-восстановления укажите email");
+    if (!identifier) {
+      throw new Error("Укажите email или телефон");
     }
     if (!nextPassword || nextPassword.length < 6) {
       throw new Error("Новый пароль должен быть не короче 6 символов");
     }
 
-    const { error } = await client.auth.updateUser({
-      password: nextPassword
-    });
-    if (error) {
-      const { error: resetError } = await client.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}${window.location.pathname}#/partner/login`
+    let resp, data;
+    try {
+      resp = await fetch("/api/partner/reset-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identifier, newPassword: nextPassword })
       });
-      if (resetError) throw resetError;
+      data = await resp.json().catch(() => ({}));
+    } catch (e) {
+      throw new Error("Сервер недоступен — не удалось сбросить пароль");
+    }
+    if (!resp.ok || !data.ok) {
+      if (data.notFound) throw new Error("Аккаунт с таким email или телефоном не найден");
+      if (data.configured === false) throw new Error("Сброс пароля недоступен: сервер без service-role ключа");
+      throw new Error(data.error || "Не удалось сбросить пароль");
     }
 
     emitSync("partner-reset-password");
