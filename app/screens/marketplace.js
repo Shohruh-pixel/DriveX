@@ -1471,6 +1471,8 @@
     const toast = useToast();
     const storesCount = new Set(items.map((item) => item.storeId).filter(Boolean)).size;
     const [checkoutDraft, setCheckoutDraft] = useState(() => createMarketplaceCheckoutDraft(items, profile));
+    const [submitting, setSubmitting] = useState(false); // для вида кнопки
+    const submittingRef = useRef(false); // СИНХРОННЫЙ замок: state обновляется асинхронно, быстрые клики проскакивают
 
     useEffect(() => {
       setCheckoutDraft((prev) => syncMarketplaceCheckoutDraft(prev, items, profile));
@@ -1793,9 +1795,11 @@
                 </p>
                 <button
                   type="button"
+                  disabled=${submitting}
                   className="w-full py-4 rounded-2xl font-bold text-lg"
-                  style=${{ background: "var(--gradient-primary)", color: "var(--drivex-white)" }}
-                  onClick=${() => {
+                  style=${{ background: "var(--gradient-primary)", color: "var(--drivex-white)", opacity: submitting ? 0.6 : 1, cursor: submitting ? "wait" : "pointer" }}
+                  onClick=${async () => {
+                    if (submittingRef.current) return; // синхронный замок — блокирует мгновенно, до ре-рендера
                     if (!items.length) {
                       toast.push("Корзина пуста");
                       return;
@@ -1819,10 +1823,18 @@
                       return;
                     }
 
-                    onCheckout && onCheckout(checkoutDraft);
+                    if (!onCheckout) return;
+                    submittingRef.current = true;
+                    setSubmitting(true);
+                    try {
+                      await onCheckout(checkoutDraft);
+                    } finally {
+                      submittingRef.current = false;
+                      setSubmitting(false);
+                    }
                   }}
                 >
-                  Оформить заказ
+                  ${submitting ? "Оформляем…" : "Оформить заказ"}
                 </button>
               </div>`
             : null}
