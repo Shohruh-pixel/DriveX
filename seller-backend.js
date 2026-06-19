@@ -1741,6 +1741,30 @@
       }
     }
 
+    // FK orders.customer_user_id -> public.users(id). Покупатель мог не иметь
+    // строки профиля (в отличие от продавца, который создаёт её при регистрации) —
+    // тогда INSERT заказа падает с "violates foreign key constraint
+    // orders_customer_user_id_fkey". Создаём профиль, если его нет. НЕ трогаем
+    // существующий (чтобы не перезаписать role продавца, который заказывает как покупатель).
+    if (buyerUserId && isUuid(buyerUserId)) {
+      try {
+        const probe = incomingOrders[0] || {};
+        const { data: existingUser } = await withTimeout(
+          client.from("users").select("id").eq("id", buyerUserId).maybeSingle(), 6000, "users check timeout"
+        );
+        if (!existingUser) {
+          await withTimeout(client.from("users").insert({
+            id: buyerUserId,
+            full_name: probe.customerName || "Покупатель DRIVEX",
+            phone: probe.customerPhone || "",
+            role: "buyer"
+          }), 6000, "users insert timeout");
+        }
+      } catch (e) {
+        console.warn("[seller-backend] ensure buyer profile:", e && e.message);
+      }
+    }
+
     const createdOrders = []; // {storeId, code, id} — чтобы покупатель привязал свой заказ к uuid из БД
     for (const order of incomingOrders) {
       // Не передаём id — пусть Supabase генерирует UUID автоматически
