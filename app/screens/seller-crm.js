@@ -2537,24 +2537,122 @@
           </div>
         `;
 
-    return safeViewerRole === "seller"
-        ? html`
-          <${SellerLayout}
-            title="Чат по заказу"
-            subtitle="Связь с покупателем по заказу."
-            activeItem="orders"
-            currentUser=${currentUser}
-            store=${store}
-            showStoreSummary=${false}
-          >
-            ${pageContent}
-          </${SellerLayout}>
-        `
-      : html`
-          <${SimplePage} title="Чат по заказу" backPath=${backPath}>
-            ${pageContent}
-          </${SimplePage}>
-        `;
+    // ── Полноэкранный чат-мессенджер (дизайн как в референсе) ──────────────
+    void pageContent; // старый шаблон не используется — рендерим мессенджер ниже
+    const fmtTime = (iso) => {
+      try {
+        const d = new Date(iso);
+        if (isNaN(d.getTime())) return "";
+        return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+      } catch { return ""; }
+    };
+    const dayLabel = (iso) => {
+      try {
+        const d = new Date(iso);
+        if (isNaN(d.getTime())) return "";
+        const now = new Date();
+        const start = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+        const diff = Math.round((start(now) - start(d)) / 86400000);
+        if (diff === 0) return "Сегодня";
+        if (diff === 1) return "Вчера";
+        return d.toLocaleDateString("ru-RU", { day: "2-digit", month: "long" });
+      } catch { return ""; }
+    };
+    const chatItems = [];
+    let lastDay = "";
+    for (const m of messages) {
+      const dl = dayLabel(m.sentAt);
+      if (dl && dl !== lastDay) { chatItems.push({ type: "day", id: "day-" + dl + "-" + m.id, label: dl }); lastDay = dl; }
+      chatItems.push({ type: "msg", message: m });
+    }
+    const quickReplies = safeViewerRole === "seller"
+      ? ["👍 Принято", "В наличии", "Уже в пути 🚗", "Спасибо!"]
+      : ["Здравствуйте!", "Когда будет готово?", "Спасибо!"];
+    const sendQuick = (text) => { if (order?.id) onSendMessage && onSendMessage(order.id, safeViewerRole, text); };
+
+    const shellStyle = { position: "fixed", inset: 0, maxWidth: "480px", margin: "0 auto", background: "var(--drivex-black, #0a0a0f)", display: "flex", flexDirection: "column", zIndex: 60 };
+
+    if (!order) {
+      return html`
+        <div style=${shellStyle}>
+          <div style=${{ padding: "16px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+            <a href=${`#${backPath}`} style=${{ color: "var(--drivex-neon-cyan)", display: "inline-flex", alignItems: "center", gap: "8px", fontWeight: 600 }}>
+              <${Icon} name="chevron-left" size=${18} /> ${backLabel}
+            </a>
+          </div>
+          <div style=${{ flex: 1, display: "grid", placeItems: "center", color: "var(--drivex-silver)" }}>Заказ для чата не найден</div>
+        </div>`;
+    }
+
+    return html`
+      <div style=${shellStyle}>
+        <div style=${{ flexShrink: 0, display: "flex", alignItems: "center", gap: "10px", padding: "12px 12px", borderBottom: "1px solid rgba(255,255,255,0.06)", background: "rgba(14,18,26,0.98)" }}>
+          <a href=${`#${backPath}`} aria-label="Назад" style=${{ color: "var(--drivex-white)", display: "inline-flex", padding: "4px" }}><${Icon} name="chevron-left" size=${22} /></a>
+          <div style=${{ width: "44px", height: "44px", borderRadius: "50%", background: "linear-gradient(135deg, rgba(6,182,212,0.2), rgba(15,23,42,0.9))", border: "1px solid rgba(6,182,212,0.18)", display: "grid", placeItems: "center", color: "var(--drivex-neon-cyan)", fontWeight: 700, fontSize: "14px", flexShrink: 0 }}>${contactInitials}</div>
+          <div style=${{ flex: 1, minWidth: 0 }}>
+            <div style=${{ fontWeight: 700, color: "var(--drivex-white)", fontSize: "16px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>${contactName}</div>
+          </div>
+          ${phoneHref ? html`<a href=${phoneHref} aria-label="Позвонить" style=${{ width: "40px", height: "40px", borderRadius: "50%", border: "1px solid rgba(255,255,255,0.08)", display: "grid", placeItems: "center", color: "var(--drivex-neon-cyan)", flexShrink: 0 }}><${Icon} name="phone" size=${18} /></a>` : null}
+        </div>
+
+        <div style=${{ flexShrink: 0, display: "flex", alignItems: "center", gap: "12px", padding: "10px 14px", borderBottom: "1px solid rgba(255,255,255,0.05)", background: "rgba(18,22,30,0.55)" }}>
+          <div style=${{ width: "40px", height: "40px", borderRadius: "12px", background: "rgba(6,182,212,0.12)", border: "1px solid rgba(6,182,212,0.14)", display: "grid", placeItems: "center", color: "var(--drivex-neon-cyan)", fontWeight: 800, fontSize: "12px", flexShrink: 0 }}>DX</div>
+          <div style=${{ flex: 1, minWidth: 0 }}>
+            <div style=${{ fontWeight: 700, color: "var(--drivex-white)", fontSize: "14px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>${itemsLabel}</div>
+            <div style=${{ fontSize: "12px", color: "var(--drivex-silver)", marginTop: "2px" }}>${orderCode} · ${formatTjsPrice(order.amount)} · ${order.deliveryMethod || "Доставка"}</div>
+          </div>
+          <span style=${{ padding: "6px 12px", borderRadius: "9999px", fontSize: "12px", fontWeight: 600, background: alphaBg(statusMeta.color, 0.16), color: statusMeta.color, whiteSpace: "nowrap", flexShrink: 0 }}>${statusMeta.label}</span>
+        </div>
+
+        <div style=${{ flex: 1, overflowY: "auto", padding: "16px", display: "flex", flexDirection: "column", gap: "8px" }}>
+          ${chatItems.length
+            ? chatItems.map((it) => {
+                if (it.type === "day") {
+                  return html`<div key=${it.id} style=${{ alignSelf: "center", margin: "6px 0", padding: "4px 14px", borderRadius: "9999px", background: "rgba(255,255,255,0.06)", color: "var(--drivex-silver)", fontSize: "12px", fontWeight: 600 }}>${it.label}</div>`;
+                }
+                const m = it.message;
+                const own = m.senderRole === safeViewerRole;
+                const read = own ? (safeViewerRole === "seller" ? m.readByBuyer : m.readBySeller) : false;
+                return html`<div key=${m.id} style=${{ display: "flex", justifyContent: own ? "flex-end" : "flex-start" }}>
+                  <div style=${{ maxWidth: "78%", padding: "9px 13px", borderRadius: own ? "18px 18px 4px 18px" : "18px 18px 18px 4px", background: own ? "linear-gradient(135deg, rgba(16,122,98,0.96), rgba(13,95,77,0.96))" : "rgba(255,255,255,0.06)", border: own ? "1px solid rgba(16,185,129,0.25)" : "1px solid rgba(255,255,255,0.06)" }}>
+                    <div style=${{ fontSize: "15px", lineHeight: 1.4, color: "var(--drivex-white)", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>${m.text}</div>
+                    <div style=${{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "4px", marginTop: "3px", fontSize: "11px", color: "rgba(255,255,255,0.55)" }}>
+                      <span>${fmtTime(m.sentAt)}</span>
+                      ${own ? html`<span style=${{ color: read ? "#34d399" : "rgba(255,255,255,0.5)", fontSize: "12px", letterSpacing: "-2px" }}>✓✓</span>` : null}
+                    </div>
+                  </div>
+                </div>`;
+              })
+            : html`<div style=${{ flex: 1, display: "grid", placeItems: "center", color: "var(--drivex-silver)", fontSize: "14px", textAlign: "center" }}>Пока сообщений нет —<br/>напишите первым</div>`}
+          <div ref=${messagesEndRef}></div>
+        </div>
+
+        <div style=${{ flexShrink: 0, display: "flex", gap: "8px", overflowX: "auto", padding: "10px 14px 2px" }}>
+          ${quickReplies.map((q, i) => html`<button key=${i} type="button" onClick=${() => sendQuick(q)} style=${{ flexShrink: 0, padding: "8px 14px", borderRadius: "9999px", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)", color: "var(--drivex-white)", fontSize: "14px", fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>${q}</button>`)}
+        </div>
+
+        <div style=${{ flexShrink: 0, padding: "8px 12px 14px", borderTop: "1px solid rgba(255,255,255,0.06)", background: "rgba(14,18,26,0.98)" }}>
+          <form onSubmit=${handleSubmit}>
+            <div style=${{ display: "flex", alignItems: "flex-end", gap: "8px" }}>
+              <div style=${{ flex: 1, display: "flex", alignItems: "center", gap: "8px", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "24px", padding: "6px 14px" }}>
+                <span style=${{ fontSize: "18px", opacity: 0.7, lineHeight: 1 }}>🙂</span>
+                <textarea
+                  rows="1"
+                  value=${draftMessage}
+                  onInput=${(e) => { setDraftMessage(e.target.value); e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 110) + "px"; }}
+                  onKeyDown=${handleKeyDown}
+                  placeholder="Сообщение…"
+                  className="dx-input"
+                  style=${{ flex: 1, background: "transparent", border: "none", outline: "none", color: "var(--drivex-white)", resize: "none", maxHeight: "110px", minHeight: "24px", lineHeight: 1.4, fontSize: "15px", padding: "2px 0" }}
+                ></textarea>
+              </div>
+              <button type="submit" disabled=${!draftMessage.trim()} style=${{ width: "48px", height: "48px", borderRadius: "50%", flexShrink: 0, display: "grid", placeItems: "center", border: "none", cursor: draftMessage.trim() ? "pointer" : "default", background: draftMessage.trim() ? "linear-gradient(135deg, #10b981, #059669)" : "rgba(255,255,255,0.08)", color: "#fff", opacity: draftMessage.trim() ? 1 : 0.5, transition: "all 0.2s" }}>
+                <${Icon} name="send" size=${20} />
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>`;
   }
 
   function SellerOrdersScreen({ currentUser, store, orders, orderChats, onUpdateOrderStatus }) {
