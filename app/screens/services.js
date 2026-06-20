@@ -1455,9 +1455,17 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ vin: v })
         });
-        const data = await resp.json();
+        if (!resp.ok) {
+          // 404 = на сервере нет маршрута /api/ai/vin (запущен старый код)
+          toast.push(resp.status === 404
+            ? "VIN-сервис не найден — перезапустите сервер (node server.js)"
+            : `VIN-сервис вернул ошибку ${resp.status}`);
+          return;
+        }
+        let data = null;
+        try { data = await resp.json(); } catch { data = null; }
         if (!data || (!data.brand && !data.year)) {
-          toast.push("Не удалось распознать VIN");
+          toast.push("Не удалось распознать VIN — проверьте код");
           return;
         }
         setVinInfo(data);
@@ -1467,7 +1475,7 @@
         setSearched({ brand: data.brand || "", model: data.model || "", year: data.year ? String(data.year) : "" });
         toast.push(data._mock ? "VIN: базовая расшифровка" : "VIN распознан");
       } catch {
-        toast.push("Ошибка проверки VIN");
+        toast.push("Нет связи с VIN-сервисом — сервер запущен?");
       } finally {
         setVinBusy(false);
       }
