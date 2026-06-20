@@ -2160,6 +2160,8 @@
     const toast = useToast();
     const [draftMessage, setDraftMessage] = useState("");
     const messagesEndRef = useRef(null);
+    const imageInputRef = useRef(null);
+    const [uploadingImage, setUploadingImage] = useState(false);
     const safeViewerRole = viewerRole === "seller" ? "seller" : "buyer";
     const thread = useMemo(() => getOrderChatThread(orderChats, order?.id), [orderChats, order?.id]);
     const messages = thread.messages;
@@ -2217,6 +2219,31 @@
       [draftMessage, onSendMessage, order?.id, safeViewerRole]
     );
 
+    // Отправка фото: сжимаем -> грузим в Supabase Storage -> шлём URL как сообщение.
+    const handlePickImage = useCallback(
+      async (event) => {
+        const file = event.target.files && event.target.files[0];
+        if (event.target) event.target.value = "";
+        if (!file || !order?.id) return;
+        if (!DX.uploadChatImage) { toast.push("Отправка фото недоступна"); return; }
+        try {
+          setUploadingImage(true);
+          const dataUrl = DX.prepareAvatarDataUrl
+            ? await DX.prepareAvatarDataUrl(file, { size: 1280, quality: 0.82 })
+            : null;
+          if (!dataUrl) { toast.push("Не удалось обработать фото"); return; }
+          const url = await DX.uploadChatImage(dataUrl);
+          if (!url) { toast.push("Не удалось загрузить фото"); return; }
+          onSendMessage && onSendMessage(order.id, safeViewerRole, url);
+        } catch (e) {
+          toast.push("Не удалось отправить фото");
+        } finally {
+          setUploadingImage(false);
+        }
+      },
+      [order?.id, safeViewerRole, onSendMessage, toast]
+    );
+
     const statusMeta = order
       ? safeViewerRole === "seller"
         ? getSellerOrderStatusMeta(order.status)
@@ -2250,6 +2277,15 @@
       order?.customerPhone && String(order.customerPhone).trim()
         ? `tel:${String(order.customerPhone).replace(/[^\d+]/g, "")}`
         : "";
+    // Аватар собеседника: для покупателя — логотип магазина (если есть).
+    const contactStore = safeViewerRole === "seller" ? null : ((DX.getMarketStore && DX.getMarketStore(order?.storeId)) || null);
+    const contactAvatar = safeViewerRole === "seller"
+      ? (order?.customerAvatar || "")
+      : (order?.storeLogo || (contactStore && (contactStore.logo || contactStore.avatar)) || "");
+    const isImageMsg = (t) => {
+      const s = String(t || "");
+      return s.startsWith("data:image/") || /^https?:\/\/\S+\.(png|jpe?g|webp|gif)(\?\S*)?$/i.test(s);
+    };
     const orderCode = order?.id
       ? (/^DX-/i.test(String(order.id)) ? String(order.id) : "DX-" + String(order.id).replace(/-/g, "").slice(0, 6).toUpperCase())
       : "Заказ";
@@ -2588,7 +2624,9 @@
       <div style=${shellStyle}>
         <div style=${{ flexShrink: 0, display: "flex", alignItems: "center", gap: "10px", padding: "12px 12px", borderBottom: "1px solid rgba(255,255,255,0.06)", background: "rgba(14,18,26,0.98)" }}>
           <a href=${`#${backPath}`} aria-label="Назад" style=${{ color: "var(--drivex-white)", display: "inline-flex", padding: "4px" }}><${Icon} name="chevron-left" size=${22} /></a>
-          <div style=${{ width: "44px", height: "44px", borderRadius: "50%", background: "linear-gradient(135deg, rgba(6,182,212,0.2), rgba(15,23,42,0.9))", border: "1px solid rgba(6,182,212,0.18)", display: "grid", placeItems: "center", color: "var(--drivex-neon-cyan)", fontWeight: 700, fontSize: "14px", flexShrink: 0 }}>${contactInitials}</div>
+          ${contactAvatar
+            ? html`<img src=${contactAvatar} alt=${contactName} style=${{ width: "44px", height: "44px", borderRadius: "50%", objectFit: "cover", border: "1px solid rgba(6,182,212,0.18)", flexShrink: 0 }} />`
+            : html`<div style=${{ width: "44px", height: "44px", borderRadius: "50%", background: "linear-gradient(135deg, rgba(6,182,212,0.2), rgba(15,23,42,0.9))", border: "1px solid rgba(6,182,212,0.18)", display: "grid", placeItems: "center", color: "var(--drivex-neon-cyan)", fontWeight: 700, fontSize: "14px", flexShrink: 0 }}>${contactInitials}</div>`}
           <div style=${{ flex: 1, minWidth: 0 }}>
             <div style=${{ fontWeight: 700, color: "var(--drivex-white)", fontSize: "16px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>${contactName}</div>
           </div>
@@ -2614,8 +2652,12 @@
                 const own = m.senderRole === safeViewerRole;
                 const read = own ? (safeViewerRole === "seller" ? m.readByBuyer : m.readBySeller) : false;
                 return html`<div key=${m.id} style=${{ display: "flex", justifyContent: own ? "flex-end" : "flex-start" }}>
-                  <div style=${{ maxWidth: "78%", padding: "9px 13px", borderRadius: own ? "18px 18px 4px 18px" : "18px 18px 18px 4px", background: own ? "linear-gradient(135deg, rgba(16,122,98,0.96), rgba(13,95,77,0.96))" : "rgba(255,255,255,0.06)", border: own ? "1px solid rgba(16,185,129,0.25)" : "1px solid rgba(255,255,255,0.06)" }}>
-                    <div style=${{ fontSize: "15px", lineHeight: 1.4, color: "var(--drivex-white)", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>${m.text}</div>
+                  <div style=${{ maxWidth: "78%", padding: isImageMsg(m.text) ? "5px" : "9px 13px", borderRadius: own ? "18px 18px 4px 18px" : "18px 18px 18px 4px", background: own ? "linear-gradient(135deg, rgba(16,122,98,0.96), rgba(13,95,77,0.96))" : "rgba(255,255,255,0.06)", border: own ? "1px solid rgba(16,185,129,0.25)" : "1px solid rgba(255,255,255,0.06)" }}>
+                    ${isImageMsg(m.text)
+                      ? html`<a href=${m.text} target="_blank" rel="noopener noreferrer" style=${{ display: "block" }}>
+                          <img src=${m.text} alt="фото" style=${{ maxWidth: "230px", maxHeight: "280px", width: "100%", borderRadius: "12px", display: "block", objectFit: "cover" }} />
+                        </a>`
+                      : html`<div style=${{ fontSize: "15px", lineHeight: 1.4, color: "var(--drivex-white)", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>${m.text}</div>`}
                     <div style=${{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "4px", marginTop: "3px", fontSize: "11px", color: "rgba(255,255,255,0.55)" }}>
                       <span>${fmtTime(m.sentAt)}</span>
                       ${own ? html`<span style=${{ color: read ? "#34d399" : "rgba(255,255,255,0.5)", fontSize: "12px", letterSpacing: "-2px" }}>✓✓</span>` : null}
@@ -2634,17 +2676,27 @@
         <div style=${{ flexShrink: 0, padding: "8px 12px 14px", borderTop: "1px solid rgba(255,255,255,0.06)", background: "rgba(14,18,26,0.98)" }}>
           <form onSubmit=${handleSubmit}>
             <div style=${{ display: "flex", alignItems: "flex-end", gap: "8px" }}>
-              <div style=${{ flex: 1, display: "flex", alignItems: "center", gap: "8px", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "24px", padding: "6px 14px" }}>
+              <div style=${{ flex: 1, display: "flex", alignItems: "center", gap: "8px", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "24px", padding: "6px 12px 6px 14px" }}>
                 <span style=${{ fontSize: "18px", opacity: 0.7, lineHeight: 1 }}>🙂</span>
                 <textarea
                   rows="1"
                   value=${draftMessage}
                   onInput=${(e) => { setDraftMessage(e.target.value); e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 110) + "px"; }}
                   onKeyDown=${handleKeyDown}
-                  placeholder="Сообщение…"
+                  placeholder=${uploadingImage ? "Отправляем фото…" : "Сообщение…"}
                   className="dx-input"
                   style=${{ flex: 1, background: "transparent", border: "none", outline: "none", color: "var(--drivex-white)", resize: "none", maxHeight: "110px", minHeight: "24px", lineHeight: 1.4, fontSize: "15px", padding: "2px 0" }}
                 ></textarea>
+                <input ref=${imageInputRef} type="file" accept="image/*" style=${{ display: "none" }} onChange=${handlePickImage} />
+                <button
+                  type="button"
+                  aria-label="Прикрепить фото"
+                  disabled=${uploadingImage}
+                  onClick=${() => imageInputRef.current && imageInputRef.current.click()}
+                  style=${{ background: "none", border: "none", cursor: uploadingImage ? "wait" : "pointer", color: "var(--drivex-silver)", display: "grid", placeItems: "center", padding: "2px", flexShrink: 0, opacity: uploadingImage ? 0.5 : 1 }}
+                >
+                  <${Icon} name="image" size=${21} />
+                </button>
               </div>
               <button type="submit" disabled=${!draftMessage.trim()} style=${{ width: "48px", height: "48px", borderRadius: "50%", flexShrink: 0, display: "grid", placeItems: "center", border: "none", cursor: draftMessage.trim() ? "pointer" : "default", background: draftMessage.trim() ? "linear-gradient(135deg, #10b981, #059669)" : "rgba(255,255,255,0.08)", color: "#fff", opacity: draftMessage.trim() ? 1 : 0.5, transition: "all 0.2s" }}>
                 <${Icon} name="send" size=${20} />

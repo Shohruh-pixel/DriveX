@@ -332,6 +332,21 @@
           <circle cx="12" cy="12" r="9"></circle>
           <path d="m10 8 6 4-6 4z"></path>
         </svg>`;
+      case "send":
+        return html`<svg ...${commonProps} className=${className} style=${style}>
+          <path d="M22 2 11 13"></path>
+          <path d="M22 2 15 22l-4-9-9-4 20-7Z"></path>
+        </svg>`;
+      case "image":
+        return html`<svg ...${commonProps} className=${className} style=${style}>
+          <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+          <circle cx="9" cy="9" r="2"></circle>
+          <path d="m21 15-4.5-4.5L4 21"></path>
+        </svg>`;
+      case "paperclip":
+        return html`<svg ...${commonProps} className=${className} style=${style}>
+          <path d="M21 11.5 12.5 20a5 5 0 0 1-7-7l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7L10 13.4"></path>
+        </svg>`;
       default:
         return html`<svg ...${commonProps} className=${className} style=${style}>
           <circle cx="12" cy="12" r="10"></circle>

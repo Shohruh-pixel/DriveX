@@ -2291,6 +2291,35 @@
     }
   }
 
+  // Загрузка фото из чата в Supabase Storage -> публичный URL (его и шлём как
+  // сообщение; data-URL не годится — он вырезается при синхронизации в облако).
+  async function uploadChatImage(dataUrl) {
+    const client = getSupabaseClient();
+    if (!client || !dataUrl || !String(dataUrl).startsWith("data:image/")) return null;
+    try {
+      const { data: sess } = await client.auth.getSession();
+      const uid = sess && sess.session && sess.session.user && sess.session.user.id;
+      if (!uid) return null;
+      const match = dataUrl.match(/^data:(image\/\w+);base64,(.+)$/);
+      if (!match) return null;
+      const mimeType = match[1];
+      const ext = mimeType === "image/png" ? "png" : (mimeType === "image/webp" ? "webp" : "jpg");
+      const byteChars = atob(match[2]);
+      const byteArr = new Uint8Array(byteChars.length);
+      for (let i = 0; i < byteChars.length; i++) byteArr[i] = byteChars.charCodeAt(i);
+      const blob = new Blob([byteArr], { type: mimeType });
+      const cfg = window.DRIVEX_SUPABASE_CONFIG || {};
+      const bucket = (cfg.buckets && cfg.buckets.userAvatars) || cfg.storageBucket || "user-avatars";
+      const filePath = `${uid}/chat/${Date.now()}-${Math.random().toString(16).slice(2)}.${ext}`;
+      const { error } = await client.storage.from(bucket).upload(filePath, blob, { upsert: true, contentType: mimeType });
+      if (error) return null;
+      const { data: urlData } = client.storage.from(bucket).getPublicUrl(filePath);
+      return (urlData && urlData.publicUrl) || null;
+    } catch {
+      return null;
+    }
+  }
+
   function getBuyerLocalStorageKey(key, session) {
     const safeSession = normalizeBuyerSession(session);
     if (safeSession.authenticated && safeSession.id) {
@@ -5170,6 +5199,7 @@
   try { window.DX.sellerProductStatusOptions = sellerProductStatusOptions; } catch(e) {}
   try { window.DX.buyerOrderStatusOptions = buyerOrderStatusOptions; } catch(e) {}
   try { window.DX.prepareAvatarDataUrl = prepareAvatarDataUrl; } catch(e) {}
+  try { window.DX.uploadChatImage = uploadChatImage; } catch(e) {}
 
 })();
 
