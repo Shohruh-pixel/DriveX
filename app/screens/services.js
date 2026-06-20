@@ -1372,18 +1372,110 @@
     `;
   }
 
+  const MARKET_CAR_MAKES = [
+    "Toyota", "Lexus", "Honda", "Nissan", "Mitsubishi", "Mazda", "Subaru", "Suzuki",
+    "BMW", "Mercedes", "Audi", "Volkswagen", "Opel", "Hyundai", "Kia", "Daewoo",
+    "Chevrolet", "Ford", "Renault", "Lada"
+  ];
+
+  function marketVinEndpoint() {
+    const base = (window.DRIVEX_AI_CONFIG && window.DRIVEX_AI_CONFIG.endpoint) || "/api/ai/assistant";
+    return base.replace(/\/assistant\/?$/, "/vin");
+  }
+
   function MarketAutoPickerScreen({ cartCount, onAddToCart }) {
+    const toast = useToast();
+    const cars = Array.isArray(garageCars) ? garageCars : [];
+    const firstCar = cars[0] || null;
+
     const [mode, setMode] = useState("car");
-    const [brand, setBrand] = useState("BMW");
-    const [model, setModel] = useState("X5 (F15)");
-    const [year, setYear] = useState("2019");
-    const [modification, setModification] = useState("xDrive 30d 3.0d");
-    const activeCar = garageCars[0] || null;
-    const selectedProducts = useMemo(() => {
-      return marketplaceData.products
-        .filter((product) => ["oil", "parts", "battery"].includes(product.categoryId))
-        .slice(0, 6);
+    const [brand, setBrand] = useState(firstCar?.brand || "");
+    const [model, setModel] = useState(firstCar?.model || "");
+    const [year, setYear] = useState(firstCar?.year ? String(firstCar.year) : "");
+    const [vin, setVin] = useState("");
+    const [vinBusy, setVinBusy] = useState(false);
+    const [vinInfo, setVinInfo] = useState(null);
+    const [searched, setSearched] = useState(
+      firstCar
+        ? { brand: firstCar.brand || "", model: firstCar.model || "", year: firstCar.year ? String(firstCar.year) : "" }
+        : null
+    );
+
+    const years = useMemo(() => {
+      const cy = new Date().getFullYear();
+      const arr = [];
+      for (let y = cy; y >= 1990; y--) arr.push(String(y));
+      return arr;
     }, []);
+
+    // Реальный подбор: фильтруем каталог по совместимости с выбранным авто
+    const matched = useMemo(() => {
+      if (!searched || (!searched.brand && !searched.model)) return null;
+      const specific = [];
+      const universal = [];
+      (marketplaceData.products || []).forEach((product) => {
+        const r = DX.productMatchesCar
+          ? DX.productMatchesCar(product, searched)
+          : { match: true, universal: true };
+        if (!r.match) return;
+        if (r.universal) universal.push(product);
+        else specific.push(product);
+      });
+      return { specific, universal, total: specific.length + universal.length };
+    }, [searched]);
+
+    const pickGarageCar = useCallback((car) => {
+      setMode("car");
+      setBrand(car.brand || "");
+      setModel(car.model || "");
+      setYear(car.year ? String(car.year) : "");
+      setVinInfo(null);
+      setSearched({ brand: car.brand || "", model: car.model || "", year: car.year ? String(car.year) : "" });
+    }, []);
+
+    const runCarSearch = useCallback(() => {
+      if (!brand && !model) {
+        toast.push("Выберите марку или модель");
+        return;
+      }
+      setVinInfo(null);
+      setSearched({ brand, model, year });
+    }, [brand, model, year, toast]);
+
+    const runVinCheck = useCallback(async () => {
+      const v = String(vin || "").trim();
+      if (v.replace(/[^A-Za-z0-9]/g, "").length < 11) {
+        toast.push("Введите корректный VIN (мин. 11 символов)");
+        return;
+      }
+      setVinBusy(true);
+      try {
+        const resp = await fetch(marketVinEndpoint(), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ vin: v })
+        });
+        const data = await resp.json();
+        if (!data || (!data.brand && !data.year)) {
+          toast.push("Не удалось распознать VIN");
+          return;
+        }
+        setVinInfo(data);
+        setBrand(data.brand || "");
+        setModel(data.model || "");
+        setYear(data.year ? String(data.year) : "");
+        setSearched({ brand: data.brand || "", model: data.model || "", year: data.year ? String(data.year) : "" });
+        toast.push(data._mock ? "VIN: базовая расшифровка" : "VIN распознан");
+      } catch {
+        toast.push("Ошибка проверки VIN");
+      } finally {
+        setVinBusy(false);
+      }
+    }, [vin, toast]);
+
+    const carLabel = searched && (searched.brand || searched.model)
+      ? [searched.brand, searched.model, searched.year].filter(Boolean).join(" ")
+      : "";
 
     return html`
       <div className="market-ui-page">
@@ -1396,6 +1488,32 @@
         />
         <main className="market-ui-content">
           <${MarketAppNav} active="auto" cartCount=${cartCount} />
+
+          ${cars.length
+            ? html`
+                <${MarketSectionTitle} title="Ваш гараж" />
+                <div className="market-ui-saved-cars">
+                  ${cars.map((car) => {
+                    const isActive =
+                      searched &&
+                      (searched.brand || "") === (car.brand || "") &&
+                      (searched.model || "") === (car.model || "");
+                    return html`
+                      <button
+                        key=${car.id || `${car.brand}-${car.model}`}
+                        type="button"
+                        className=${isActive ? "is-active" : ""}
+                        onClick=${() => pickGarageCar(car)}
+                      >
+                        <b>${[car.brand, car.model].filter(Boolean).join(" ") || "Авто"}</b>
+                        <span>${car.year || ""}</span>
+                      </button>
+                    `;
+                  })}
+                </div>
+              `
+            : null}
+
           <div className="market-ui-mode-switch">
             <button type="button" className=${mode === "car" ? "is-active" : ""} onClick=${() => setMode("car")}>
               По авто
@@ -1408,55 +1526,92 @@
           ${mode === "car"
             ? html`
                 <div className="market-ui-form-list">
-                  ${[
-                    ["Марка", brand, setBrand, ["BMW", "Toyota", "Mercedes-Benz"]],
-                    ["Модель", model, setModel, ["X5 (F15)", "Camry", "E-Class"]],
-                    ["Год выпуска", year, setYear, ["2019", "2021", "2018"]],
-                    ["Модификация", modification, setModification, ["xDrive 30d 3.0d", "2.5 Hybrid", "2.0 бензин"]]
-                  ].map(([label, value, setter, options]) => html`
-                    <label key=${label} className="market-ui-select">
-                      <span>${label}</span>
-                      <select value=${value} onInput=${(event) => setter(event.target.value)}>
-                        ${options.map((option) => html`<option key=${option} value=${option}>${option}</option>`)}
-                      </select>
-                    </label>
-                  `)}
+                  <label className="market-ui-select">
+                    <span>Марка</span>
+                    <select value=${brand} onInput=${(e) => setBrand(e.target.value)}>
+                      <option value="">Любая</option>
+                      ${MARKET_CAR_MAKES.map((m) => html`<option key=${m} value=${m}>${m}</option>`)}
+                    </select>
+                  </label>
+                  <label className="market-ui-select">
+                    <span>Модель</span>
+                    <input
+                      className="dx-input"
+                      placeholder="Например, Camry"
+                      value=${model}
+                      onInput=${(e) => setModel(e.target.value)}
+                    />
+                  </label>
+                  <label className="market-ui-select">
+                    <span>Год выпуска</span>
+                    <select value=${year} onInput=${(e) => setYear(e.target.value)}>
+                      <option value="">Любой</option>
+                      ${years.map((y) => html`<option key=${y} value=${y}>${y}</option>`)}
+                    </select>
+                  </label>
                 </div>
-                <button type="button" className="market-ui-primary-btn">Показать запчасти</button>
+                <button type="button" className="market-ui-primary-btn" onClick=${runCarSearch}>
+                  Показать запчасти
+                </button>
               `
             : html`
                 <div className="market-ui-filter-panel">
                   <label className="market-ui-select">
                     <span>VIN</span>
-                    <input className="dx-input" placeholder="Введите VIN" />
+                    <input
+                      className="dx-input"
+                      placeholder="Например, JTDBR32E320012345"
+                      value=${vin}
+                      maxLength=${17}
+                      onInput=${(e) => setVin(e.target.value.toUpperCase())}
+                    />
                   </label>
-                  <button type="button" className="market-ui-primary-btn">Проверить VIN</button>
+                  <button type="button" className="market-ui-primary-btn" disabled=${vinBusy} onClick=${runVinCheck}>
+                    ${vinBusy ? "Проверяю…" : "Проверить VIN"}
+                  </button>
+                  ${vinInfo && (vinInfo.brand || vinInfo.year)
+                    ? html`<p style=${{ marginTop: "10px", fontSize: "13px", color: "var(--drivex-light-silver)" }}>
+                        Распознано: <b style=${{ color: "var(--drivex-white)" }}>${[vinInfo.brand, vinInfo.model, vinInfo.year].filter(Boolean).join(" ") || "—"}</b>
+                      </p>`
+                    : null}
                 </div>
               `}
 
-          <div className="market-ui-car-preview">
-            <img
-              src="./assets/marketplace/bmw-x5.jpg"
-              alt="BMW X5"
-              loading="eager"
-              decoding="async"
-            />
-          </div>
-
-          <${MarketSectionTitle} title="Сохранённые авто" />
-          <div className="market-ui-saved-cars">
-            <button type="button">
-              <b>${activeCar?.brand || "BMW"} ${activeCar?.model || "X5"}</b>
-              <span>${activeCar?.year || "2019"}</span>
-            </button>
-            <button type="button">
-              <b>Toyota Camry</b>
-              <span>2021</span>
-            </button>
-          </div>
-
-          <${MarketSectionTitle} title="Подходящие товары" />
-          <${MemoProductGrid} products=${selectedProducts} onAddToCart=${onAddToCart} />
+          ${searched
+            ? matched && matched.total
+              ? html`
+                  ${matched.specific.length
+                    ? html`
+                        <${MarketSectionTitle} title=${`Точно для ${carLabel || "вашего авто"} · ${matched.specific.length}`} />
+                        <${MemoProductGrid} products=${matched.specific} onAddToCart=${onAddToCart} />
+                      `
+                    : null}
+                  ${matched.universal.length
+                    ? html`
+                        <${MarketSectionTitle} title=${`Универсальные · ${matched.universal.length}`} />
+                        <${MemoProductGrid} products=${matched.universal} onAddToCart=${onAddToCart} />
+                      `
+                    : null}
+                `
+              : html`
+                  <div className="market-ui-filter-panel">
+                    <div className="text-center">
+                      <p className="font-semibold" style=${{ color: "var(--drivex-white)" }}>
+                        Подходящих товаров не нашлось
+                      </p>
+                      <p className="text-sm mt-2" style=${{ color: "var(--drivex-silver)" }}>
+                        Для ${carLabel || "этого авто"} пока нет совместимых позиций в каталоге.
+                      </p>
+                    </div>
+                  </div>
+                `
+            : html`
+                <div className="market-ui-filter-panel">
+                  <p className="text-sm text-center" style=${{ color: "var(--drivex-silver)" }}>
+                    Выберите авто из гаража или укажите марку/VIN — покажем подходящие запчасти.
+                  </p>
+                </div>
+              `}
         </main>
       </div>
     `;

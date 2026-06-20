@@ -96,6 +96,33 @@ async function handleProductCardRoute(req, res) {
   return true;
 }
 
+// ── Расшифровка VIN для подбора запчастей ─────────────────────────────────────
+// POST /api/ai/vin  { vin }  →  { vin, brand, model, year, valid }
+async function handleVinRoute(req, res) {
+  if (req.method !== "POST") {
+    sendJson(res, 405, { error: "Method not allowed" });
+    return true;
+  }
+
+  try {
+    const body = await readJsonBody(req);
+    const { decodeVin } = require("./ai.vin");
+    const result = await decodeVin(body.vin);
+    sendJson(res, 200, result);
+  } catch (err) {
+    sendJson(res, 200, {
+      vin: "",
+      brand: "",
+      model: "",
+      year: "",
+      valid: false,
+      _error: err && err.message ? err.message : String(err)
+    });
+  }
+
+  return true;
+}
+
 // ── История чатов ─────────────────────────────────────────────────────────────
 // GET  /api/ai/chats?userId=xxx         — список чатов пользователя
 // GET  /api/ai/chats/:chatId?userId=xxx — сообщения чата
@@ -140,5 +167,6 @@ module.exports = {
   handleAiRoute,
   handleAiHistoryRoute,
   handleProductCardRoute,
+  handleVinRoute,
   sendJson
 };
