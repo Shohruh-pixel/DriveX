@@ -42,6 +42,13 @@
     } catch { /* ignore */ }
   }
 
+  // Короткий человекочитаемый код заказа из длинного UUID бэкенда
+  function shortOrderId(id) {
+    const clean = String(id || "").replace(/[^a-zA-Z0-9]/g, "");
+    if (!clean) return String(id || "");
+    return clean.length <= 6 ? clean.toUpperCase() : clean.slice(-6).toUpperCase();
+  }
+
   // Уведомления по статусам заказов покупателя
   function buildBuyerOrderNotifications(orders) {
     const normalize = _dxFn("normalizeBuyerOrdersList");
@@ -59,7 +66,7 @@
         return {
           // id содержит статус → при смене статуса это новое (непрочитанное) событие
           id: `order-${order.id}-${order.status || "new"}`,
-          title: `Заказ ${order.id}: ${meta.label || "обновление"}`,
+          title: `Заказ №${shortOrderId(order.id)} · ${meta.label || "обновление"}`,
           body: (firstItem || "Ваш заказ") + store,
           time: fmt ? fmt(order.statusUpdatedAt || order.date) : "",
           color: meta.color || "var(--drivex-neon-cyan)",
