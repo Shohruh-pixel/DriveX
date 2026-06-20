@@ -4505,6 +4505,15 @@
     return message?.senderRole === safeViewerRole ? "Вы" : getOrderChatPeerLabel(safeViewerRole);
   }
 
+  // Сообщение-фото хранит ссылку (Supabase storage) или data:image прямо в text.
+  // В превью показываем «📷 Фото», а не сырую ссылку.
+  function chatTextIsImage(text) {
+    const t = String(text || "");
+    if (t.startsWith("data:image/")) return true;
+    if (/^https?:\/\//i.test(t) && (/\.(jpe?g|png|webp|gif|heic|bmp)(\?|#|$)/i.test(t) || /\/storage\/v1\/object\//i.test(t))) return true;
+    return false;
+  }
+
   function getOrderChatPreviewText(message, viewerRole = "buyer") {
     if (!message) {
       return viewerRole === "seller"
@@ -4512,7 +4521,16 @@
         : "Чат пуст. Можно написать продавцу по этому заказу.";
     }
 
-    return `${getOrderChatSenderLabel(message, viewerRole)}: ${message.text}`;
+    const body = chatTextIsImage(message.text) ? "📷 Фото" : message.text;
+    return `${getOrderChatSenderLabel(message, viewerRole)}: ${body}`;
+  }
+
+  // Единый короткий код заказа из длинного UUID бэкенда: "DX-7158E9".
+  function formatOrderShortId(id) {
+    const raw = String(id || "");
+    if (/^DX-/i.test(raw)) return raw;
+    const clean = raw.replace(/[^a-zA-Z0-9]/g, "");
+    return clean ? "DX-" + clean.slice(0, 6).toUpperCase() : raw;
   }
 
   function daysUntil(iso) {
@@ -5049,6 +5067,7 @@
   try { if (typeof getOrderChatLastMessage !== 'undefined') window.DX['getOrderChatLastMessage'] = getOrderChatLastMessage; } catch(e) {}
   try { if (typeof getOrderChatPeerLabel !== 'undefined') window.DX['getOrderChatPeerLabel'] = getOrderChatPeerLabel; } catch(e) {}
   try { if (typeof getOrderChatPreviewText !== 'undefined') window.DX['getOrderChatPreviewText'] = getOrderChatPreviewText; } catch(e) {}
+  try { if (typeof formatOrderShortId !== 'undefined') window.DX['formatOrderShortId'] = formatOrderShortId; } catch(e) {}
   try { if (typeof getOrderChatSenderLabel !== 'undefined') window.DX['getOrderChatSenderLabel'] = getOrderChatSenderLabel; } catch(e) {}
   try { if (typeof getOrderChatThread !== 'undefined') window.DX['getOrderChatThread'] = getOrderChatThread; } catch(e) {}
   try { if (typeof getOrderChatUnreadCount !== 'undefined') window.DX['getOrderChatUnreadCount'] = getOrderChatUnreadCount; } catch(e) {}

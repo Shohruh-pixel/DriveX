@@ -50,7 +50,7 @@
 
     // Chat / orders
     'getOrderChatThread','getOrderChatLastMessage','getOrderChatPreviewText','getOrderChatUnreadCount',
-    'getSellerOrderChatPath',
+    'getSellerOrderChatPath','formatOrderShortId',
 
     // Seller models
     'createDefaultSellerSession','createFreshSellerSession',

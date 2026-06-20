@@ -1644,7 +1644,7 @@
                 <div key=${order.id} className="market-ui-order-card">
                   <div className="market-ui-order-head">
                     <div className="min-w-0">
-                      <h3>${order.id}</h3>
+                      <h3>${(DX.formatOrderShortId || ((x) => x))(order.id)}</h3>
                       <p>${formatRuDate(order.date)} • ${order.storeName}</p>
                     </div>
                     <span style=${{ color: order.statusColor, background: alphaBg(order.statusColor, 0.14) }}>
