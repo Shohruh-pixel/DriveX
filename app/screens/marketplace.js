@@ -1058,9 +1058,26 @@
                 </span>
               </div>
 
-              <p className="text-sm mt-4" style=${{ color: "var(--drivex-silver)" }}>
-                ${product.description}
-              </p>
+              ${product.description
+                ? html`<div className="glass-card-light rounded-2xl p-4 mt-4">
+                    <p className="font-semibold mb-2" style=${{ color: "var(--drivex-white)" }}>Описание</p>
+                    <div style=${{ fontSize: "13.5px", lineHeight: 1.6 }}>
+                      ${String(product.description).split(/\n/).map((line, i) => {
+                        const t = line.trim();
+                        if (!t) return html`<div key=${`sp-${i}`} style=${{ height: "8px" }}></div>`;
+                        const isHeader = /:$/.test(t) && t.length <= 42;
+                        return html`<p
+                          key=${`ln-${i}`}
+                          style=${{
+                            margin: "0 0 3px",
+                            fontWeight: isHeader ? 700 : 400,
+                            color: isHeader ? "var(--drivex-white)" : "var(--drivex-light-silver)"
+                          }}
+                        >${t}</p>`;
+                      })}
+                    </div>
+                  </div>`
+                : null}
 
               ${store
                 ? html`<a
@@ -1150,27 +1167,39 @@
                 </p>
               </div>
 
-              ${Array.isArray(product.specs) && product.specs.length
-                ? html`<div className="glass-card-light rounded-2xl p-4 mb-4">
-                    <p className="font-semibold" style=${{ color: "var(--drivex-white)" }}>
-                      Характеристики
-                    </p>
-                    <div className="flex gap-2 flex-wrap mt-3">
-                      ${product.specs.map((spec) => html`
-                        <span
-                          key=${spec}
-                          className="px-3 py-1.5 rounded-xl text-xs font-semibold"
-                          style=${{
-                            background: "var(--glass-bg)",
-                            color: "var(--drivex-light-silver)"
-                          }}
-                        >
-                          ${spec}
-                        </span>
-                      `)}
-                    </div>
-                  </div>`
-                : null}
+              ${(() => {
+                const rows = [];
+                if (product.brand) rows.push(["Бренд", product.brand]);
+                if (product.sku) rows.push(["Артикул", product.sku]);
+                if (product.category) rows.push(["Категория", product.category]);
+                // доп. характеристики вида "Ключ: значение" (если есть)
+                (Array.isArray(product.specs) ? product.specs : []).forEach((spec) => {
+                  const str = String(spec);
+                  const idx = str.indexOf(":");
+                  if (idx > 0) rows.push([str.slice(0, idx).trim(), str.slice(idx + 1).trim()]);
+                });
+                if (!rows.length) return null;
+                return html`<div className="glass-card-light rounded-2xl p-4 mb-4">
+                  <p className="font-semibold mb-1" style=${{ color: "var(--drivex-white)" }}>
+                    Характеристики
+                  </p>
+                  <div>
+                    ${rows.map(([key, value], i) => html`
+                      <div
+                        key=${`spec-${i}`}
+                        className="flex items-baseline justify-between gap-3"
+                        style=${{
+                          padding: "9px 0",
+                          borderBottom: i < rows.length - 1 ? "1px solid rgba(255,255,255,0.06)" : "none"
+                        }}
+                      >
+                        <span style=${{ color: "var(--drivex-silver)", fontSize: "13px", flexShrink: 0 }}>${key}</span>
+                        <span style=${{ color: "var(--drivex-white)", fontSize: "13px", fontWeight: 600, textAlign: "right" }}>${value}</span>
+                      </div>
+                    `)}
+                  </div>
+                </div>`;
+              })()}
 
               ${(() => {
                 const compat = normalizeProductCompatibility(product.compatibility);

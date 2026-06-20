@@ -1252,6 +1252,10 @@
         typeof source.deliveryAvailable === "boolean"
           ? source.deliveryAvailable
           : Boolean(getMarketStore(storeId)?.deliveryAvailable),
+      // Совместимость с авто и поисковые слова — сохраняем, чтобы их заполнял ИИ
+      // и они доходили до карточки в маркете (раньше тут терялись).
+      compatibility: source.compatibility || null,
+      keywords: typeof source.keywords === "string" ? source.keywords.trim() : "",
       createdAt: Number.isFinite(Number(source.createdAt)) ? Number(source.createdAt) : Date.now()
     };
   }
@@ -1328,6 +1332,9 @@
       badge: safeProduct.badge,
       unitLabel: safeProduct.stockQty > 0 ? `Остаток: ${safeProduct.stockQty} шт.` : "Нет в наличии",
       description: safeProduct.description,
+      brand: safeProduct.brand,
+      sku: safeProduct.sku,
+      compatibility: safeProduct.compatibility || null,
       specs: [safeProduct.brand, safeProduct.sku, safeProduct.deliveryAvailable ? "Есть доставка" : "Самовывоз"].filter(Boolean),
       store_id: safeProduct.storeId,
       discounted: Boolean(safeProduct.oldPrice),
@@ -1338,6 +1345,7 @@
         safeProduct.brand,
         safeProduct.sku,
         safeProduct.badge,
+        safeProduct.keywords,
         store?.name
       ]
         .filter(Boolean)

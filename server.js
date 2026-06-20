@@ -5,7 +5,7 @@ const https = require("https");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
-const { handleAiRoute, handleAiHistoryRoute } = require("./src/ai/ai.router");
+const { handleAiRoute, handleAiHistoryRoute, handleProductCardRoute } = require("./src/ai/ai.router");
 
 const rootDir = __dirname;
 const dataDir = path.join(rootDir, "data");
@@ -979,6 +979,11 @@ const server = http.createServer(async (req, res) => {
 
   if (url.pathname === "/api/ai/assistant") {
     await handleAiRoute(req, res);
+    return;
+  }
+
+  if (url.pathname === "/api/ai/product-card") {
+    await handleProductCardRoute(req, res);
     return;
   }
 

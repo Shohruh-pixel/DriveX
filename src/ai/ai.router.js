@@ -66,6 +66,36 @@ async function handleAiRoute(req, res) {
   return true;
 }
 
+// ── Генерация карточки товара по фото (seller CRM) ────────────────────────────
+// POST /api/ai/product-card  { image, title, ocrText, categories[] }
+async function handleProductCardRoute(req, res) {
+  if (req.method !== "POST") {
+    sendJson(res, 405, { error: "Method not allowed" });
+    return true;
+  }
+
+  try {
+    // До 8 МБ: base64-фото крупнее обычного JSON-запроса
+    const body = await readJsonBody(req, 8 * 1024 * 1024);
+    const { generateProductCard } = require("./ai.vision");
+    const card = await generateProductCard(body);
+    sendJson(res, 200, card);
+  } catch (err) {
+    sendJson(res, 200, {
+      title: "",
+      category: "",
+      brand: "",
+      sku: "",
+      description: "",
+      specs: [],
+      tags: [],
+      _error: err && err.message ? err.message : String(err)
+    });
+  }
+
+  return true;
+}
+
 // ── История чатов ─────────────────────────────────────────────────────────────
 // GET  /api/ai/chats?userId=xxx         — список чатов пользователя
 // GET  /api/ai/chats/:chatId?userId=xxx — сообщения чата
@@ -109,5 +139,6 @@ async function handleAiHistoryRoute(req, res, urlParts) {
 module.exports = {
   handleAiRoute,
   handleAiHistoryRoute,
+  handleProductCardRoute,
   sendJson
 };

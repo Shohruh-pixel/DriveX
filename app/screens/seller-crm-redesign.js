@@ -29,6 +29,59 @@
   const getSellerOrderChatPath = DX.getSellerOrderChatPath || ((id) => `/seller/orders/${encodeURIComponent(id)}/chat`);
   const getOrderChatUnreadCount = DX.getOrderChatUnreadCount || (() => 0);
 
+  // ── ИИ-заполнение карточки товара по фото ────────────────────────────
+  // Tesseract.js грузим лениво с CDN только при первом клике (тяжёлый + опц.).
+  // Если не загрузился (оффлайн/блок) — не страшно: vision-модель сама читает
+  // текст с фото, OCR лишь подсказка.
+  let _tesseractPromise = null;
+  function loadTesseract() {
+    if (typeof window !== "undefined" && window.Tesseract) return Promise.resolve(window.Tesseract);
+    if (_tesseractPromise) return _tesseractPromise;
+    _tesseractPromise = new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
+      s.async = true;
+      s.onload = () => resolve(window.Tesseract);
+      s.onerror = () => reject(new Error("tesseract load failed"));
+      document.head.appendChild(s);
+    });
+    return _tesseractPromise;
+  }
+
+  async function runOcr(dataUrl) {
+    try {
+      const T = await loadTesseract();
+      if (!T || !T.recognize) return "";
+      const { data } = await T.recognize(dataUrl, "rus+eng");
+      return String((data && data.text) || "").replace(/\s+/g, " ").trim().slice(0, 2000);
+    } catch {
+      return ""; // vision-модель прочитает текст сама
+    }
+  }
+
+  // Любой src (data:/remote URL) → base64 dataURL для отправки в vision-модель
+  async function imageSrcToDataUrl(src) {
+    if (!src) return "";
+    if (String(src).startsWith("data:")) return src;
+    try {
+      const resp = await fetch(src, { mode: "cors" });
+      const blob = await resp.blob();
+      return await new Promise((resolve) => {
+        const fr = new FileReader();
+        fr.onload = () => resolve(String(fr.result || ""));
+        fr.onerror = () => resolve("");
+        fr.readAsDataURL(blob);
+      });
+    } catch {
+      return "";
+    }
+  }
+
+  function aiProductCardEndpoint() {
+    const base = (window.DRIVEX_AI_CONFIG && window.DRIVEX_AI_CONFIG.endpoint) || "/api/ai/assistant";
+    return base.replace(/\/assistant\/?$/, "/product-card");
+  }
+
   // Дата (+ реальное время, если есть) заказа человекочитаемо
   function formatOrderWhen(order) {
     const raw = order.createdAt || order.created_at || order.date || "";
@@ -781,11 +834,13 @@
       return makeFormState(product, store);
     });
     const [submitting, setSubmitting] = useState(false);
+    const [aiFilling, setAiFilling] = useState(false);
     const [compatOpen, setCompatOpen] = useState(() =>
       Boolean(form.compatBrands || form.compatModels || form.compatYearFrom)
     );
     const [touched, setTouched] = useState(false);
     const fileRef = useRef(null);
+    const aiImageRef = useRef(""); // байты последнего загруженного фото для ИИ
 
     useEffect(() => {
       if (isEdit) setForm(makeFormState(product, store));
@@ -811,6 +866,12 @@
     const handlePhoto = useCallback(async (event) => {
       const file = event.target.files && event.target.files[0];
       if (!file) return;
+      // Всегда готовим dataURL для ИИ (нужны байты фото, даже если оно ушло в облако)
+      try {
+        aiImageRef.current = DX.prepareDocumentDataUrl ? await DX.prepareDocumentDataUrl(file, { maxSize: 1200, quality: 0.85 }) : "";
+      } catch {
+        aiImageRef.current = "";
+      }
       try {
         const client = window.__DRIVEX_SUPABASE_SELLER_CLIENT__ || (DX.getSupabaseClient && DX.getSupabaseClient());
         const cfg = window.DRIVEX_SUPABASE_CONFIG || {};
@@ -827,13 +888,78 @@
             return;
           }
         }
-        const dataUrl = DX.prepareDocumentDataUrl ? await DX.prepareDocumentDataUrl(file, { maxSize: 1200, quality: 0.85 }) : "";
+        const dataUrl = aiImageRef.current || (DX.prepareDocumentDataUrl ? await DX.prepareDocumentDataUrl(file, { maxSize: 1200, quality: 0.85 }) : "");
         if (dataUrl) { set({ image: dataUrl }); toast.push("Фото добавлено"); }
         else toast.push("Не удалось обработать фото");
       } catch {
         toast.push("Файл не подходит");
       }
     }, [store?.id, set, toast]);
+
+    // 🪄 Заполнить через ИИ: фото → OCR (Tesseract) → vision-модель → поля формы
+    const handleAiFill = useCallback(async () => {
+      if (aiFilling) return;
+
+      // 1. Достаём байты фото: свежезагруженное (ref) → form.image (data:/URL)
+      let imageData = aiImageRef.current || "";
+      if (!imageData) imageData = await imageSrcToDataUrl(form.image);
+      if (!imageData) { toast.push("Сначала загрузите фото товара"); return; }
+
+      setAiFilling(true);
+      try {
+        toast.push("Распознаю фото…");
+        const ocrText = await runOcr(imageData);
+
+        const categories = (marketCategories || [])
+          .filter((c) => c.id !== "all")
+          .map((c) => c.name);
+
+        const resp = await fetch(aiProductCardEndpoint(), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ image: imageData, title: form.title, ocrText, categories })
+        });
+        if (!resp.ok) throw new Error("ai http " + resp.status);
+        const card = await resp.json();
+
+        // 2. Применяем к форме (черновик — продавец потом правит)
+        const patch = {};
+        if (card.title) patch.title = card.title;
+        if (card.brand) patch.brand = card.brand;
+        if (card.sku) patch.sku = card.sku;
+        if (card.category) {
+          const cat = (marketCategories || []).find(
+            (c) => String(c.name).toLowerCase() === String(card.category).toLowerCase()
+          );
+          if (cat) patch.categoryId = cat.id;
+        }
+        // Описание + характеристики (отдельного поля характеристик нет — в описание)
+        const parts = [];
+        if (card.description) parts.push(String(card.description).trim());
+        if (Array.isArray(card.specs) && card.specs.length) {
+          parts.push("Характеристики:\n" + card.specs.map((s) => "• " + s).join("\n"));
+        }
+        if (parts.length) patch.description = parts.join("\n\n");
+        // Теги → поле поиска keywords (видимого поля нет, но товар их хранит)
+        if (Array.isArray(card.tags) && card.tags.length) patch.keywords = card.tags.join(", ");
+        // Совместимость с авто → реальные поля формы
+        const compat = card.compat || {};
+        if (Array.isArray(compat.brands) && compat.brands.length) patch.compatBrands = compat.brands.join(", ");
+        if (Array.isArray(compat.models) && compat.models.length) patch.compatModels = compat.models.join(", ");
+        if (compat.yearFrom) patch.compatYearFrom = String(compat.yearFrom);
+        if (compat.yearTo) patch.compatYearTo = String(compat.yearTo);
+        set(patch);
+        if (patch.compatBrands || patch.compatModels || patch.compatYearFrom) setCompatOpen(true);
+
+        if (card._mock) toast.push("Демо-режим: добавьте GEMINI_API_KEY для реального ИИ");
+        else if (card._fallback || card._error) toast.push("ИИ недоступен — заполнил черновик, проверьте");
+        else toast.push("Карточка заполнена ИИ — проверьте и сохраните");
+      } catch {
+        toast.push("Не удалось заполнить через ИИ");
+      } finally {
+        setAiFilling(false);
+      }
+    }, [aiFilling, form.image, form.title, set, toast]);
 
     const handleClose = useCallback(() => {
       navigateToHash(isEdit ? "/seller/products" : "/seller");
@@ -851,6 +977,7 @@
           title: form.title, categoryId: form.categoryId, price: form.price, oldPrice: form.oldPrice,
           stockQty: form.stockQty, description: form.description, brand: form.brand, sku: form.sku,
           badge: form.badge, image: form.image, deliveryAvailable: form.deliveryAvailable, status: form.status,
+          keywords: form.keywords || (product && product.keywords) || "",
           compatibility
         },
         store?.id
@@ -889,9 +1016,14 @@
             <div style=${{ flex: 1 }}>
               <div style=${{ fontSize: "14.5px", fontWeight: 700 }}>Фото товара</div>
               <div style=${{ fontSize: "12.5px", color: "var(--cx-dim)", marginTop: "2px", lineHeight: 1.4 }}>Квадрат, до 5 МБ. Хорошее фото повышает продажи.</div>
-              <button type="button" className="cx-upload-btn" onClick=${() => fileRef.current && fileRef.current.click()}>
-                <${Icon} name="image" size=${15} color="var(--cx-link)" />Загрузить
-              </button>
+              <div style=${{ display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "10px" }}>
+                <button type="button" className="cx-upload-btn" style=${{ marginTop: 0 }} onClick=${() => fileRef.current && fileRef.current.click()}>
+                  <${Icon} name="image" size=${15} color="var(--cx-link)" />Загрузить
+                </button>
+                <button type="button" className="cx-ai-btn" disabled=${aiFilling} onClick=${handleAiFill}>
+                  <span style=${{ fontSize: "15px", lineHeight: 1 }}>🪄</span>${aiFilling ? "ИИ думает…" : "Заполнить через ИИ"}
+                </button>
+              </div>
               <input ref=${fileRef} type="file" accept="image/*" style=${{ display: "none" }} onChange=${handlePhoto} />
             </div>
           </div>

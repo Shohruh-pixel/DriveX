@@ -400,6 +400,17 @@
   display: inline-flex; align-items: center; gap: 7px;
 }
 
+/* «Заполнить через ИИ» — заметная magic-кнопка рядом с «Загрузить» */
+.cx-ai-btn {
+  height: 36px; padding: 0 14px; border-radius: 11px; cursor: pointer;
+  background: linear-gradient(95deg, var(--cx-acc1), var(--cx-acc2)); color: #fff;
+  border: none; font-family: inherit; font-size: 13px; font-weight: 700;
+  display: inline-flex; align-items: center; gap: 7px;
+  box-shadow: 0 8px 20px -10px var(--cx-glow);
+}
+.cx-ai-btn:disabled { opacity: 0.55; cursor: default; box-shadow: none; }
+.cx-ai-btn:active:not(:disabled) { transform: scale(0.98); }
+
 .cx-form-section { margin-top: 22px; }
 .cx-form-section-title {
   font-size: 12px; font-weight: 800; letter-spacing: 0.08em; color: var(--cx-faint);
