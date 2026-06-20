@@ -1,5 +1,14 @@
 [
   {
+    "id": "review-1781987653679-999dd1e6f85e8",
+    "productId": "628299",
+    "authorName": "Покупатель DRIVEX",
+    "rating": 3,
+    "comment": "Классно",
+    "verified": false,
+    "createdAt": "2026-06-20T20:34:13.679Z"
+  },
+  {
     "id": "review-1781416629045-238e513157ac1",
     "productId": "863420",
     "authorName": "Покупатель DRIVEX",

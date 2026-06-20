@@ -3695,7 +3695,7 @@
     const serviceScopedAppointments = normalizeServiceAppointmentsList(serviceAppointments, serviceCurrentCenter.id)
       .filter((item) => item.centerId === serviceCurrentCenter.id && !isDemoServiceAppointment(item));
     const notificationsCount = (window.DX && typeof window.DX.countUnreadBuyerNotifications === "function")
-      ? window.DX.countUnreadBuyerNotifications(serviceRequests)
+      ? window.DX.countUnreadBuyerNotifications(serviceRequests, buyerOrders, orderChats)
       : (baseNotificationsCount + buildBuyerServiceNotifications(serviceRequests).length);
     const serviceDirectory = buildServiceDirectoryData(serviceCurrentCenter, {
       clients: serviceScopedClients,
@@ -4142,7 +4142,7 @@
         />`;
       } else if (normalized === "/notifications") {
         activePath = "/profile";
-        content = html`<${getScreen('NotificationsScreen')} serviceRequests=${serviceRequests} />`;
+        content = html`<${getScreen('NotificationsScreen')} serviceRequests=${serviceRequests} buyerOrders=${buyerOrders} orderChats=${orderChats} />`;
       } else if (normalized === "/profile-security") {
         activePath = "/profile";
         content = html`<${getScreen('ProfileSecurityScreen')} profile=${profile} />`;

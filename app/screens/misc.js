@@ -16,13 +16,15 @@
   const formatTjsPrice = function(n){ return DX.formatTjsPrice ? DX.formatTjsPrice(n) : (String(n)+' сом.'); };
   const genId = function(p){ return DX.genId ? DX.genId(p) : (p+'-'+Date.now()); };
 
-  // ── Уведомления: статический список + состояние прочитано/скрыто ─────────
+  // ── Уведомления: только РЕАЛЬНЫЕ события (заказы, чаты, записи в сервис) ──
+  // Демо-уведомления убраны: новый пользователь видит «Нет уведомлений», пока
+  // не появятся реальные события (статус заказа, сообщение продавца, запись).
   const NOTIF_STORE_KEY = "drivex.notifications.v1";
-  const STATIC_BUYER_NOTIFICATIONS = [
-    { id: "promo-oil", title: "Скидка 15% на замену масла", body: "Акция действует до конца недели в партнёрских сервисах.", time: "2 часа назад", color: "var(--drivex-warning)", icon: "star" },
-    { id: "inspection-reminder", title: "Напоминание: техосмотр", body: "До планового техосмотра осталось 30 дней.", time: "Вчера", color: "var(--drivex-electric-blue)", icon: "scan" },
-    { id: "market-order", title: "Ваш заказ в пути", body: "Товар ‘Shell Helix Ultra 5W-40’ будет доставлен сегодня.", time: "Сегодня", color: "var(--drivex-neon-cyan)", icon: "bag" }
-  ];
+  const _dxFn = (name) =>
+    (typeof DX !== "undefined" && DX[name]) ||
+    (typeof window !== "undefined" && window[name]) ||
+    null;
+
   function readNotifState() {
     try {
       const raw = window.localStorage ? window.localStorage.getItem(NOTIF_STORE_KEY) : null;
@@ -39,23 +41,77 @@
       );
     } catch { /* ignore */ }
   }
-  function visibleBuyerNotifications(serviceRequests) {
-    const dynamic = (typeof buildBuyerServiceNotifications === "function") ? buildBuyerServiceNotifications(serviceRequests) : [];
-    const st = readNotifState();
-    return [...dynamic, ...STATIC_BUYER_NOTIFICATIONS].filter((n) => !st.dismissed.includes(n.id));
+
+  // Уведомления по статусам заказов покупателя
+  function buildBuyerOrderNotifications(orders) {
+    const normalize = _dxFn("normalizeBuyerOrdersList");
+    const list = normalize ? normalize(orders) : (Array.isArray(orders) ? orders : []);
+    const statusMeta = _dxFn("getBuyerOrderStatusMeta");
+    const fmt = _dxFn("formatChatTime");
+    return list
+      .slice()
+      .sort((a, b) => String(b.statusUpdatedAt || b.date || "").localeCompare(String(a.statusUpdatedAt || a.date || "")))
+      .slice(0, 10)
+      .map((order) => {
+        const meta = statusMeta ? statusMeta(order.status) : { label: "Обновление заказа", color: "var(--drivex-neon-cyan)" };
+        const firstItem = Array.isArray(order.items) && order.items.length ? order.items[0].title : "";
+        const store = order.storeName ? ` • ${order.storeName}` : "";
+        return {
+          // id содержит статус → при смене статуса это новое (непрочитанное) событие
+          id: `order-${order.id}-${order.status || "new"}`,
+          title: `Заказ ${order.id}: ${meta.label || "обновление"}`,
+          body: (firstItem || "Ваш заказ") + store,
+          time: fmt ? fmt(order.statusUpdatedAt || order.date) : "",
+          color: meta.color || "var(--drivex-neon-cyan)",
+          icon: "bag"
+        };
+      });
   }
-  function countUnreadBuyerNotifications(serviceRequests) {
+
+  // Уведомления о новых сообщениях продавца по заказам
+  function buildBuyerChatNotifications(orders, orderChats) {
+    const unreadCount = _dxFn("getOrderChatUnreadCount");
+    if (!orderChats || !unreadCount) return [];
+    const normalize = _dxFn("normalizeBuyerOrdersList");
+    const list = normalize ? normalize(orders) : (Array.isArray(orders) ? orders : []);
+    const lastMsg = _dxFn("getOrderChatLastMessage");
+    const preview = _dxFn("getOrderChatPreviewText");
+    const fmt = _dxFn("formatChatTime");
+    const out = [];
+    list.forEach((order) => {
+      if (unreadCount(orderChats, order.id, "buyer") <= 0) return;
+      const last = lastMsg ? lastMsg(orderChats, order.id) : null;
+      out.push({
+        id: `chat-${order.id}-${(last && (last.id || last.sentAt)) || "msg"}`,
+        title: `Новое сообщение • ${order.storeName || "Продавец"}`,
+        body: last ? (preview ? preview(last, "buyer") : (last.text || "Сообщение по заказу")) : `Сообщение по заказу ${order.id}`,
+        time: (last && fmt) ? fmt(last.sentAt) : "",
+        color: "var(--drivex-electric-blue)",
+        icon: "bell"
+      });
+    });
+    return out;
+  }
+
+  function visibleBuyerNotifications(serviceRequests, buyerOrders, orderChats) {
+    const service = (typeof buildBuyerServiceNotifications === "function") ? buildBuyerServiceNotifications(serviceRequests) : [];
+    const orders = buildBuyerOrderNotifications(buyerOrders);
+    const chats = buildBuyerChatNotifications(buyerOrders, orderChats);
     const st = readNotifState();
-    return visibleBuyerNotifications(serviceRequests).filter((n) => !st.read.includes(n.id)).length;
+    return [...chats, ...orders, ...service].filter((n) => n && n.id && !st.dismissed.includes(n.id));
+  }
+  function countUnreadBuyerNotifications(serviceRequests, buyerOrders, orderChats) {
+    const st = readNotifState();
+    return visibleBuyerNotifications(serviceRequests, buyerOrders, orderChats).filter((n) => !st.read.includes(n.id)).length;
   }
   try { DX.visibleBuyerNotifications = visibleBuyerNotifications; } catch (e) {}
   try { DX.countUnreadBuyerNotifications = countUnreadBuyerNotifications; } catch (e) {}
 
-  function NotificationsScreen({ serviceRequests }) {
+  function NotificationsScreen({ serviceRequests, buyerOrders, orderChats }) {
     const toast = useToast();
     const { confirm } = useConfirm();
     const [, setTick] = useState(0);
-    const items = visibleBuyerNotifications(serviceRequests);
+    const items = visibleBuyerNotifications(serviceRequests, buyerOrders, orderChats);
 
     // Какие были непрочитаны на момент открытия — для значка «новое»
     const unreadOnOpenRef = useRef(null);
@@ -67,14 +123,14 @@
     // Отметить все видимые как прочитанные при открытии экрана
     useEffect(() => {
       const st = readNotifState();
-      const ids = visibleBuyerNotifications(serviceRequests).map((n) => n.id);
+      const ids = visibleBuyerNotifications(serviceRequests, buyerOrders, orderChats).map((n) => n.id);
       const merged = Array.from(new Set([...st.read, ...ids]));
       if (merged.length !== st.read.length) writeNotifState({ read: merged, dismissed: st.dismissed });
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const handleClear = useCallback(async () => {
-      if (!visibleBuyerNotifications(serviceRequests).length) return;
+      if (!visibleBuyerNotifications(serviceRequests, buyerOrders, orderChats).length) return;
       const ok = await confirm({
         title: "Очистить уведомления?",
         message: "Все текущие уведомления будут скрыты.",
@@ -83,11 +139,11 @@
       });
       if (!ok) return;
       const st = readNotifState();
-      const ids = visibleBuyerNotifications(serviceRequests).map((n) => n.id);
+      const ids = visibleBuyerNotifications(serviceRequests, buyerOrders, orderChats).map((n) => n.id);
       writeNotifState({ read: st.read, dismissed: Array.from(new Set([...st.dismissed, ...ids])) });
       setTick((t) => t + 1);
       toast.push("Уведомления очищены");
-    }, [confirm, serviceRequests, toast]);
+    }, [confirm, serviceRequests, buyerOrders, orderChats, toast]);
 
     return html`
       <${SimplePage} title="Уведомления" backPath="/profile">
