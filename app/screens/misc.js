@@ -988,6 +988,36 @@
     `;
   }
 
+  // Копирование с фолбэком: navigator.clipboard работает только в secure context
+  // (https/localhost). На телефоне по http://LAN он недоступен. Порядок:
+  // clipboard → execCommand → prompt (ручное копирование). Возвращает "copied" | "manual" | false.
+  async function copyToClipboard(text) {
+    const str = String(text == null ? "" : text);
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText && window.isSecureContext) {
+        await navigator.clipboard.writeText(str);
+        return "copied";
+      }
+    } catch { /* падаем в фолбэк */ }
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = str;
+      ta.setAttribute("readonly", "");
+      ta.style.position = "fixed";
+      ta.style.top = "0";
+      ta.style.left = "-9999px";
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      ta.setSelectionRange(0, str.length);
+      const ok = document.execCommand("copy");
+      document.body.removeChild(ta);
+      if (ok) return "copied";
+    } catch { /* падаем в prompt */ }
+    // Последний резерв (старые/защищённые мобильные браузеры по http): показать текст
+    try { window.prompt("Скопируйте ссылку вручную:", str); return "manual"; } catch { return false; }
+  }
+
   // ── Реальный экран «Пригласить друзей» ──────────────────────────────────
   function InviteScreen({ buyerSession }) {
     const toast = useToast();
@@ -1030,8 +1060,10 @@
     const list = stats && Array.isArray(stats.list) ? stats.list : [];
 
     const copyText = useCallback(async (text, msg) => {
-      try { await navigator.clipboard.writeText(text); toast.push(msg || "Скопировано"); }
-      catch { toast.push("Не удалось скопировать"); }
+      const res = await copyToClipboard(text);
+      if (res === "copied") toast.push(msg || "Скопировано");
+      else if (res === "manual") toast.push("Скопируйте ссылку из окна");
+      else toast.push("Не удалось скопировать");
     }, [toast]);
 
     const nativeShare = useCallback(async () => {
@@ -1053,6 +1085,11 @@
     const tiktokShare = useCallback(async () => {
       await copyText(fullShare, "Ссылка скопирована — вставь в TikTok (описание/сообщение)");
       try { window.open("https://www.tiktok.com/", "_blank", "noopener"); } catch { /* ignore */ }
+    }, [copyText, fullShare]);
+
+    const instagramShare = useCallback(async () => {
+      await copyText(fullShare, "Ссылка скопирована — вставь в Instagram (сторис/директ)");
+      try { window.open("https://www.instagram.com/", "_blank", "noopener"); } catch { /* ignore */ }
     }, [copyText, fullShare]);
 
     const shareBtn = (label, bg, fg, onClick) => html`
@@ -1099,11 +1136,12 @@
               ${shareBtn("WhatsApp", "#25D366", "#fff", () => openExternal("whatsapp"))}
               ${shareBtn("Telegram", "#229ED9", "#fff", () => openExternal("telegram"))}
               ${shareBtn("TikTok", "#010101", "#fff", tiktokShare)}
-              ${shareBtn("Копировать", "var(--glass-bg)", "var(--drivex-white)", () => copyText(fullShare, "Ссылка скопирована"))}
+              ${shareBtn("Instagram", "linear-gradient(45deg, #F58529, #DD2A7B, #8134AF)", "#fff", instagramShare)}
             </div>
-            <button type="button" className="w-full mt-3 py-3 rounded-2xl text-sm font-bold dx-btn" onClick=${nativeShare}>
-              Поделиться…
-            </button>
+            <div className="grid grid-cols-2 gap-3 mt-3">
+              ${shareBtn("Копировать", "var(--glass-bg)", "var(--drivex-white)", () => copyText(fullShare, "Ссылка скопирована"))}
+              <button type="button" className="py-3 rounded-2xl text-sm font-bold dx-btn" onClick=${nativeShare}>Поделиться…</button>
+            </div>
           </div>
 
           <div className="glass-card-light rounded-2xl p-5">
