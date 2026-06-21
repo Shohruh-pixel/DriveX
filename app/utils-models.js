@@ -28,6 +28,7 @@
     favorites: "drivex.favorites.v1",
     orderChats: "drivex.order-chats.v1",
     buyerInvite: "drivex.buyer.invite.v1",
+    referrals: "drivex.referrals.v1",
     marketplaceCatalog: "drivex.market.catalog.v1",
     sellerSession: "drivex.seller.session.v1",
     sellerProfile: "drivex.seller.profile.v1",
@@ -4533,6 +4534,62 @@
     return clean ? "DX-" + clean.slice(0, 6).toUpperCase() : raw;
   }
 
+  // ── Реферальная программа «Пригласи друга» ──────────────────────────────
+  // Пригласивший получает REFERRAL_REWARD_TJS за каждого друга ПОСЛЕ его
+  // первого заказа. Награда копится и тратится как скидка в корзине.
+  const REFERRAL_REWARD_TJS = 1.5;
+
+  function getBuyerReferralCode(buyerId) {
+    const cleaned = String(buyerId || "guest").replace(/[^a-z0-9]/gi, "").slice(-6).toUpperCase();
+    return `DRIVEX-${cleaned || "2026"}`;
+  }
+
+  function normalizeReferralCode(value) {
+    const raw = String(value || "").trim().toUpperCase();
+    if (!raw) return "";
+    return raw.startsWith("DRIVEX-") ? raw : `DRIVEX-${raw.replace(/[^A-Z0-9]/g, "")}`;
+  }
+
+  function normalizeReferralRecord(value) {
+    if (!value || typeof value !== "object") return null;
+    const referrerCode = normalizeReferralCode(value.referrerCode);
+    const inviteeId = String(value.inviteeId || "").trim();
+    if (!referrerCode || !inviteeId) return null;
+    const status = value.status === "rewarded" ? "rewarded" : "registered";
+    return {
+      id: String(value.id || "").trim() || `ref-${inviteeId}`,
+      referrerCode,
+      inviteeId,
+      inviteeName: String(value.inviteeName || "").trim().slice(0, 40),
+      status,
+      reward: Number(value.reward) || 0,
+      createdAt: value.createdAt || new Date().toISOString(),
+      rewardedAt: value.rewardedAt || null
+    };
+  }
+
+  function normalizeReferralsList(list) {
+    return (Array.isArray(list) ? list : []).map(normalizeReferralRecord).filter(Boolean);
+  }
+
+  // Сводка для пригласившего: сколько приглашено, начислено, доступно к трате
+  function computeReferralStats(referrals, myCode, spent = 0) {
+    const code = normalizeReferralCode(myCode);
+    const mine = code ? normalizeReferralsList(referrals).filter((r) => r.referrerCode === code) : [];
+    const rewarded = mine.filter((r) => r.status === "rewarded");
+    const earned = rewarded.reduce((sum, r) => sum + (Number(r.reward) || REFERRAL_REWARD_TJS), 0);
+    const spentNum = Math.max(0, Number(spent) || 0);
+    return {
+      code,
+      invited: mine.length,
+      rewardedCount: rewarded.length,
+      earned,
+      spent: spentNum,
+      available: Math.max(0, Math.round((earned - spentNum) * 100) / 100),
+      list: mine.slice().sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")))
+    };
+  }
+
   function daysUntil(iso) {
     const target = parseISODate(iso);
     if (!target) return null;
@@ -5068,6 +5125,12 @@
   try { if (typeof getOrderChatPeerLabel !== 'undefined') window.DX['getOrderChatPeerLabel'] = getOrderChatPeerLabel; } catch(e) {}
   try { if (typeof getOrderChatPreviewText !== 'undefined') window.DX['getOrderChatPreviewText'] = getOrderChatPreviewText; } catch(e) {}
   try { if (typeof formatOrderShortId !== 'undefined') window.DX['formatOrderShortId'] = formatOrderShortId; } catch(e) {}
+  try { if (typeof getBuyerReferralCode !== 'undefined') window.DX['getBuyerReferralCode'] = getBuyerReferralCode; } catch(e) {}
+  try { if (typeof normalizeReferralCode !== 'undefined') window.DX['normalizeReferralCode'] = normalizeReferralCode; } catch(e) {}
+  try { if (typeof normalizeReferralRecord !== 'undefined') window.DX['normalizeReferralRecord'] = normalizeReferralRecord; } catch(e) {}
+  try { if (typeof normalizeReferralsList !== 'undefined') window.DX['normalizeReferralsList'] = normalizeReferralsList; } catch(e) {}
+  try { if (typeof computeReferralStats !== 'undefined') window.DX['computeReferralStats'] = computeReferralStats; } catch(e) {}
+  try { window.DX['REFERRAL_REWARD_TJS'] = REFERRAL_REWARD_TJS; } catch(e) {}
   try { if (typeof getOrderChatSenderLabel !== 'undefined') window.DX['getOrderChatSenderLabel'] = getOrderChatSenderLabel; } catch(e) {}
   try { if (typeof getOrderChatThread !== 'undefined') window.DX['getOrderChatThread'] = getOrderChatThread; } catch(e) {}
   try { if (typeof getOrderChatUnreadCount !== 'undefined') window.DX['getOrderChatUnreadCount'] = getOrderChatUnreadCount; } catch(e) {}

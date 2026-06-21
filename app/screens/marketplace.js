@@ -1496,12 +1496,17 @@
     `;
   }
 
-  function CartScreen({ items, total, profile, onSetQty, onRemove, onCheckout }) {
+  function CartScreen({ items, total, profile, referralBalance = 0, onSetQty, onRemove, onCheckout }) {
     const toast = useToast();
     const storesCount = new Set(items.map((item) => item.storeId).filter(Boolean)).size;
     const [checkoutDraft, setCheckoutDraft] = useState(() => createMarketplaceCheckoutDraft(items, profile));
     const [submitting, setSubmitting] = useState(false); // для вида кнопки
     const submittingRef = useRef(false); // СИНХРОННЫЙ замок: state обновляется асинхронно, быстрые клики проскакивают
+    const [useBonus, setUseBonus] = useState(false); // списать реферальные бонусы
+
+    const bonusAvailable = Math.max(0, Number(referralBalance) || 0);
+    const bonusApplied = useBonus ? Math.min(bonusAvailable, Number(total) || 0) : 0;
+    const payableTotal = Math.max(0, Math.round(((Number(total) || 0) - bonusApplied) * 100) / 100);
 
     useEffect(() => {
       setCheckoutDraft((prev) => syncMarketplaceCheckoutDraft(prev, items, profile));
@@ -1814,10 +1819,30 @@
 
           ${items.length > 0
             ? html`<div className="glass-card rounded-2xl p-5 neon-glow-blue">
+                ${bonusAvailable > 0
+                  ? html`<button
+                      type="button"
+                      onClick=${() => setUseBonus((v) => !v)}
+                      className="w-full flex items-center justify-between mb-3 p-3 rounded-2xl"
+                      style=${{
+                        background: useBonus ? "rgba(16,185,129,0.14)" : "var(--glass-bg)",
+                        border: useBonus ? "1px solid rgba(16,185,129,0.3)" : "1px solid transparent"
+                      }}
+                    >
+                      <span className="text-sm font-semibold" style=${{ color: "var(--drivex-white)" }}>
+                        🎁 Списать бонусы (${bonusAvailable} сомони)
+                      </span>
+                      <span className="text-sm font-bold" style=${{ color: useBonus ? "var(--drivex-success)" : "var(--drivex-neon-cyan)" }}>
+                        ${useBonus ? `−${bonusApplied}` : "Применить"}
+                      </span>
+                    </button>`
+                  : null}
                 <div className="flex items-center justify-between mb-3">
-                  <span style=${{ color: "var(--drivex-silver)" }}>Итого</span>
+                  <span style=${{ color: "var(--drivex-silver)" }}>${bonusApplied > 0 ? "К оплате" : "Итого"}</span>
                   <span className="text-xl font-bold" style=${{ color: "var(--drivex-white)" }}>
-                    ${formatTjsPrice(total)}
+                    ${bonusApplied > 0
+                      ? html`<span style=${{ textDecoration: "line-through", color: "var(--drivex-silver)", fontSize: "14px", marginRight: "8px" }}>${formatTjsPrice(total)}</span>${formatTjsPrice(payableTotal)}`
+                      : formatTjsPrice(total)}
                   </span>
                 </div>
                 <p className="text-xs mb-4" style=${{ color: "var(--drivex-silver)" }}>
@@ -1867,7 +1892,7 @@
                     submittingRef.current = true;
                     setSubmitting(true);
                     try {
-                      await onCheckout(checkoutDraft);
+                      await onCheckout({ ...checkoutDraft, bonusApplied });
                     } finally {
                       submittingRef.current = false;
                       setSubmitting(false);

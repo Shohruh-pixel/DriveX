@@ -526,6 +526,108 @@ async function handleMarketReviewsRoute(req, res, url) {
   sendJson(res, 405, { error: "Method not allowed" });
 }
 
+// ── Реферальная программа «Пригласи друга» ────────────────────────────────────
+const referralsFilePath = path.join(dataDir, "referrals.json");
+const REFERRAL_REWARD = 1.5;
+
+function readReferrals() {
+  try {
+    if (!fs.existsSync(referralsFilePath)) return [];
+    const parsed = JSON.parse(fs.readFileSync(referralsFilePath, "utf8"));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch { return []; }
+}
+
+function writeReferrals(list) {
+  ensureDataDir();
+  fs.writeFileSync(referralsFilePath, JSON.stringify(list, null, 2), "utf8");
+}
+
+function normalizeReferralCodeServer(value) {
+  const raw = cleanString(value, 40).toUpperCase();
+  if (!raw) return "";
+  return raw.startsWith("DRIVEX-") ? raw : "DRIVEX-" + raw.replace(/[^A-Z0-9]/g, "");
+}
+
+function codeFromInviteeId(inviteeId) {
+  const cleaned = String(inviteeId || "").replace(/[^a-zA-Z0-9]/g, "").slice(-6).toUpperCase();
+  return "DRIVEX-" + (cleaned || "2026");
+}
+
+function computeReferralStatsServer(all, code) {
+  const mine = all.filter((r) => r.referrerCode === code);
+  const rewarded = mine.filter((r) => r.status === "rewarded");
+  return {
+    code,
+    invited: mine.length,
+    rewardedCount: rewarded.length,
+    earned: Math.round(rewarded.reduce((s, r) => s + (Number(r.reward) || REFERRAL_REWARD), 0) * 100) / 100,
+    list: mine
+  };
+}
+
+async function handleReferralsRoute(req, res, url) {
+  if (req.method === "GET") {
+    const code = normalizeReferralCodeServer(url.searchParams.get("code"));
+    const all = readReferrals();
+    sendJson(res, 200, { stats: computeReferralStatsServer(all, code) });
+    return;
+  }
+  if (req.method === "POST") {
+    try {
+      const body = await readJsonBody(req);
+      const action = cleanString(body.action, 20) || "register";
+      const all = readReferrals();
+
+      if (action === "register") {
+        const referrerCode = normalizeReferralCodeServer(body.referrerCode);
+        const inviteeId = cleanString(body.inviteeId, 120);
+        if (!referrerCode || !inviteeId) { sendJson(res, 400, { error: "referrerCode и inviteeId обязательны" }); return; }
+        // нельзя пригласить самого себя
+        if (codeFromInviteeId(inviteeId) === referrerCode) { sendJson(res, 200, { ok: false, reason: "self" }); return; }
+        // один приглашённый — одна запись (первый код побеждает)
+        const existing = all.find((r) => r.inviteeId === inviteeId);
+        if (existing) { sendJson(res, 200, { ok: true, referral: existing, existed: true }); return; }
+        const record = {
+          id: "ref-" + inviteeId,
+          referrerCode,
+          inviteeId,
+          inviteeName: cleanString(body.inviteeName, 40),
+          status: "registered",
+          reward: 0,
+          createdAt: new Date().toISOString(),
+          rewardedAt: null
+        };
+        all.push(record);
+        writeReferrals(all.slice(-20000));
+        sendJson(res, 201, { ok: true, referral: record });
+        return;
+      }
+
+      if (action === "reward") {
+        const inviteeId = cleanString(body.inviteeId, 120);
+        if (!inviteeId) { sendJson(res, 400, { error: "inviteeId обязателен" }); return; }
+        const record = all.find((r) => r.inviteeId === inviteeId);
+        if (!record) { sendJson(res, 200, { ok: false, reason: "not_referred" }); return; }
+        if (record.status !== "rewarded") {
+          record.status = "rewarded";
+          record.reward = REFERRAL_REWARD;
+          record.rewardedAt = new Date().toISOString();
+          writeReferrals(all);
+        }
+        sendJson(res, 200, { ok: true, referral: record });
+        return;
+      }
+
+      sendJson(res, 400, { error: "Неизвестное действие" });
+    } catch (error) {
+      sendJson(res, 400, { error: error.message || "Referral save failed" });
+    }
+    return;
+  }
+  sendJson(res, 405, { error: "Method not allowed" });
+}
+
 async function handleServiceCentersRoute(req, res) {
   if (req.method === "GET") {
     sendJson(res, 200, { centers: readServiceCenters() });
@@ -1011,6 +1113,11 @@ const server = http.createServer(async (req, res) => {
 
   if (url.pathname === "/api/market/reviews") {
     await handleMarketReviewsRoute(req, res, url);
+    return;
+  }
+
+  if (url.pathname === "/api/referrals") {
+    await handleReferralsRoute(req, res, url);
     return;
   }
 

@@ -451,4 +451,38 @@
     summarizeReviews,
     loadRatingsSummary
   };
+
+  // ── Реферальная программа «Пригласи друга» ──────────────────────────────
+  const EMPTY_REF_STATS = { code: "", invited: 0, rewardedCount: 0, earned: 0, list: [] };
+  window.DrivexReferrals = {
+    async getStats(code) {
+      if (!code) return { ...EMPTY_REF_STATS };
+      try {
+        const r = await fetch("/api/referrals?code=" + encodeURIComponent(code), { headers: { Accept: "application/json" }, cache: "no-store" });
+        if (!r.ok) return { ...EMPTY_REF_STATS, code };
+        const p = await r.json();
+        return p && p.stats ? p.stats : { ...EMPTY_REF_STATS, code };
+      } catch { return { ...EMPTY_REF_STATS, code }; }
+    },
+    async register(referrerCode, inviteeId, inviteeName) {
+      try {
+        const r = await fetch("/api/referrals", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "register", referrerCode, inviteeId, inviteeName: inviteeName || "" })
+        });
+        return await r.json().catch(() => ({}));
+      } catch { return {}; }
+    },
+    async reward(inviteeId) {
+      try {
+        const r = await fetch("/api/referrals", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "reward", inviteeId })
+        });
+        return await r.json().catch(() => ({}));
+      } catch { return {}; }
+    }
+  };
 })();

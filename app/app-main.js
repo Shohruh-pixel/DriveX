@@ -235,6 +235,49 @@
         return createEmptyBuyerSession();
       }
     });
+
+    // Реферал: захват ?ref= из ссылки приглашения (до регистрации)
+    useEffect(() => {
+      try {
+        const ref = new URLSearchParams(window.location.search || "").get("ref");
+        if (ref) window.localStorage.setItem("drivex.pendingRef", String(ref).toUpperCase());
+      } catch { /* ignore */ }
+    }, []);
+
+    // Реферал: после авторизации покупателя фиксируем связь «кто кого» (один раз)
+    useEffect(() => {
+      if (!buyerSession || !buyerSession.authenticated || !buyerSession.id) return;
+      let pending = "";
+      try { pending = window.localStorage.getItem("drivex.pendingRef") || ""; } catch { pending = ""; }
+      if (!pending) return;
+      const api = window.DrivexReferrals;
+      const refCode = DX.normalizeReferralCode ? DX.normalizeReferralCode(pending) : "";
+      const myCode = DX.getBuyerReferralCode ? DX.getBuyerReferralCode(buyerSession.id) : "";
+      const clear = () => { try { window.localStorage.removeItem("drivex.pendingRef"); } catch { /* ignore */ } };
+      if (!api || !refCode || refCode === myCode) { clear(); return; }
+      const name = buyerSession.name || buyerSession.fullName || "";
+      api.register(refCode, buyerSession.id, name).finally(clear);
+    }, [buyerSession && buyerSession.authenticated, buyerSession && buyerSession.id]);
+
+    // Реферал: доступный бонус-баланс покупателя (заработано − потрачено)
+    const [referralBalance, setReferralBalance] = useState(0);
+    useEffect(() => {
+      let cancelled = false;
+      const api = window.DrivexReferrals;
+      if (!buyerSession || !buyerSession.authenticated || !buyerSession.id || !api) { setReferralBalance(0); return; }
+      const myCode = DX.getBuyerReferralCode ? DX.getBuyerReferralCode(buyerSession.id) : "";
+      let spent = 0;
+      try {
+        const s = readBuyerLocalStorage(drivexStorageKeys.buyerInvite, buyerSession);
+        spent = Math.max(0, Number(s && s.spent) || 0);
+      } catch { spent = 0; }
+      api.getStats(myCode).then((st) => {
+        if (cancelled) return;
+        const earned = Number(st && st.earned) || 0;
+        setReferralBalance(Math.max(0, Math.round((earned - spent) * 100) / 100));
+      }).catch(() => { if (!cancelled) setReferralBalance(0); });
+      return () => { cancelled = true; };
+    }, [buyerSession && buyerSession.authenticated, buyerSession && buyerSession.id]);
     const [cart, setCart] = useState(() => {
       const fallback = {};
 
@@ -3524,6 +3567,20 @@
         return;
       }
 
+      // Реферал-бонус: списываем доступный баланс с суммы заказов
+      const bonusRequested = Math.max(0, Number(checkoutDraft && checkoutDraft.bonusApplied) || 0);
+      let bonusUsed = Math.min(bonusRequested, Math.max(0, Number(referralBalance) || 0));
+      if (bonusUsed > 0) {
+        let remaining = bonusUsed;
+        for (const o of nextOrders) {
+          if (remaining <= 0) break;
+          const cut = Math.min(remaining, Number(o.amount) || 0);
+          o.amount = Math.max(0, Math.round(((Number(o.amount) || 0) - cut) * 100) / 100);
+          remaining = Math.round((remaining - cut) * 100) / 100;
+        }
+        bonusUsed = Math.round((bonusUsed - remaining) * 100) / 100; // фактически применено
+      }
+
       try {
         const checkoutResult = await runSellerBackendAction("recordMarketplaceCheckout", {
           orders: nextOrders,
@@ -3545,12 +3602,25 @@
         });
         setBuyerOrders((prev) => mergeBuyerOrders(prev, nextBuyerOrders));
         setCart({});
+        // Реферал: начисляем награду пригласившему (если покупатель пришёл по коду)
+        if (window.DrivexReferrals && buyerSession && buyerSession.id) {
+          window.DrivexReferrals.reward(buyerSession.id).catch(() => {});
+        }
+        // Списанный бонус — фиксируем потраченное и обновляем баланс
+        if (bonusUsed > 0) {
+          try {
+            const prevInvite = readBuyerLocalStorage(drivexStorageKeys.buyerInvite, buyerSession) || {};
+            const nextSpent = Math.max(0, Number(prevInvite.spent) || 0) + bonusUsed;
+            writeBuyerLocalStorage(drivexStorageKeys.buyerInvite, { ...prevInvite, spent: nextSpent }, buyerSession);
+          } catch { /* ignore */ }
+          setReferralBalance((b) => Math.max(0, Math.round(((Number(b) || 0) - bonusUsed) * 100) / 100));
+        }
         toast.push(`Заказ отправлен продавцам: ${nextOrders.length}`);
         navigateToHash("/orders");
       } catch (error) {
         toast.push(error?.message || "Не удалось отправить заказ продавцу");
       }
-    }, [cartItems, profile, runSellerBackendAction, runtimeMarketStores, sellerOrders, toast, buyerSession]);
+    }, [cartItems, profile, runSellerBackendAction, runtimeMarketStores, sellerOrders, toast, buyerSession, referralBalance]);
 
     const normalized = normalizePath(path);
 
@@ -4207,6 +4277,7 @@
           items=${cartItems}
           total=${cartTotal}
           profile=${profile}
+          referralBalance=${referralBalance}
           onSetQty=${setCartQty}
           onRemove=${removeFromCart}
           onCheckout=${checkoutCart}
@@ -4254,7 +4325,7 @@
         content = html`<${getScreen('ComingSoonScreen')} title="Бонусная программа" emoji="⭐" subtitle="Баллы и награды появятся в ближайшем обновлении" />`;
       } else if (normalized === "/invite") {
         activePath = "/profile";
-        content = html`<${getScreen('ComingSoonScreen')} title="Пригласить друзей" emoji="🎁" subtitle="Реферальная программа появится в ближайшем обновлении" />`;
+        content = html`<${getScreen('InviteScreen')} buyerSession=${buyerSession} />`;
       } else {
         activePath = "/";
         content = html`<${getScreen('NotFoundScreen')} path=${normalized} />`;

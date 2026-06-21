@@ -988,6 +988,154 @@
     `;
   }
 
+  // ── Реальный экран «Пригласить друзей» ──────────────────────────────────
+  function InviteScreen({ buyerSession }) {
+    const toast = useToast();
+    const code = useMemo(
+      () => (DX.getBuyerReferralCode ? DX.getBuyerReferralCode(buyerSession && buyerSession.id) : "DRIVEX-2026"),
+      [buyerSession && buyerSession.id]
+    );
+    const shareUrl = useMemo(() => {
+      try { return `${window.location.origin}${window.location.pathname}?ref=${encodeURIComponent(code)}`; }
+      catch { return `https://drivex.tj/?ref=${code}`; }
+    }, [code]);
+    const shareText = `Привет! Регистрируйся в DRIVEX (маркет автозапчастей) по моей ссылке. Мой код: ${code}`;
+    const fullShare = `${shareText}\n${shareUrl}`;
+    const reward = DX.REFERRAL_REWARD_TJS != null ? DX.REFERRAL_REWARD_TJS : 1.5;
+
+    const spent = useMemo(() => {
+      try {
+        const s = readBuyerLocalStorage(drivexStorageKeys.buyerInvite, buyerSession);
+        return Math.max(0, Number(s && s.spent) || 0);
+      } catch { return 0; }
+    }, [buyerSession && buyerSession.id]);
+
+    const [stats, setStats] = useState(null); // null = загрузка
+    useEffect(() => {
+      let cancelled = false;
+      setStats(null);
+      const api = window.DrivexReferrals;
+      if (api && code) {
+        api.getStats(code)
+          .then((s) => { if (!cancelled) setStats(s || { invited: 0, rewardedCount: 0, earned: 0, list: [] }); })
+          .catch(() => { if (!cancelled) setStats({ invited: 0, rewardedCount: 0, earned: 0, list: [] }); });
+      } else {
+        setStats({ invited: 0, rewardedCount: 0, earned: 0, list: [] });
+      }
+      return () => { cancelled = true; };
+    }, [code]);
+
+    const earned = stats ? Number(stats.earned) || 0 : 0;
+    const available = Math.max(0, Math.round((earned - spent) * 100) / 100);
+    const list = stats && Array.isArray(stats.list) ? stats.list : [];
+
+    const copyText = useCallback(async (text, msg) => {
+      try { await navigator.clipboard.writeText(text); toast.push(msg || "Скопировано"); }
+      catch { toast.push("Не удалось скопировать"); }
+    }, [toast]);
+
+    const nativeShare = useCallback(async () => {
+      try {
+        if (navigator.share) await navigator.share({ title: "DRIVEX", text: shareText, url: shareUrl });
+        else await copyText(fullShare, "Ссылка скопирована — вставь в любое приложение");
+      } catch { /* отмена share */ }
+    }, [shareText, shareUrl, fullShare, copyText]);
+
+    const openExternal = useCallback((channel) => {
+      const u = encodeURIComponent(shareUrl);
+      let link = "";
+      if (channel === "whatsapp") link = `https://wa.me/?text=${encodeURIComponent(fullShare)}`;
+      else if (channel === "telegram") link = `https://t.me/share/url?url=${u}&text=${encodeURIComponent(shareText)}`;
+      if (!link) return;
+      try { window.open(link, "_blank", "noopener"); } catch { window.location.href = link; }
+    }, [shareUrl, fullShare, shareText]);
+
+    const tiktokShare = useCallback(async () => {
+      await copyText(fullShare, "Ссылка скопирована — вставь в TikTok (описание/сообщение)");
+      try { window.open("https://www.tiktok.com/", "_blank", "noopener"); } catch { /* ignore */ }
+    }, [copyText, fullShare]);
+
+    const shareBtn = (label, bg, fg, onClick) => html`
+      <button type="button" onClick=${onClick}
+        className="py-3 rounded-2xl text-sm font-bold"
+        style=${{ background: bg, color: fg }}>${label}</button>`;
+
+    return html`
+      <${SimplePage} title="Пригласить друзей" backPath="/profile">
+        <div className="px-6 py-6 space-y-4">
+          <div className="glass-card rounded-3xl p-6 neon-glow-cyan">
+            <p className="text-sm" style=${{ color: "var(--drivex-silver)" }}>Заработано за друзей</p>
+            <p className="text-4xl font-bold mt-1" style=${{ color: "var(--drivex-white)" }}>${available} сомони</p>
+            <p className="text-sm mt-2" style=${{ color: "var(--drivex-silver)" }}>
+              Доступно к списанию в корзине${spent > 0 ? ` · потрачено ${spent}` : ""}
+            </p>
+            <div className="flex gap-4 mt-4">
+              <div>
+                <p className="text-2xl font-bold" style=${{ color: "var(--drivex-white)" }}>${stats ? stats.invited : "…"}</p>
+                <p className="text-xs" style=${{ color: "var(--drivex-silver)" }}>приглашено</p>
+              </div>
+              <div>
+                <p className="text-2xl font-bold" style=${{ color: "var(--drivex-success)" }}>${stats ? stats.rewardedCount : "…"}</p>
+                <p className="text-xs" style=${{ color: "var(--drivex-silver)" }}>сделали заказ</p>
+              </div>
+            </div>
+            <p className="text-xs mt-4" style=${{ color: "var(--drivex-silver)", lineHeight: 1.5 }}>
+              За каждого друга, который зарегистрируется по твоей ссылке и сделает первый заказ — <b style=${{ color: "var(--drivex-neon-cyan)" }}>+${reward} сомони</b> тебе на баланс.
+            </p>
+          </div>
+
+          <div className="glass-card-light rounded-2xl p-5">
+            <p className="text-sm" style=${{ color: "var(--drivex-silver)" }}>Твой код приглашения</p>
+            <div className="flex items-center justify-between gap-3 mt-2">
+              <p className="text-2xl font-bold" style=${{ color: "var(--drivex-white)" }}>${code}</p>
+              <button type="button" className="p-3 rounded-xl glass-card" style=${{ color: "var(--drivex-neon-cyan)" }}
+                onClick=${() => copyText(code, "Код скопирован")} aria-label="Копировать код">
+                <${Icon} name="copy" size=${20} />
+              </button>
+            </div>
+
+            <p className="text-sm mt-4 mb-2" style=${{ color: "var(--drivex-silver)" }}>Поделиться ссылкой:</p>
+            <div className="grid grid-cols-2 gap-3">
+              ${shareBtn("WhatsApp", "#25D366", "#fff", () => openExternal("whatsapp"))}
+              ${shareBtn("Telegram", "#229ED9", "#fff", () => openExternal("telegram"))}
+              ${shareBtn("TikTok", "#010101", "#fff", tiktokShare)}
+              ${shareBtn("Копировать", "var(--glass-bg)", "var(--drivex-white)", () => copyText(fullShare, "Ссылка скопирована"))}
+            </div>
+            <button type="button" className="w-full mt-3 py-3 rounded-2xl text-sm font-bold dx-btn" onClick=${nativeShare}>
+              Поделиться…
+            </button>
+          </div>
+
+          <div className="glass-card-light rounded-2xl p-5">
+            <h2 className="text-lg font-bold mb-3" style=${{ color: "var(--drivex-white)" }}>Приглашённые</h2>
+            ${stats === null
+              ? html`<p className="text-sm" style=${{ color: "var(--drivex-silver)" }}>Загрузка…</p>`
+              : list.length
+                ? html`<div className="space-y-3">
+                    ${list.map((r) => {
+                      const rewarded = r.status === "rewarded";
+                      return html`
+                        <div key=${r.id} className="flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="font-semibold truncate" style=${{ color: "var(--drivex-white)" }}>${r.inviteeName || "Друг"}</p>
+                            <p className="text-xs" style=${{ color: "var(--drivex-silver)" }}>${rewarded ? "сделал первый заказ" : "ждём первый заказ"}</p>
+                          </div>
+                          <span className="px-3 py-1 rounded-lg text-xs font-bold flex-shrink-0" style=${{
+                            background: rewarded ? "rgba(16,185,129,0.18)" : "rgba(148,163,184,0.16)",
+                            color: rewarded ? "var(--drivex-success)" : "var(--drivex-silver)"
+                          }}>${rewarded ? `+${r.reward || reward}` : "ожидание"}</span>
+                        </div>`;
+                    })}
+                  </div>`
+                : html`<p className="text-sm" style=${{ color: "var(--drivex-silver)" }}>
+                    Пока никого. Поделись ссылкой — друг зарегистрируется, сделает заказ, и ты получишь ${reward} сомони.
+                  </p>`}
+          </div>
+        </div>
+      </${SimplePage}>
+    `;
+  }
+
   function ProfileSecurityScreen({ profile }) {
     const toast = useToast();
 
@@ -1340,6 +1488,7 @@
   if (typeof FavoritesScreen !== 'undefined') DX.screens['FavoritesScreen'] = FavoritesScreen;
   if (typeof HelpScreen !== 'undefined') DX.screens['HelpScreen'] = HelpScreen;
   if (typeof InviteFriendsScreen !== 'undefined') DX.screens['InviteFriendsScreen'] = InviteFriendsScreen;
+  if (typeof InviteScreen !== 'undefined') DX.screens['InviteScreen'] = InviteScreen;
   if (typeof NotificationsScreen !== 'undefined') DX.screens['NotificationsScreen'] = NotificationsScreen;
   if (typeof PaymentDataScreen !== 'undefined') DX.screens['PaymentDataScreen'] = PaymentDataScreen;
   if (typeof ProfileEditScreen !== 'undefined') DX.screens['ProfileEditScreen'] = ProfileEditScreen;

@@ -52,6 +52,10 @@
     'getOrderChatThread','getOrderChatLastMessage','getOrderChatPreviewText','getOrderChatUnreadCount',
     'getSellerOrderChatPath','formatOrderShortId',
 
+    // Referrals («Пригласи друга»)
+    'getBuyerReferralCode','normalizeReferralCode','normalizeReferralRecord',
+    'normalizeReferralsList','computeReferralStats',
+
     // Seller models
     'createDefaultSellerSession','createFreshSellerSession',
     'normalizeSellerSession','normalizeSellerStore','normalizeSellerProfile','normalizeSellerProduct',
