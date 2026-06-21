@@ -1026,8 +1026,9 @@
       [buyerSession && buyerSession.id]
     );
     const shareUrl = useMemo(() => {
-      try { return `${window.location.origin}${window.location.pathname}?ref=${encodeURIComponent(code)}`; }
-      catch { return `https://drivex.tj/?ref=${code}`; }
+      // ?ref= в search (его ловит app-main), #/register сразу открывает регистрацию
+      try { return `${window.location.origin}${window.location.pathname}?ref=${encodeURIComponent(code)}#/register`; }
+      catch { return `https://drivex.tj/?ref=${code}#/register`; }
     }, [code]);
     const shareText = `Привет! Регистрируйся в DRIVEX (маркет автозапчастей) по моей ссылке. Мой код: ${code}`;
     const fullShare = `${shareText}\n${shareUrl}`;
