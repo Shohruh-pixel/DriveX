@@ -1104,8 +1104,10 @@
           <div className="glass-card rounded-3xl p-6 neon-glow-cyan">
             <p className="text-sm" style=${{ color: "var(--drivex-silver)" }}>Заработано за друзей</p>
             <p className="text-4xl font-bold mt-1" style=${{ color: "var(--drivex-white)" }}>${available} сомони</p>
-            <p className="text-sm mt-2" style=${{ color: "var(--drivex-silver)" }}>
-              Доступно к списанию в корзине${spent > 0 ? ` · потрачено ${spent}` : ""}
+            <p className="text-sm mt-2" style=${{ color: available > 0 ? "var(--drivex-success)" : "var(--drivex-silver)" }}>
+              ${available > 0
+                ? "Можно списать скидкой в корзине при заказе"
+                : "Появится, когда друг сделает первый заказ"}${spent > 0 ? ` · потрачено ${spent}` : ""}
             </p>
             <div className="flex gap-4 mt-4">
               <div>
@@ -1117,9 +1119,20 @@
                 <p className="text-xs" style=${{ color: "var(--drivex-silver)" }}>сделали заказ</p>
               </div>
             </div>
-            <p className="text-xs mt-4" style=${{ color: "var(--drivex-silver)", lineHeight: 1.5 }}>
-              За каждого друга, который зарегистрируется по твоей ссылке и сделает первый заказ — <b style=${{ color: "var(--drivex-neon-cyan)" }}>+${reward} сомони</b> тебе на баланс.
-            </p>
+          </div>
+
+          <div className="glass-card-light rounded-2xl p-5">
+            <p className="font-semibold mb-3" style=${{ color: "var(--drivex-white)" }}>Как это работает</p>
+            ${[
+              "Поделись своей ссылкой с другом",
+              "Друг регистрируется по ссылке и делает первый заказ",
+              `Тебе +${reward} сомони — спишутся скидкой в корзине при оформлении заказа`
+            ].map((t, i) => html`
+              <div key=${`step-${i}`} className="flex items-start gap-3 ${i < 2 ? "mb-3" : ""}">
+                <span className="flex-shrink-0 flex items-center justify-center text-xs font-bold"
+                  style=${{ width: "24px", height: "24px", borderRadius: "9999px", background: "rgba(6,182,212,0.16)", color: "var(--drivex-neon-cyan)" }}>${i + 1}</span>
+                <span className="text-sm" style=${{ color: "var(--drivex-silver)", lineHeight: 1.4 }}>${t}</span>
+              </div>`)}
           </div>
 
           <div className="glass-card-light rounded-2xl p-5">
