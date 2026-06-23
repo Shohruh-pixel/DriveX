@@ -752,7 +752,7 @@
 
           <div className="glass-card-light rounded-2xl p-5">
             <label className="block mb-3" style=${{ color: "var(--drivex-silver)" }}>
-              Сумма (₽)
+              Сумма (сомони)
             </label>
             <input
               type="number"
