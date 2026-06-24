@@ -1,0 +1,22 @@
+# Render Blueprint для DRIVEX
+# Деплой: https://render.com → New → Blueprint → подключить репозиторий.
+# GEMINI_API_KEY задаётся вручную в дашборде (sync: false) — не хранится в git.
+services:
+  - type: web
+    name: drivex
+    runtime: node
+    plan: free
+    region: frankfurt
+    buildCommand: npm install
+    startCommand: node server.js
+    healthCheckPath: /
+    autoDeploy: true
+    envVars:
+      - key: AI_MODE
+        value: llm_first
+      - key: AI_PROVIDER
+        value: gemini
+      - key: GEMINI_MODEL
+        value: gemini-flash-latest
+      - key: GEMINI_API_KEY
+        sync: false

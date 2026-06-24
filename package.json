@@ -1,0 +1,15 @@
+{
+  "name": "drivex",
+  "version": "1.0.0",
+  "private": true,
+  "description": "DRIVEX — маркетплейс автозапчастей и сервисов (Node static + API сервер)",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0"
+  }
+}
