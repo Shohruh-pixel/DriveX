@@ -2462,6 +2462,10 @@
       fuelType: ["petrol", "diesel", "gas", "electric"].includes(String(value.fuelType || "").toLowerCase())
         ? String(value.fuelType).toLowerCase()
         : "petrol",
+      engine: (function () {
+        const e = Number(value.engine ?? value.engineVolume);
+        return Number.isFinite(e) && e > 0 && e < 12 ? Math.round(e * 10) / 10 : "";
+      })(),
       createdAt: typeof value.createdAt === "string" ? value.createdAt : new Date().toISOString()
     };
   }
@@ -4633,10 +4637,16 @@
   function getFuelType(key) {
     return DRIVEX_FUEL_TYPES[String(key || "petrol").toLowerCase()] || DRIVEX_FUEL_TYPES.petrol;
   }
-  // Расход за поездку по типу двигателя: { amount, unit, cost, label }
-  function estimateTripConsumption(distanceKm, fuelKey) {
+  // Расход за поездку по типу двигателя и объёму мотора: { amount, unit, cost, label }
+  // Базовый расход рассчитан на мотор ~2.0 л; больше мотор → выше расход (для топлива).
+  function estimateTripConsumption(distanceKm, fuelKey, engineVolume) {
     const ft = getFuelType(fuelKey);
-    const amount = Math.round((Number(distanceKm) || 0) * ft.per100 / 100 * 100) / 100;
+    let per100 = ft.per100;
+    if (ft.key !== "electric") {
+      const vol = Number(engineVolume) || 0;
+      if (vol > 0) per100 = Math.round(ft.per100 * Math.max(0.6, Math.min(2.0, vol / 2.0)) * 10) / 10;
+    }
+    const amount = Math.round((Number(distanceKm) || 0) * per100 / 100 * 100) / 100;
     return { amount, unit: ft.unit, cost: Math.round(amount * ft.price), label: ft.energyLabel, fuelType: ft.key };
   }
 

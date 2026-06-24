@@ -39,6 +39,7 @@
     const [year, setYear] = useState("");
     const [mileage, setMileage] = useState("");
     const [fuelType, setFuelType] = useState("petrol");
+    const [engine, setEngine] = useState("");
 
     const cars = garageCars;
     const activeCar = findGarageCar(activeCarId) || cars[0];
@@ -87,7 +88,8 @@
         plate,
         year,
         mileageValue: mileageNum,
-        fuelType
+        fuelType,
+        engine
       });
       if (!nextCar) {
         toast.push("Выберите марку и модель");
@@ -101,9 +103,10 @@
       setYear("");
       setMileage("");
       setFuelType("petrol");
+      setEngine("");
       setShowForm(false);
       toast.push("Автомобиль добавлен");
-    }, [make, model, customMake, mileage, onAddCar, plate, toast, year, fuelType]);
+    }, [make, model, customMake, mileage, onAddCar, plate, toast, year, fuelType, engine]);
 
     return html`
       <${SimplePage} title="Мой гараж" backPath="/profile">
@@ -223,6 +226,20 @@
                       <option value="electric">Электричество</option>
                     </select>
                   </label>
+                  ${fuelType !== "electric"
+                    ? html`<label className="block">
+                        <span className="text-sm" style=${{ color: "var(--drivex-silver)" }}>Мотор — объём двигателя, л</span>
+                        <input
+                          type="number"
+                          step="0.1"
+                          min="0"
+                          className="w-full mt-2 p-3 rounded-xl dx-input"
+                          value=${engine}
+                          onInput=${(e) => setEngine(e.target.value)}
+                          placeholder="Напр. 1.6"
+                        />
+                      </label>`
+                    : null}
                   <button type="button" className="w-full py-3 rounded-2xl font-bold dx-btn" onClick=${submitCar}>
                     Сохранить автомобиль
                   </button>
@@ -1279,7 +1296,7 @@
     const currentCar = useMemo(() => cars.find((c) => c.id === carId) || cars[0] || null, [cars, carId]);
     const monthConsumption = useMemo(
       () => (DX.estimateTripConsumption
-        ? DX.estimateTripConsumption(monthSummary.distanceKm, currentCar && currentCar.fuelType)
+        ? DX.estimateTripConsumption(monthSummary.distanceKm, currentCar && currentCar.fuelType, currentCar && currentCar.engine)
         : { amount: monthSummary.fuelL, unit: "л", cost: monthSummary.costTjs, label: "топливо" }),
       [monthSummary, currentCar]
     );
