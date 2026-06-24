@@ -59,6 +59,7 @@
     // Поездки (GPS-трекер)
     'tripHaversineKm','computeTripStats','normalizeTrip','normalizeTripsList',
     'summarizeTrips','estimateTripFuel','estimateTripCost',
+    'getFuelType','estimateTripConsumption',
 
     // Seller models
     'createDefaultSellerSession','createFreshSellerSession',

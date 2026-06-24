@@ -38,6 +38,7 @@
     const [plate, setPlate] = useState("");
     const [year, setYear] = useState("");
     const [mileage, setMileage] = useState("");
+    const [fuelType, setFuelType] = useState("petrol");
 
     const cars = garageCars;
     const activeCar = findGarageCar(activeCarId) || cars[0];
@@ -85,7 +86,8 @@
         model: model.trim(),
         plate,
         year,
-        mileageValue: mileageNum
+        mileageValue: mileageNum,
+        fuelType
       });
       if (!nextCar) {
         toast.push("Выберите марку и модель");
@@ -98,9 +100,10 @@
       setPlate("");
       setYear("");
       setMileage("");
+      setFuelType("petrol");
       setShowForm(false);
       toast.push("Автомобиль добавлен");
-    }, [make, model, customMake, mileage, onAddCar, plate, toast, year]);
+    }, [make, model, customMake, mileage, onAddCar, plate, toast, year, fuelType]);
 
     return html`
       <${SimplePage} title="Мой гараж" backPath="/profile">
@@ -206,6 +209,20 @@
                     placeholder="Пробег, км"
                     min="0"
                   />
+                  <label className="block">
+                    <span className="text-sm" style=${{ color: "var(--drivex-silver)" }}>Тип топлива / двигатель</span>
+                    <select
+                      className="w-full mt-2 p-3 rounded-xl outline-none dx-input"
+                      style=${{ background: "var(--glass-bg)" }}
+                      value=${fuelType}
+                      onChange=${(e) => setFuelType(e.target.value)}
+                    >
+                      <option value="petrol">Бензин</option>
+                      <option value="diesel">Дизель</option>
+                      <option value="gas">Газ</option>
+                      <option value="electric">Электричество</option>
+                    </select>
+                  </label>
                   <button type="button" className="w-full py-3 rounded-2xl font-bold dx-btn" onClick=${submitCar}>
                     Сохранить автомобиль
                   </button>
@@ -1259,6 +1276,13 @@
     }, [trips, buyerSession, selectedId]);
 
     const monthSummary = useMemo(() => (DX.summarizeTrips ? DX.summarizeTrips(trips, startOfMonthMs()) : { distanceKm: 0, durationMin: 0, fuelL: 0, costTjs: 0 }), [trips]);
+    const currentCar = useMemo(() => cars.find((c) => c.id === carId) || cars[0] || null, [cars, carId]);
+    const monthConsumption = useMemo(
+      () => (DX.estimateTripConsumption
+        ? DX.estimateTripConsumption(monthSummary.distanceKm, currentCar && currentCar.fuelType)
+        : { amount: monthSummary.fuelL, unit: "л", cost: monthSummary.costTjs, label: "топливо" }),
+      [monthSummary, currentCar]
+    );
     const smartTasks = useMemo(() => { try { return (DX.buildSmartCareTasks ? DX.buildSmartCareTasks(maintenance) : []) || []; } catch { return []; } }, [maintenance]);
 
     return html`
@@ -1302,8 +1326,8 @@
             <div className="grid grid-cols-2 gap-4 mt-3">
               <div><p className="text-2xl font-bold" style=${{ color: "var(--drivex-white)" }}>${monthSummary.distanceKm} км</p><p className="text-xs" style=${{ color: "var(--drivex-silver)" }}>пробег</p></div>
               <div><p className="text-2xl font-bold" style=${{ color: "var(--drivex-white)" }}>${fmtTripDuration(monthSummary.durationMin)}</p><p className="text-xs" style=${{ color: "var(--drivex-silver)" }}>в пути</p></div>
-              <div><p className="text-2xl font-bold" style=${{ color: "var(--drivex-white)" }}>${monthSummary.fuelL} л</p><p className="text-xs" style=${{ color: "var(--drivex-silver)" }}>≈ топливо</p></div>
-              <div><p className="text-2xl font-bold" style=${{ color: "var(--drivex-neon-cyan)" }}>${formatTjsPrice(monthSummary.costTjs)}</p><p className="text-xs" style=${{ color: "var(--drivex-silver)" }}>≈ расход</p></div>
+              <div><p className="text-2xl font-bold" style=${{ color: "var(--drivex-white)" }}>${monthConsumption.amount} ${monthConsumption.unit}</p><p className="text-xs" style=${{ color: "var(--drivex-silver)" }}>≈ ${monthConsumption.label}</p></div>
+              <div><p className="text-2xl font-bold" style=${{ color: "var(--drivex-neon-cyan)" }}>${formatTjsPrice(monthConsumption.cost)}</p><p className="text-xs" style=${{ color: "var(--drivex-silver)" }}>≈ расход</p></div>
             </div>
           </div>
 

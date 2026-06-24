@@ -2459,6 +2459,9 @@
       mileage: mileageText,
       mileageValue,
       vin: typeof value.vin === "string" ? value.vin.trim().toUpperCase() : "",
+      fuelType: ["petrol", "diesel", "gas", "electric"].includes(String(value.fuelType || "").toLowerCase())
+        ? String(value.fuelType).toLowerCase()
+        : "petrol",
       createdAt: typeof value.createdAt === "string" ? value.createdAt : new Date().toISOString()
     };
   }
@@ -4620,6 +4623,23 @@
     return Math.round((Number(liters) || 0) * (Number(pricePerL) || TRIP_FUEL_PRICE_TJS));
   }
 
+  // Тип двигателя/топлива — расход и стоимость считаются по типу (ориентир по TJ)
+  const DRIVEX_FUEL_TYPES = {
+    petrol:   { key: "petrol",   label: "Бензин",        unit: "л",     per100: 9,  price: 11,  energyLabel: "топливо" },
+    diesel:   { key: "diesel",   label: "Дизель",        unit: "л",     per100: 7,  price: 10,  energyLabel: "топливо" },
+    gas:      { key: "gas",      label: "Газ",           unit: "м³",    per100: 11, price: 3.5, energyLabel: "газ" },
+    electric: { key: "electric", label: "Электричество", unit: "кВт·ч", per100: 18, price: 1.2, energyLabel: "электричество" }
+  };
+  function getFuelType(key) {
+    return DRIVEX_FUEL_TYPES[String(key || "petrol").toLowerCase()] || DRIVEX_FUEL_TYPES.petrol;
+  }
+  // Расход за поездку по типу двигателя: { amount, unit, cost, label }
+  function estimateTripConsumption(distanceKm, fuelKey) {
+    const ft = getFuelType(fuelKey);
+    const amount = Math.round((Number(distanceKm) || 0) * ft.per100 / 100 * 100) / 100;
+    return { amount, unit: ft.unit, cost: Math.round(amount * ft.price), label: ft.energyLabel, fuelType: ft.key };
+  }
+
   function normalizeTrip(value) {
     if (!value || typeof value !== "object") return null;
     const points = Array.isArray(value.points)
@@ -5232,6 +5252,9 @@
   try { if (typeof estimateTripFuel !== 'undefined') window.DX['estimateTripFuel'] = estimateTripFuel; } catch(e) {}
   try { if (typeof estimateTripCost !== 'undefined') window.DX['estimateTripCost'] = estimateTripCost; } catch(e) {}
   try { if (typeof tripHaversineKm !== 'undefined') window.DX['tripHaversineKm'] = tripHaversineKm; } catch(e) {}
+  try { if (typeof getFuelType !== 'undefined') window.DX['getFuelType'] = getFuelType; } catch(e) {}
+  try { if (typeof estimateTripConsumption !== 'undefined') window.DX['estimateTripConsumption'] = estimateTripConsumption; } catch(e) {}
+  try { if (typeof DRIVEX_FUEL_TYPES !== 'undefined') window.DX['DRIVEX_FUEL_TYPES'] = DRIVEX_FUEL_TYPES; } catch(e) {}
   try { if (typeof getOrderChatSenderLabel !== 'undefined') window.DX['getOrderChatSenderLabel'] = getOrderChatSenderLabel; } catch(e) {}
   try { if (typeof getOrderChatThread !== 'undefined') window.DX['getOrderChatThread'] = getOrderChatThread; } catch(e) {}
   try { if (typeof getOrderChatUnreadCount !== 'undefined') window.DX['getOrderChatUnreadCount'] = getOrderChatUnreadCount; } catch(e) {}
