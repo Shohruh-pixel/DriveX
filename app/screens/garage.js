@@ -15,18 +15,93 @@
   const formatTjsPrice = function(n){ return DX.formatTjsPrice ? DX.formatTjsPrice(n) : (String(n)+' сом.'); };
   const genId = function(p){ return DX.genId ? DX.genId(p) : (p+'-'+Date.now()); };
 
-  // Марки и модели для формы добавления авто
-  const CAR_MAKES = ["Toyota", "Chevrolet", "Hyundai", "Kia", "BMW", "Mercedes", "Daewoo", "Другое"];
+  // Марки авто (популярные в TJ/СНГ + мировые + электромобили). Поиск + ввод вручную.
+  const CAR_MAKES = [
+    "Toyota", "Lexus", "Honda", "Acura", "Nissan", "Infiniti", "Mazda", "Mitsubishi", "Subaru", "Suzuki", "Daihatsu", "Isuzu",
+    "Hyundai", "Kia", "Genesis", "SsangYong", "Daewoo", "Ravon",
+    "Chevrolet", "Cadillac", "GMC", "Ford", "Lincoln", "Dodge", "Jeep", "Chrysler", "RAM",
+    "BMW", "Mini", "Mercedes-Benz", "Audi", "Volkswagen", "Porsche", "Opel", "Skoda", "SEAT", "Cupra",
+    "Renault", "Dacia", "Peugeot", "Citroen", "Fiat", "Alfa Romeo", "Volvo", "Land Rover", "Jaguar",
+    "Bentley", "Rolls-Royce", "Maserati", "Ferrari", "Lamborghini", "Aston Martin",
+    "Lada", "UAZ", "GAZ", "Moskvich",
+    "Tesla", "Polestar", "Rivian", "Lucid",
+    "BYD", "Zeekr", "Li Auto", "NIO", "XPeng", "Leapmotor", "Avatr", "Aito", "Voyah", "Wuling",
+    "Geely", "Chery", "Exeed", "Omoda", "Jaecoo", "Haval", "Great Wall", "Tank", "Changan", "Deepal", "Jetour", "Hongqi", "MG", "Dongfeng", "FAW", "Bestune", "JAC", "Foton", "BAIC", "GAC",
+    "Datsun", "Smart", "Mahindra", "Tata", "Proton", "Lifan", "Brilliance"
+  ];
+  // Подсказки моделей для популярных марок (модель можно и вписать вручную).
   const CAR_MODELS = {
-    Toyota:    ["Camry", "Corolla", "RAV4", "Land Cruiser", "Prius"],
-    Chevrolet: ["Cobalt", "Nexia", "Lacetti", "Captiva", "Spark"],
-    Hyundai:   ["Elantra", "Tucson", "Accent", "Santa Fe", "Sonata"],
-    Kia:       ["Rio", "Sportage", "Ceed", "K5", "Cerato"],
-    BMW:       ["3 Series", "5 Series", "X5", "X6"],
-    Mercedes:  ["C-Class", "E-Class", "GLE", "S-Class"],
-    Daewoo:    ["Matiz", "Nexia", "Lacetti"],
-    "Другое":  []
+    Toyota: ["Camry", "Corolla", "RAV4", "Land Cruiser", "Land Cruiser Prado", "Prius", "Highlander", "Yaris", "Hilux", "Fortuner", "C-HR", "bZ4X"],
+    Lexus: ["RX", "NX", "ES", "LX", "GX", "IS", "UX", "LS"],
+    Honda: ["Civic", "Accord", "CR-V", "Pilot", "Fit", "HR-V", "Odyssey"],
+    Nissan: ["Altima", "Sentra", "Qashqai", "X-Trail", "Patrol", "Juke", "Leaf", "Ariya", "Murano"],
+    Mitsubishi: ["Lancer", "Outlander", "Pajero", "ASX", "Montero", "Eclipse Cross", "L200"],
+    Mazda: ["Mazda 3", "Mazda 6", "CX-5", "CX-9", "CX-30", "MX-5"],
+    Hyundai: ["Elantra", "Sonata", "Tucson", "Santa Fe", "Accent", "Creta", "Palisade", "Ioniq 5", "Ioniq 6", "Kona"],
+    Kia: ["Rio", "Sportage", "Sorento", "Cerato", "K5", "Optima", "Seltos", "Carnival", "EV6", "Soul"],
+    Chevrolet: ["Cobalt", "Nexia", "Lacetti", "Spark", "Malibu", "Captiva", "Tracker", "Onix", "Tahoe"],
+    Daewoo: ["Matiz", "Nexia", "Lacetti", "Gentra"],
+    Ravon: ["R2", "R3", "R4", "Nexia R3", "Gentra"],
+    BMW: ["3 Series", "5 Series", "7 Series", "X1", "X3", "X5", "X6", "X7", "i3", "i4", "iX"],
+    "Mercedes-Benz": ["A-Class", "C-Class", "E-Class", "S-Class", "GLA", "GLC", "GLE", "GLS", "EQS", "EQE", "Sprinter"],
+    Audi: ["A3", "A4", "A6", "A8", "Q3", "Q5", "Q7", "Q8", "e-tron"],
+    Volkswagen: ["Polo", "Golf", "Passat", "Jetta", "Tiguan", "Touareg", "ID.4"],
+    Opel: ["Astra", "Insignia", "Corsa", "Mokka", "Zafira", "Vectra"],
+    Lada: ["Granta", "Vesta", "Niva", "Largus", "Priora", "Kalina", "XRAY"],
+    Tesla: ["Model 3", "Model Y", "Model S", "Model X", "Cybertruck"],
+    BYD: ["Song Plus", "Han", "Tang", "Qin", "Seal", "Atto 3", "Dolphin", "Yuan Plus", "Seagull"],
+    Zeekr: ["001", "007", "X", "009"],
+    "Li Auto": ["L6", "L7", "L8", "L9", "Mega"],
+    Chery: ["Tiggo 2", "Tiggo 4", "Tiggo 7 Pro", "Tiggo 8 Pro", "Arrizo 8"],
+    Haval: ["Jolion", "H6", "Dargo", "F7", "H9"],
+    Geely: ["Coolray", "Atlas", "Monjaro", "Emgrand", "Tugella"],
+    Changan: ["CS35 Plus", "CS55 Plus", "CS75 Plus", "Eado", "UNI-K", "UNI-T"]
   };
+
+  // Поисковый выпадающий список (тёмная тема, фильтр по вводу, можно вписать своё)
+  function SearchableSelect({ value, onChange, options, placeholder, disabled }) {
+    const [open, setOpen] = useState(false);
+    const [query, setQuery] = useState("");
+    const boxRef = useRef(null);
+    const opts = Array.isArray(options) ? options : [];
+    const q = String(query || "").trim().toLowerCase();
+    const filtered = q ? opts.filter((o) => o.toLowerCase().includes(q)) : opts;
+
+    useEffect(() => {
+      if (!open) return undefined;
+      const onDoc = (e) => { if (boxRef.current && !boxRef.current.contains(e.target)) setOpen(false); };
+      document.addEventListener("mousedown", onDoc);
+      return () => document.removeEventListener("mousedown", onDoc);
+    }, [open]);
+
+    const pick = (val) => { onChange(val); setQuery(""); setOpen(false); };
+
+    return html`
+      <div ref=${boxRef} style=${{ position: "relative" }}>
+        <input
+          className="w-full p-3 rounded-xl dx-input"
+          disabled=${disabled}
+          value=${open ? query : (value || "")}
+          placeholder=${placeholder}
+          onFocus=${() => { if (!disabled) { setQuery(""); setOpen(true); } }}
+          onInput=${(e) => { setQuery(e.target.value); onChange(e.target.value); if (!open) setOpen(true); }}
+        />
+        ${open && !disabled
+          ? html`<div style=${{ position: "absolute", left: 0, right: 0, top: "calc(100% + 4px)", zIndex: 60, maxHeight: "240px", overflowY: "auto", background: "#141927", border: "1px solid rgba(255,255,255,0.14)", borderRadius: "14px", boxShadow: "0 14px 32px -8px rgba(0,0,0,0.65)" }}>
+              ${filtered.length
+                ? filtered.map((o) => html`<button
+                    key=${o}
+                    type="button"
+                    className="w-full text-left px-4 py-3"
+                    style=${{ color: o === value ? "var(--drivex-neon-cyan)" : "var(--drivex-white)", background: "transparent", border: "none", borderBottom: "1px solid rgba(255,255,255,0.05)", fontSize: "15px", cursor: "pointer" }}
+                    onMouseDown=${(e) => { e.preventDefault(); pick(o); }}
+                  >${o}</button>`)
+                : html`<div className="px-4 py-3 text-sm" style=${{ color: "var(--drivex-silver)" }}>Нет в списке — оставлю как «${query}»</div>`}
+            </div>`
+          : null}
+      </div>
+    `;
+  }
 
   function GarageScreen({ activeCarId, onSelectCar, onAddCar, onRemoveCar }) {
     const toast = useToast();
@@ -34,7 +109,6 @@
     const [showForm, setShowForm] = useState(false);
     const [make, setMake] = useState("");
     const [model, setModel] = useState("");
-    const [customMake, setCustomMake] = useState("");
     const [plate, setPlate] = useState("");
     const [year, setYear] = useState("");
     const [mileage, setMileage] = useState("");
@@ -64,7 +138,7 @@
     }, [confirm, onRemoveCar, toast]);
 
     const submitCar = useCallback(() => {
-      const brand = make === "Другое" ? customMake.trim() : make;
+      const brand = String(make || "").trim();
       if (!brand || !model.trim()) {
         toast.push("Выберите марку и модель");
         return;
@@ -98,7 +172,6 @@
       onAddCar && onAddCar(nextCar);
       setMake("");
       setModel("");
-      setCustomMake("");
       setPlate("");
       setYear("");
       setMileage("");
@@ -106,7 +179,7 @@
       setEngine("");
       setShowForm(false);
       toast.push("Автомобиль добавлен");
-    }, [make, model, customMake, mileage, onAddCar, plate, toast, year, fuelType, engine]);
+    }, [make, model, mileage, onAddCar, plate, toast, year, fuelType, engine]);
 
     return html`
       <${SimplePage} title="Мой гараж" backPath="/profile">
@@ -154,39 +227,20 @@
             ? html`
                 <div className="glass-card-light rounded-2xl p-4 space-y-3">
                   <div className="grid grid-cols-2 gap-3">
-                    <select
-                      className="w-full p-3 rounded-xl dx-input"
+                    <${SearchableSelect}
                       value=${make}
-                      onChange=${(e) => { setMake(e.target.value); setModel(""); setCustomMake(""); }}
-                    >
-                      <option value="">Марка…</option>
-                      ${CAR_MAKES.map((m) => html`<option key=${m} value=${m}>${m}</option>`)}
-                    </select>
-                    ${make === "Другое"
-                      ? html`<input
-                          className="w-full p-3 rounded-xl dx-input"
-                          value=${customMake}
-                          onInput=${(e) => setCustomMake(e.target.value)}
-                          placeholder="Марка вручную"
-                        />`
-                      : html`<select
-                          className="w-full p-3 rounded-xl dx-input"
-                          value=${model}
-                          onChange=${(e) => setModel(e.target.value)}
-                          disabled=${!make}
-                        >
-                          <option value="">Модель…</option>
-                          ${(CAR_MODELS[make] || []).map((m) => html`<option key=${m} value=${m}>${m}</option>`)}
-                        </select>`}
+                      onChange=${(v) => { setMake(v); setModel(""); }}
+                      options=${CAR_MAKES}
+                      placeholder="Марка — найди или впиши"
+                    />
+                    <${SearchableSelect}
+                      value=${model}
+                      onChange=${setModel}
+                      options=${CAR_MODELS[make] || []}
+                      placeholder="Модель — выбери или впиши"
+                      disabled=${!make}
+                    />
                   </div>
-                  ${make === "Другое"
-                    ? html`<input
-                        className="w-full p-3 rounded-xl dx-input"
-                        value=${model}
-                        onInput=${(e) => setModel(e.target.value)}
-                        placeholder="Модель"
-                      />`
-                    : null}
                   <div className="grid grid-cols-2 gap-3">
                     <input
                       className="w-full p-3 rounded-xl dx-input"
@@ -214,17 +268,21 @@
                   />
                   <label className="block">
                     <span className="text-sm" style=${{ color: "var(--drivex-silver)" }}>Тип топлива / двигатель</span>
-                    <select
-                      className="w-full mt-2 p-3 rounded-xl outline-none dx-input"
-                      style=${{ background: "var(--glass-bg)" }}
-                      value=${fuelType}
-                      onChange=${(e) => setFuelType(e.target.value)}
-                    >
-                      <option value="petrol">Бензин</option>
-                      <option value="diesel">Дизель</option>
-                      <option value="gas">Газ</option>
-                      <option value="electric">Электричество</option>
-                    </select>
+                    <div className="grid grid-cols-2 gap-2 mt-2">
+                      ${[["petrol", "Бензин"], ["diesel", "Дизель"], ["gas", "Газ"], ["electric", "Электричество"]].map(([val, label]) => html`
+                        <button
+                          key=${val}
+                          type="button"
+                          className="py-3 rounded-xl text-sm font-medium"
+                          style=${{
+                            border: fuelType === val ? "1px solid var(--drivex-neon-cyan)" : "1px solid rgba(255,255,255,0.12)",
+                            background: fuelType === val ? "rgba(6,182,212,0.18)" : "transparent",
+                            color: fuelType === val ? "var(--drivex-neon-cyan)" : "var(--drivex-white)",
+                            cursor: "pointer"
+                          }}
+                          onClick=${() => setFuelType(val)}
+                        >${label}</button>`)}
+                    </div>
                   </label>
                   ${fuelType !== "electric"
                     ? html`<label className="block">
