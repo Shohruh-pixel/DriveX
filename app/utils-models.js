@@ -29,6 +29,7 @@
     orderChats: "drivex.order-chats.v1",
     buyerInvite: "drivex.buyer.invite.v1",
     referrals: "drivex.referrals.v1",
+    trips: "drivex.trips.v1",
     marketplaceCatalog: "drivex.market.catalog.v1",
     sellerSession: "drivex.seller.session.v1",
     sellerProfile: "drivex.seller.profile.v1",
@@ -72,7 +73,8 @@
     drivexStorageKeys.buyerOrders,
     drivexStorageKeys.savedPlaces,
     drivexStorageKeys.favorites,
-    drivexStorageKeys.buyerInvite
+    drivexStorageKeys.buyerInvite,
+    drivexStorageKeys.trips
   ]);
   const drivexMediaDbName = "drivex.media.v1";
   const drivexMediaStoreName = "media";
@@ -4572,6 +4574,98 @@
     return (Array.isArray(list) ? list : []).map(normalizeReferralRecord).filter(Boolean);
   }
 
+  // ── Поездки (GPS-трекер) ────────────────────────────────────────────────
+  const TRIP_FUEL_L_PER_100 = 9;   // средний расход, л/100км (если у авто не задан)
+  const TRIP_FUEL_PRICE_TJS = 11;  // цена бензина, сомони/л (ориентир по TJ)
+
+  function tripHaversineKm(a, b) {
+    if (!a || !b) return 0;
+    const R = 6371;
+    const toRad = (d) => (d * Math.PI) / 180;
+    const dLat = toRad(b.lat - a.lat);
+    const dLng = toRad(b.lng - a.lng);
+    const lat1 = toRad(a.lat), lat2 = toRad(b.lat);
+    const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+    return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+  }
+
+  function computeTripStats(points, startedAt, endedAt) {
+    const pts = Array.isArray(points)
+      ? points.filter((p) => p && Number.isFinite(p.lat) && Number.isFinite(p.lng))
+      : [];
+    let distanceKm = 0, maxSpeed = 0;
+    for (let i = 1; i < pts.length; i++) {
+      const d = tripHaversineKm(pts[i - 1], pts[i]);
+      distanceKm += d;
+      const dtH = (Number(pts[i].t) - Number(pts[i - 1].t)) / 3600000;
+      if (dtH > 0) { const sp = d / dtH; if (sp < 300 && sp > maxSpeed) maxSpeed = sp; }
+    }
+    const startMs = Number(startedAt) || (pts[0] && Number(pts[0].t)) || 0;
+    const endMs = Number(endedAt) || (pts.length && Number(pts[pts.length - 1].t)) || startMs;
+    const durationMin = Math.max(0, Math.round((endMs - startMs) / 60000));
+    const durationH = durationMin / 60;
+    const round = (n) => Math.round(n * 10) / 10;
+    return {
+      distanceKm: round(distanceKm),
+      durationMin,
+      avgSpeed: durationH > 0 ? round(distanceKm / durationH) : 0,
+      maxSpeed: round(maxSpeed)
+    };
+  }
+
+  function estimateTripFuel(distanceKm, lPer100 = TRIP_FUEL_L_PER_100) {
+    return Math.round((Number(distanceKm) || 0) * (Number(lPer100) || TRIP_FUEL_L_PER_100) / 100 * 100) / 100;
+  }
+  function estimateTripCost(liters, pricePerL = TRIP_FUEL_PRICE_TJS) {
+    return Math.round((Number(liters) || 0) * (Number(pricePerL) || TRIP_FUEL_PRICE_TJS));
+  }
+
+  function normalizeTrip(value) {
+    if (!value || typeof value !== "object") return null;
+    const points = Array.isArray(value.points)
+      ? value.points
+          .map((p) => ({ lat: Number(p.lat), lng: Number(p.lng), t: Number(p.t) || 0 }))
+          .filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng))
+          .slice(0, 3000)
+      : [];
+    const startedAt = Number(value.startedAt) || (points[0] && points[0].t) || 0;
+    const endedAt = Number(value.endedAt) || (points.length && points[points.length - 1].t) || startedAt;
+    const stats = computeTripStats(points, startedAt, endedAt);
+    return {
+      id: String(value.id || "").trim() || ("trip-" + startedAt),
+      carId: String(value.carId || ""),
+      title: String(value.title || "").trim(),
+      startedAt,
+      endedAt,
+      points,
+      distanceKm: Number.isFinite(Number(value.distanceKm)) && Number(value.distanceKm) > 0 ? Number(value.distanceKm) : stats.distanceKm,
+      durationMin: Number.isFinite(Number(value.durationMin)) && Number(value.durationMin) > 0 ? Number(value.durationMin) : stats.durationMin,
+      avgSpeed: Number(value.avgSpeed) || stats.avgSpeed,
+      maxSpeed: Number(value.maxSpeed) || stats.maxSpeed
+    };
+  }
+  function normalizeTripsList(list) {
+    return (Array.isArray(list) ? list : [])
+      .map(normalizeTrip)
+      .filter(Boolean)
+      .sort((a, b) => b.startedAt - a.startedAt)
+      .slice(0, 100);
+  }
+
+  function summarizeTrips(trips, sinceMs = 0) {
+    const list = normalizeTripsList(trips).filter((t) => t.startedAt >= (Number(sinceMs) || 0));
+    const distanceKm = list.reduce((s, t) => s + (t.distanceKm || 0), 0);
+    const durationMin = list.reduce((s, t) => s + (t.durationMin || 0), 0);
+    const fuelL = estimateTripFuel(distanceKm);
+    return {
+      count: list.length,
+      distanceKm: Math.round(distanceKm * 10) / 10,
+      durationMin,
+      fuelL,
+      costTjs: estimateTripCost(fuelL)
+    };
+  }
+
   // Сводка для пригласившего: сколько приглашено, начислено, доступно к трате
   function computeReferralStats(referrals, myCode, spent = 0) {
     const code = normalizeReferralCode(myCode);
@@ -5131,6 +5225,13 @@
   try { if (typeof normalizeReferralsList !== 'undefined') window.DX['normalizeReferralsList'] = normalizeReferralsList; } catch(e) {}
   try { if (typeof computeReferralStats !== 'undefined') window.DX['computeReferralStats'] = computeReferralStats; } catch(e) {}
   try { window.DX['REFERRAL_REWARD_TJS'] = REFERRAL_REWARD_TJS; } catch(e) {}
+  try { if (typeof computeTripStats !== 'undefined') window.DX['computeTripStats'] = computeTripStats; } catch(e) {}
+  try { if (typeof normalizeTrip !== 'undefined') window.DX['normalizeTrip'] = normalizeTrip; } catch(e) {}
+  try { if (typeof normalizeTripsList !== 'undefined') window.DX['normalizeTripsList'] = normalizeTripsList; } catch(e) {}
+  try { if (typeof summarizeTrips !== 'undefined') window.DX['summarizeTrips'] = summarizeTrips; } catch(e) {}
+  try { if (typeof estimateTripFuel !== 'undefined') window.DX['estimateTripFuel'] = estimateTripFuel; } catch(e) {}
+  try { if (typeof estimateTripCost !== 'undefined') window.DX['estimateTripCost'] = estimateTripCost; } catch(e) {}
+  try { if (typeof tripHaversineKm !== 'undefined') window.DX['tripHaversineKm'] = tripHaversineKm; } catch(e) {}
   try { if (typeof getOrderChatSenderLabel !== 'undefined') window.DX['getOrderChatSenderLabel'] = getOrderChatSenderLabel; } catch(e) {}
   try { if (typeof getOrderChatThread !== 'undefined') window.DX['getOrderChatThread'] = getOrderChatThread; } catch(e) {}
   try { if (typeof getOrderChatUnreadCount !== 'undefined') window.DX['getOrderChatUnreadCount'] = getOrderChatUnreadCount; } catch(e) {}

@@ -56,6 +56,10 @@
     'getBuyerReferralCode','normalizeReferralCode','normalizeReferralRecord',
     'normalizeReferralsList','computeReferralStats',
 
+    // Поездки (GPS-трекер)
+    'tripHaversineKm','computeTripStats','normalizeTrip','normalizeTripsList',
+    'summarizeTrips','estimateTripFuel','estimateTripCost',
+
     // Seller models
     'createDefaultSellerSession','createFreshSellerSession',
     'normalizeSellerSession','normalizeSellerStore','normalizeSellerProfile','normalizeSellerProduct',

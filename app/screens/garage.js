@@ -1144,6 +1144,206 @@
   }
 
 
+  // ── Поездки (GPS-трекер) ─────────────────────────────────────────────────
+  function fmtTripDuration(min) {
+    const m = Math.max(0, Math.round(Number(min) || 0));
+    const h = Math.floor(m / 60);
+    return h > 0 ? `${h} ч ${m % 60} мин` : `${m} мин`;
+  }
+  function startOfMonthMs() {
+    const d = new Date(); d.setDate(1); d.setHours(0, 0, 0, 0); return d.getTime();
+  }
+
+  function TripsScreen({ buyerSession, activeCarId, onSelectCar, maintenance }) {
+    const toast = useToast();
+    const cars = Array.isArray(garageCars) ? garageCars : [];
+    const [carId, setCarId] = useState(activeCarId || (cars[0] && cars[0].id) || "");
+    const [trips, setTrips] = useState(() => {
+      try { return DX.normalizeTripsList(readBuyerLocalStorage(drivexStorageKeys.trips, buyerSession) || []); }
+      catch { return []; }
+    });
+    const [recording, setRecording] = useState(false);
+    const [points, setPoints] = useState([]);
+    const [selectedId, setSelectedId] = useState(null);
+    const [, setTick] = useState(0);
+    const watchRef = useRef(null);
+    const startRef = useRef(0);
+    const mapRef = useRef(null);
+    const lineRef = useRef(null);
+    const startMarkerRef = useRef(null);
+    const endMarkerRef = useRef(null);
+    const mapNodeRef = useRef(null);
+
+    // Тик для живого таймера
+    useEffect(() => {
+      if (!recording) return undefined;
+      const id = setInterval(() => setTick((t) => t + 1), 1000);
+      return () => clearInterval(id);
+    }, [recording]);
+
+    // Очистка GPS + карты при размонтировании
+    useEffect(() => () => {
+      try { if (watchRef.current != null && navigator.geolocation) navigator.geolocation.clearWatch(watchRef.current); } catch { /* ignore */ }
+      try { if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; } } catch { /* ignore */ }
+    }, []);
+
+    const selectedTrip = useMemo(() => trips.find((t) => t.id === selectedId) || null, [trips, selectedId]);
+    const displayPoints = recording ? points : (selectedTrip ? selectedTrip.points : points);
+    const liveStats = DX.computeTripStats ? DX.computeTripStats(points, startRef.current, Date.now()) : { distanceKm: 0, durationMin: 0, avgSpeed: 0, maxSpeed: 0 };
+
+    // Карта Leaflet: рисуем маршрут (живой или выбранный)
+    useEffect(() => {
+      const L = window.L;
+      if (!L || !mapNodeRef.current) return undefined;
+      if (!mapRef.current) {
+        mapRef.current = L.map(mapNodeRef.current, { zoomControl: false, attributionControl: false, preferCanvas: true }).setView([40.2833, 69.6222], 12);
+        L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, crossOrigin: true }).addTo(mapRef.current);
+      }
+      const map = mapRef.current;
+      const ll = (displayPoints || []).map((p) => [p.lat, p.lng]);
+      [lineRef, startMarkerRef, endMarkerRef].forEach((r) => { if (r.current) { try { r.current.remove(); } catch { /* */ } r.current = null; } });
+      if (ll.length) {
+        lineRef.current = L.polyline(ll, { color: "#06b6d4", weight: 5, opacity: 0.9 }).addTo(map);
+        startMarkerRef.current = L.circleMarker(ll[0], { radius: 7, color: "#fff", weight: 2, fillColor: "#10b981", fillOpacity: 1 }).addTo(map);
+        endMarkerRef.current = L.circleMarker(ll[ll.length - 1], { radius: 7, color: "#fff", weight: 2, fillColor: "#ef4444", fillOpacity: 1 }).addTo(map);
+        if (recording) map.setView(ll[ll.length - 1], Math.max(map.getZoom(), 15));
+        else { try { map.fitBounds(L.latLngBounds(ll).pad(0.25)); } catch { /* */ } }
+      }
+      const t = setTimeout(() => { try { map.invalidateSize(); } catch { /* */ } }, 150);
+      return () => clearTimeout(t);
+    }, [displayPoints, recording, selectedId]);
+
+    const startTrip = useCallback(() => {
+      if (!navigator.geolocation) { toast.push("Геолокация недоступна на устройстве"); return; }
+      if (typeof window !== "undefined" && window.isSecureContext === false) { toast.push("GPS работает только по HTTPS — открой по https-ссылке"); return; }
+      setSelectedId(null);
+      setPoints([]);
+      startRef.current = Date.now();
+      setRecording(true);
+      try {
+        watchRef.current = navigator.geolocation.watchPosition(
+          (pos) => {
+            const p = { lat: pos.coords.latitude, lng: pos.coords.longitude, t: Date.now() };
+            setPoints((prev) => {
+              const last = prev[prev.length - 1];
+              if (last && DX.tripHaversineKm && DX.tripHaversineKm(last, p) < 0.005) return prev; // фильтр <5 м
+              return [...prev, p];
+            });
+          },
+          () => { toast.push("Нет доступа к GPS — разрешите геолокацию в браузере"); },
+          { enableHighAccuracy: true, maximumAge: 1000, timeout: 20000 }
+        );
+      } catch { toast.push("Не удалось запустить GPS"); setRecording(false); }
+    }, [toast]);
+
+    const stopTrip = useCallback(() => {
+      try { if (watchRef.current != null) { navigator.geolocation.clearWatch(watchRef.current); watchRef.current = null; } } catch { /* */ }
+      setRecording(false);
+      const pts = points;
+      if (pts.length < 2) { toast.push("Поездка слишком короткая — маршрут не записан"); setPoints([]); return; }
+      const startedAt = startRef.current || pts[0].t;
+      const trip = DX.normalizeTrip({ id: "trip-" + startedAt, carId, startedAt, endedAt: Date.now(), points: pts });
+      const next = DX.normalizeTripsList([trip, ...trips]);
+      setTrips(next);
+      try { writeBuyerLocalStorage(drivexStorageKeys.trips, next, buyerSession); } catch { /* */ }
+      setPoints([]);
+      setSelectedId(trip.id);
+      toast.push(`Поездка сохранена: ${trip.distanceKm} км`);
+    }, [points, carId, trips, buyerSession, toast]);
+
+    const removeTrip = useCallback((id) => {
+      const next = trips.filter((t) => t.id !== id);
+      setTrips(next);
+      try { writeBuyerLocalStorage(drivexStorageKeys.trips, next, buyerSession); } catch { /* */ }
+      if (selectedId === id) setSelectedId(null);
+    }, [trips, buyerSession, selectedId]);
+
+    const monthSummary = useMemo(() => (DX.summarizeTrips ? DX.summarizeTrips(trips, startOfMonthMs()) : { distanceKm: 0, durationMin: 0, fuelL: 0, costTjs: 0 }), [trips]);
+    const smartTasks = useMemo(() => { try { return (DX.buildSmartCareTasks ? DX.buildSmartCareTasks(maintenance) : []) || []; } catch { return []; } }, [maintenance]);
+
+    return html`
+      <${SimplePage} title="Поездки" backPath="/profile">
+        <div className="px-6 py-6 space-y-4">
+          ${cars.length > 1
+            ? html`<select className="w-full p-3 rounded-xl outline-none dx-input" style=${{ background: "var(--glass-bg)" }}
+                value=${carId} onChange=${(e) => { setCarId(e.target.value); onSelectCar && onSelectCar(e.target.value); }}>
+                ${cars.map((c) => html`<option key=${c.id} value=${c.id}>${c.name} • ${c.plate}</option>`)}
+              </select>`
+            : null}
+
+          <div className="glass-card-light rounded-3xl overflow-hidden">
+            <div ref=${mapNodeRef} style=${{ width: "100%", height: "240px", background: "#0b0f17" }}></div>
+            <div className="p-4">
+              ${recording
+                ? html`<div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-2xl font-bold" style=${{ color: "var(--drivex-white)" }}>${liveStats.distanceKm} км</p>
+                      <p className="text-sm" style=${{ color: "var(--drivex-silver)" }}>${fmtTripDuration(liveStats.durationMin)} · ср. ${liveStats.avgSpeed} км/ч</p>
+                    </div>
+                    <span className="flex items-center gap-2 text-sm font-semibold" style=${{ color: "var(--drivex-danger)" }}>
+                      <span style=${{ width: "10px", height: "10px", borderRadius: "50%", background: "var(--drivex-danger)", display: "inline-block" }}></span>запись…
+                    </span>
+                  </div>`
+                : selectedTrip
+                  ? html`<div>
+                      <p className="text-2xl font-bold" style=${{ color: "var(--drivex-white)" }}>${selectedTrip.distanceKm} км</p>
+                      <p className="text-sm" style=${{ color: "var(--drivex-silver)" }}>${fmtTripDuration(selectedTrip.durationMin)} · ср. ${selectedTrip.avgSpeed} · макс ${selectedTrip.maxSpeed} км/ч</p>
+                    </div>`
+                  : html`<p className="text-sm text-center" style=${{ color: "var(--drivex-silver)" }}>Нажми «Старт поездки» — маршрут появится на карте</p>`}
+            </div>
+          </div>
+
+          ${recording
+            ? html`<button type="button" className="w-full py-4 rounded-2xl font-bold text-lg" style=${{ background: "var(--drivex-danger)", color: "#fff" }} onClick=${stopTrip}>■ Стоп · сохранить</button>`
+            : html`<button type="button" className="w-full py-4 rounded-2xl font-bold text-lg dx-btn" onClick=${startTrip}>▶ Старт поездки</button>`}
+
+          <div className="glass-card rounded-3xl p-5 neon-glow-cyan">
+            <p className="text-sm" style=${{ color: "var(--drivex-silver)" }}>За этот месяц</p>
+            <div className="grid grid-cols-2 gap-4 mt-3">
+              <div><p className="text-2xl font-bold" style=${{ color: "var(--drivex-white)" }}>${monthSummary.distanceKm} км</p><p className="text-xs" style=${{ color: "var(--drivex-silver)" }}>пробег</p></div>
+              <div><p className="text-2xl font-bold" style=${{ color: "var(--drivex-white)" }}>${fmtTripDuration(monthSummary.durationMin)}</p><p className="text-xs" style=${{ color: "var(--drivex-silver)" }}>в пути</p></div>
+              <div><p className="text-2xl font-bold" style=${{ color: "var(--drivex-white)" }}>${monthSummary.fuelL} л</p><p className="text-xs" style=${{ color: "var(--drivex-silver)" }}>≈ топливо</p></div>
+              <div><p className="text-2xl font-bold" style=${{ color: "var(--drivex-neon-cyan)" }}>${formatTjsPrice(monthSummary.costTjs)}</p><p className="text-xs" style=${{ color: "var(--drivex-silver)" }}>≈ расход</p></div>
+            </div>
+          </div>
+
+          ${smartTasks.length
+            ? html`<a href="#/maintenance" className="glass-card-light rounded-2xl p-4 flex items-center gap-3" style=${{ display: "flex" }}>
+                <div className="w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0" style=${{ background: "rgba(245,158,11,0.16)", color: "var(--drivex-warning)" }}><${Icon} name="wrench" size=${20} /></div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold" style=${{ color: "var(--drivex-white)" }}>${smartTasks[0].title || "Скоро обслуживание"}</p>
+                  <p className="text-xs mt-1" style=${{ color: "var(--drivex-silver)" }}>${smartTasks[0].subtitle || smartTasks[0].body || "Загляни в журнал обслуживания"}</p>
+                </div>
+                <${Icon} name="chev" size=${18} color="var(--drivex-silver)" />
+              </a>`
+            : null}
+
+          <div>
+            <h3 className="text-sm font-semibold mb-3 px-2" style=${{ color: "var(--drivex-silver)" }}>История поездок</h3>
+            ${trips.length
+              ? html`<div className="space-y-3">
+                  ${trips.map((t) => html`
+                    <div key=${t.id} className="glass-card-light rounded-2xl p-4" style=${{ border: selectedId === t.id ? "1px solid rgba(6,182,212,0.4)" : "1px solid transparent" }}>
+                      <div className="flex items-center justify-between gap-3">
+                        <button type="button" className="flex-1 text-left min-w-0" onClick=${() => setSelectedId(t.id)}>
+                          <p className="font-bold" style=${{ color: "var(--drivex-white)" }}>${t.distanceKm} км · ${fmtTripDuration(t.durationMin)}</p>
+                          <p className="text-xs mt-1" style=${{ color: "var(--drivex-silver)" }}>${new Date(t.startedAt).toLocaleString("ru-RU", { dateStyle: "medium", timeStyle: "short" })} · ср. ${t.avgSpeed} км/ч</p>
+                        </button>
+                        <button type="button" onClick=${() => removeTrip(t.id)} style=${{ color: "var(--drivex-silver)" }} aria-label="Удалить"><${Icon} name="trash" size=${18} /></button>
+                      </div>
+                    </div>`)}
+                </div>`
+              : html`<div className="glass-card-light rounded-2xl p-6 text-center">
+                  <div style=${{ fontSize: "40px", marginBottom: "8px" }}>🛣️</div>
+                  <p className="font-semibold" style=${{ color: "var(--drivex-white)" }}>Поездок пока нет</p>
+                  <p className="text-sm mt-1" style=${{ color: "var(--drivex-silver)" }}>Нажми «Старт поездки» и держи приложение открытым в дороге — маршрут запишется автоматически.</p>
+                </div>`}
+          </div>
+        </div>
+      </${SimplePage}>
+    `;
+  }
+
   // ── Export to DX.screens (chain: app-main.js читает отсюда) ──
   DX.screens = DX.screens || {};
   if (typeof GarageScreen !== 'undefined') DX.screens['GarageScreen'] = GarageScreen;

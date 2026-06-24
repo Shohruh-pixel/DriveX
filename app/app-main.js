@@ -4297,7 +4297,12 @@
         content = html`<${getScreen('OrdersScreen')} orders=${buyerOrders} orderChats=${orderChats} />`;
       } else if (normalized === "/trips") {
         activePath = "/profile";
-        content = html`<${getScreen('ComingSoonScreen')} title="История поездок" emoji="🛣️" subtitle="GPS-история поездок появится в одном из ближайших обновлений" />`;
+        content = html`<${getScreen('TripsScreen')}
+          buyerSession=${buyerSession}
+          activeCarId=${activeCarId}
+          onSelectCar=${selectActiveCar}
+          maintenance=${maintenance}
+        />`;
       } else if (normalized === "/saved-locations") {
         activePath = "/profile";
         content = html`<${getScreen('SavedLocationsScreen')}
