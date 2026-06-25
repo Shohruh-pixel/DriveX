@@ -114,6 +114,8 @@
     const [mileage, setMileage] = useState("");
     const [fuelType, setFuelType] = useState("petrol");
     const [engine, setEngine] = useState("");
+    const [editingId, setEditingId] = useState(null);
+    const [editingCreatedAt, setEditingCreatedAt] = useState(null);
 
     const cars = garageCars;
     const activeCar = findGarageCar(activeCarId) || cars[0];
@@ -134,52 +136,92 @@
       });
       if (!ok) return;
       onRemoveCar && onRemoveCar(car.id);
+      if (editingId === car.id) { setEditingId(null); setEditingCreatedAt(null); setShowForm(false); }
       toast.push("Автомобиль удалён");
-    }, [confirm, onRemoveCar, toast]);
+    }, [confirm, onRemoveCar, toast, editingId]);
+
+    const resetCarForm = useCallback(() => {
+      setMake(""); setModel(""); setPlate(""); setYear(""); setMileage("");
+      setFuelType("petrol"); setEngine("");
+      setEditingId(null); setEditingCreatedAt(null);
+    }, []);
+
+    // Открыть форму для добавления новой машины (или закрыть)
+    const toggleAddForm = useCallback(() => {
+      setShowForm((open) => {
+        if (open) { resetCarForm(); return false; }
+        resetCarForm();
+        return true;
+      });
+    }, [resetCarForm]);
+
+    // Открыть форму для редактирования существующей машины (поля заполнены)
+    const startEditCar = useCallback((car) => {
+      setMake(car.brand || "");
+      setModel(car.model || "");
+      setPlate(car.plate || "");
+      setYear(car.year ? String(car.year) : "");
+      setMileage(car.mileageValue != null && car.mileageValue !== "" ? String(car.mileageValue) : "");
+      setFuelType(car.fuelType || "petrol");
+      setEngine(car.engine ? String(car.engine) : "");
+      setEditingId(car.id);
+      setEditingCreatedAt(car.createdAt || null);
+      setShowForm(true);
+    }, []);
 
     const submitCar = useCallback(() => {
+      // Проверяем, что все поля заполнены
       const brand = String(make || "").trim();
-      if (!brand || !model.trim()) {
-        toast.push("Выберите марку и модель");
+      if (!brand) { toast.push("Укажите марку"); return; }
+      if (!model.trim()) { toast.push("Укажите модель"); return; }
+      if (!String(plate).trim()) { toast.push("Укажите госномер"); return; }
+
+      const currentYear = new Date().getFullYear();
+      if (!String(year).trim()) { toast.push("Укажите год выпуска"); return; }
+      const y = Number(year);
+      if (!Number.isFinite(y) || y < 1980 || y > currentYear) {
+        toast.push(`Год должен быть в диапазоне 1980–${currentYear}`);
         return;
       }
-      const currentYear = new Date().getFullYear();
-      if (year) {
-        const y = Number(year);
-        if (!Number.isFinite(y) || y < 1980 || y > currentYear) {
-          toast.push(`Год должен быть в диапазоне 1980–${currentYear}`);
-          return;
-        }
-      }
-      const mileageNum = mileage === "" ? 0 : Number(mileage);
+
+      if (String(mileage).trim() === "") { toast.push("Укажите пробег"); return; }
+      const mileageNum = Number(mileage);
       if (!Number.isFinite(mileageNum) || mileageNum < 0) {
         toast.push("Проверьте пробег");
         return;
       }
+
+      // Объём двигателя нужен для всех, кроме электромобилей
+      if (fuelType !== "electric") {
+        if (String(engine).trim() === "") { toast.push("Укажите мотор (объём двигателя)"); return; }
+        const eng = Number(engine);
+        if (!Number.isFinite(eng) || eng <= 0 || eng >= 12) {
+          toast.push("Проверьте объём двигателя (0–12 л)");
+          return;
+        }
+      }
+
       const nextCar = normalizeGarageCar({
+        id: editingId || undefined,
+        createdAt: editingCreatedAt || undefined,
         brand,
         model: model.trim(),
         plate,
         year,
         mileageValue: mileageNum,
         fuelType,
-        engine
+        engine: fuelType === "electric" ? "" : engine
       });
       if (!nextCar) {
-        toast.push("Выберите марку и модель");
+        toast.push("Проверьте данные машины");
         return;
       }
+      const wasEditing = !!editingId;
       onAddCar && onAddCar(nextCar);
-      setMake("");
-      setModel("");
-      setPlate("");
-      setYear("");
-      setMileage("");
-      setFuelType("petrol");
-      setEngine("");
+      resetCarForm();
       setShowForm(false);
-      toast.push("Автомобиль добавлен");
-    }, [make, model, mileage, onAddCar, plate, toast, year, fuelType, engine]);
+      toast.push(wasEditing ? "Машина обновлена" : "Автомобиль добавлен");
+    }, [make, model, mileage, plate, year, fuelType, engine, editingId, editingCreatedAt, onAddCar, toast, resetCarForm]);
 
     return html`
       <${SimplePage} title="Мой гараж" backPath="/profile">
@@ -217,15 +259,18 @@
             <button
               type="button"
               className="px-4 py-2 rounded-xl text-sm font-medium dx-btn"
-              onClick=${() => setShowForm((value) => !value)}
+              onClick=${toggleAddForm}
             >
-              Добавить
+              ${showForm ? "Закрыть" : "Добавить"}
             </button>
           </div>
 
           ${showForm
             ? html`
                 <div className="glass-card-light rounded-2xl p-4 space-y-3">
+                  <p className="font-bold" style=${{ color: "var(--drivex-white)" }}>
+                    ${editingId ? "Изменить машину" : "Новая машина"}
+                  </p>
                   <div className="grid grid-cols-2 gap-3">
                     <${SearchableSelect}
                       value=${make}
@@ -299,7 +344,15 @@
                       </label>`
                     : null}
                   <button type="button" className="w-full py-3 rounded-2xl font-bold dx-btn" onClick=${submitCar}>
-                    Сохранить автомобиль
+                    ${editingId ? "Сохранить изменения" : "Сохранить автомобиль"}
+                  </button>
+                  <button
+                    type="button"
+                    className="w-full py-3 rounded-2xl font-medium"
+                    style=${{ background: "transparent", border: "1px solid rgba(255,255,255,0.12)", color: "var(--drivex-silver)" }}
+                    onClick=${() => { resetCarForm(); setShowForm(false); }}
+                  >
+                    Отмена
                   </button>
                 </div>
               `
@@ -310,46 +363,71 @@
               ? cars.map((car) => html`
                 <div
                   key=${car.id}
-                  className="w-full glass-card-light rounded-2xl p-4 flex items-center gap-3"
+                  className="w-full glass-card-light rounded-2xl p-4"
+                  style=${{ border: car.id === activeCar?.id ? "1px solid rgba(6, 182, 212, 0.45)" : "1px solid transparent" }}
                 >
-                  <button
-                    type="button"
-                    className="flex items-center gap-4 flex-1 text-left min-w-0"
-                    onClick=${() => handleSelectCar(car)}
-                  >
-                    <div
-                      className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0"
-                      style=${{ background: "rgba(14, 165, 233, 0.2)", color: "var(--drivex-electric-blue)" }}
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      className="flex items-center gap-3 flex-1 text-left min-w-0"
+                      onClick=${() => handleSelectCar(car)}
                     >
-                      <${Icon} name="car" size=${22} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-bold truncate" style=${{ color: "var(--drivex-white)" }}>
-                        ${car.name}
-                      </p>
-                      <p className="text-sm truncate" style=${{ color: "var(--drivex-silver)" }}>
-                        ${[car.plate, car.year, car.mileage].filter(Boolean).join(" • ") || "—"}
-                      </p>
-                    </div>
-                  </button>
-                  <span
-                    className="px-3 py-1 rounded-xl text-xs font-bold whitespace-nowrap"
-                    style=${{
-                      background: car.id === activeCar?.id ? "rgba(6, 182, 212, 0.18)" : "rgba(148, 163, 184, 0.12)",
-                      color: car.id === activeCar?.id ? "var(--drivex-neon-cyan)" : "var(--drivex-silver)"
-                    }}
-                  >
-                    ${car.id === activeCar?.id ? "Активна" : "Выбрать"}
-                  </span>
-                  <button
-                    type="button"
-                    className="px-3 py-1 rounded-xl text-xs font-bold whitespace-nowrap"
-                    style=${{ background: "rgba(239, 68, 68, 0.12)", color: "var(--drivex-danger)" }}
-                    onClick=${() => handleRemoveCar(car)}
-                    aria-label="Удалить автомобиль"
-                  >
-                    Удалить
-                  </button>
+                      <div
+                        className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0"
+                        style=${{
+                          background: car.id === activeCar?.id ? "rgba(6, 182, 212, 0.2)" : "rgba(14, 165, 233, 0.2)",
+                          color: car.id === activeCar?.id ? "var(--drivex-neon-cyan)" : "var(--drivex-electric-blue)"
+                        }}
+                      >
+                        <${Icon} name="car" size=${22} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p
+                          className="font-bold"
+                          style=${{ color: car.id === activeCar?.id ? "var(--drivex-neon-cyan)" : "var(--drivex-white)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}
+                        >
+                          ${car.name}
+                        </p>
+                        <p
+                          className="text-sm"
+                          style=${{ color: "var(--drivex-silver)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}
+                        >
+                          ${[car.plate, car.year, car.mileage].filter(Boolean).join(" • ") || "—"}
+                        </p>
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+                      style=${{ background: "rgba(148, 163, 184, 0.14)", color: "var(--drivex-silver)" }}
+                      onClick=${() => startEditCar(car)}
+                      aria-label="Изменить автомобиль"
+                    >
+                      <${Icon} name="edit" size=${16} />
+                    </button>
+                    <button
+                      type="button"
+                      className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+                      style=${{ background: "rgba(239, 68, 68, 0.12)", color: "var(--drivex-danger)" }}
+                      onClick=${() => handleRemoveCar(car)}
+                      aria-label="Удалить автомобиль"
+                    >
+                      <${Icon} name="trash" size=${16} />
+                    </button>
+                  </div>
+                  <div className="mt-3">
+                    <button
+                      type="button"
+                      className="px-3 py-1 rounded-lg text-xs font-bold whitespace-nowrap"
+                      style=${{
+                        background: car.id === activeCar?.id ? "rgba(6, 182, 212, 0.18)" : "rgba(148, 163, 184, 0.12)",
+                        color: car.id === activeCar?.id ? "var(--drivex-neon-cyan)" : "var(--drivex-silver)"
+                      }}
+                      onClick=${() => handleSelectCar(car)}
+                    >
+                      ${car.id === activeCar?.id ? "✓ Активна" : "Сделать активной"}
+                    </button>
+                  </div>
                 </div>
               `)
               : html`
