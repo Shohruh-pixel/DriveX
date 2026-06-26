@@ -617,22 +617,24 @@
               </div>
             </div>
 
-            <div className="mt-5 flex gap-2 overflow-x-auto no-scrollbar">
-              ${garageCars.map((car) => html`
-                <button
-                  key=${car.id}
-                  type="button"
-                  className="px-4 py-2 rounded-xl text-sm font-bold whitespace-nowrap"
-                  style=${{
-                    background: car.id === safeCarId ? "rgba(6, 182, 212, 0.18)" : "var(--glass-bg)",
-                    color: car.id === safeCarId ? "var(--drivex-neon-cyan)" : "var(--drivex-white)"
-                  }}
-                  onClick=${() => onSelectCar && onSelectCar(car.id)}
-                >
-                  ${car.name}
-                </button>
-              `)}
-            </div>
+            ${garageCars.length > 1
+              ? html`<div className="mt-5 flex gap-2 overflow-x-auto no-scrollbar">
+                  ${garageCars.map((car) => html`
+                    <button
+                      key=${car.id}
+                      type="button"
+                      className="px-4 py-2 rounded-xl text-sm font-bold whitespace-nowrap"
+                      style=${{
+                        background: car.id === safeCarId ? "rgba(6, 182, 212, 0.18)" : "var(--glass-bg)",
+                        color: car.id === safeCarId ? "var(--drivex-neon-cyan)" : "var(--drivex-white)"
+                      }}
+                      onClick=${() => onSelectCar && onSelectCar(car.id)}
+                    >
+                      ${car.name}
+                    </button>
+                  `)}
+                </div>`
+              : null}
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -1110,7 +1112,7 @@
                         ${formatRuDate(order.date)} • ${order.storeName}
                       </p>
                       <div className="flex flex-wrap gap-2 mt-3">
-                        ${[order.deliveryMethod, `${order.itemsCount} товара`].map((chip, index) => html`
+                        ${[order.deliveryMethod, `${order.itemsCount} ${pluralize(order.itemsCount, "товар", "товара", "товаров")}`].map((chip, index) => html`
                           <span
                             key=${`${order.id}-buyer-chip-${index}`}
                             className="px-3 py-1.5 rounded-full text-xs"

@@ -4,7 +4,7 @@
 (function() {
   var ALL_FNS = [
     // Utility
-    'alphaBg','formatTjsPrice','genId','slugifyText','toLocalISODate','parseISODate',
+    'alphaBg','formatTjsPrice','pluralize','genId','slugifyText','toLocalISODate','parseISODate',
     'normalizePath','decodeRouteSegment','encodeRouteSegment','getBuyerOrderChatPath',
     'navigateToHash','useHashPath','daysUntil','formatRuDate','formatChatTime',
     'formatPrice','getMarketProductPath','getMarketStorePath','getMarketCartPath',

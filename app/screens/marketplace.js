@@ -1566,7 +1566,7 @@
                         В корзине
                       </p>
                       <p className="text-2xl font-bold mt-1" style=${{ color: "var(--drivex-white)" }}>
-                        ${items.length} товара
+                        ${items.length} ${pluralize(items.length, "товар", "товара", "товаров")}
                       </p>
                     </div>
                     <div className="text-right">

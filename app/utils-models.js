@@ -348,6 +348,16 @@
     return `${formatPrice(price)} TJS`;
   }
 
+  // Русское склонение: pluralize(1,'товар','товара','товаров') → 'товар'
+  function pluralize(n, one, few, many) {
+    const num = Math.abs(Number(n) || 0);
+    const mod10 = num % 10;
+    const mod100 = num % 100;
+    if (mod10 === 1 && mod100 !== 11) return one;
+    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return few;
+    return many;
+  }
+
   function normalizeMarketSearchText(value) {
     return String(value || "")
       .toLowerCase()
@@ -5223,6 +5233,7 @@
   try { if (typeof formatServiceAverageTime !== 'undefined') window.DX['formatServiceAverageTime'] = formatServiceAverageTime; } catch(e) {}
   try { if (typeof formatTjsPrice !== 'undefined') window.DX['formatTjsPrice'] = formatTjsPrice; } catch(e) {}
   try { if (typeof genId !== 'undefined') window.DX['genId'] = genId; } catch(e) {}
+  try { if (typeof pluralize !== 'undefined') window.DX['pluralize'] = pluralize; } catch(e) {}
   try { if (typeof getAllowedSellerOrderStatuses !== 'undefined') window.DX['getAllowedSellerOrderStatuses'] = getAllowedSellerOrderStatuses; } catch(e) {}
   try { if (typeof getAllowedSellerOrderStatusIds !== 'undefined') window.DX['getAllowedSellerOrderStatusIds'] = getAllowedSellerOrderStatusIds; } catch(e) {}
   try { if (typeof getBuyerAuthStatus !== 'undefined') window.DX['getBuyerAuthStatus'] = getBuyerAuthStatus; } catch(e) {}

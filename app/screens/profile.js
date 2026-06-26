@@ -30,13 +30,7 @@
       {
         title: "Мой автопарк",
         items: [
-          { icon: "car", label: "Мои автомобили", path: "/garage", badge: String(garageCars.length) },
-          {
-            icon: "folder",
-            label: "Документы",
-            path: "/documents",
-            badge: documentsTotalCount ? String(documentsTotalCount) : null
-          },
+          { icon: "car", label: "Мои автомобили", path: "/garage", badge: garageCars.length ? String(garageCars.length) : null },
           {
             icon: "wrench",
             label: "Журнал обслуживания",
@@ -71,7 +65,8 @@
             icon: "bell",
             label: "Уведомления",
             path: "/notifications",
-            badge: String(notificationsCount)
+            badge: notificationsCount ? String(notificationsCount) : null,
+            alert: true
           },
           { icon: "card", label: "Платёжные данные", path: "/payment", badge: null },
           { icon: "star", label: "Бонусная программа", path: "/bonus", badge: null },
@@ -218,12 +213,12 @@
                         <span className="flex-1" style=${{ color: "var(--drivex-white)" }}>
                           ${item.label}
                         </span>
-                        ${item.badge
+                        ${item.badge && item.badge !== "0"
                           ? html`<span
                               className="px-2 py-1 rounded-lg text-xs font-bold"
                               style=${{
-                                background: "rgba(239, 68, 68, 0.2)",
-                                color: "var(--drivex-danger)"
+                                background: item.alert ? "rgba(239, 68, 68, 0.2)" : "rgba(6, 182, 212, 0.16)",
+                                color: item.alert ? "var(--drivex-danger)" : "var(--drivex-neon-cyan)"
                               }}
                             >
                               ${item.badge}
