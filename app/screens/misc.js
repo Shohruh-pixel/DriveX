@@ -51,6 +51,14 @@
     const list = normalize ? normalize(orders) : (Array.isArray(orders) ? orders : []);
     const statusMeta = _dxFn("getBuyerOrderStatusMeta");
     const fmt = _dxFn("formatChatTime");
+    // Время события: есть реальная метка со временем → дата+время; только дата → ДД.ММ.ГГ
+    // (иначе дата без времени парсится как полночь UTC и показывает выдуманное «05:00»)
+    const fmtEventTime = (ts, dateStr) => {
+      if (ts && /\d{2}:\d{2}/.test(String(ts))) return fmt ? fmt(ts) : String(ts);
+      const m = String(dateStr || ts || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (m) return `${m[3]}.${m[2]}.${m[1].slice(2)}`;
+      return fmt ? fmt(dateStr || ts) : "";
+    };
     return list
       .slice()
       .sort((a, b) => String(b.statusUpdatedAt || b.date || "").localeCompare(String(a.statusUpdatedAt || a.date || "")))
@@ -64,7 +72,7 @@
           id: `order-${order.id}-${order.status || "new"}`,
           title: `Заказ ${shortOrderId(order.id)} · ${meta.label || "обновление"}`,
           body: (firstItem || "Ваш заказ") + store,
-          time: fmt ? fmt(order.statusUpdatedAt || order.date) : "",
+          time: fmtEventTime(order.statusUpdatedAt, order.date),
           color: meta.color || "var(--drivex-neon-cyan)",
           icon: "bag"
         };
