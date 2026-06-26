@@ -310,6 +310,22 @@
     return stripDataUrls(value);
   }
 
+  // Считает значение "пустым" (нет смысла хранить / опасно затирать им данные):
+  // null/undefined, пустая строка, пустой массив, пустой объект, либо объект,
+  // ВСЕ поля которого тоже пустые (напр. {cars:{}} у ТО/документов).
+  function isEmptyishCloudValue(v) {
+    if (v === null || v === undefined) return true;
+    if (typeof v === "string") return v.trim() === "";
+    if (typeof v === "number" || typeof v === "boolean") return false;
+    if (Array.isArray(v)) return v.length === 0;
+    if (typeof v === "object") {
+      const keys = Object.keys(v);
+      if (keys.length === 0) return true;
+      return keys.every((k) => isEmptyishCloudValue(v[k]));
+    }
+    return false;
+  }
+
   async function saveBuyerAppState(session, key, value) {
     const safeSession = normalizeBuyerSession(session);
     const client = getSupabaseClient();
@@ -318,6 +334,35 @@
     // Убираем data URL перед сохранением в облако
     // Они хранятся только в localStorage (быстрый локальный кеш)
     const cloudValue = slimValueForCloud(value);
+
+    // ⛔ ЗАЩИТА ОТ ПОТЕРИ ДАННЫХ: не перезаписываем облако ПУСТЫМ значением,
+    // если по этому ключу там уже лежат НЕпустые данные. Пустое почти всегда
+    // означает "ещё не загрузилось" (гонка при входе на новом устройстве),
+    // а не "пользователь всё удалил". Именно это раньше затирало гараж/ТО.
+    if (isEmptyishCloudValue(cloudValue)) {
+      try {
+        const { data: rows } = await client
+          .from("user_app_state")
+          .select("value")
+          .eq("user_id", safeSession.id)
+          .eq("key", key)
+          .limit(1);
+        const existing = Array.isArray(rows) && rows.length ? rows[0] : null;
+        if (existing && !isEmptyishCloudValue(existing.value)) {
+          if (typeof console !== "undefined" && console.warn) {
+            console.warn("[saveBuyerAppState] пропуск: НЕ затираю непустые данные пустыми", { key });
+          }
+          return false;
+        }
+      } catch (e) {
+        // Проверку выполнить не удалось — безопаснее НЕ записывать пустое,
+        // чтобы не рисковать существующими данными.
+        if (typeof console !== "undefined" && console.warn) {
+          console.warn("[saveBuyerAppState] не удалось проверить облако — пропускаю пустую запись", { key, error: e && e.message });
+        }
+        return false;
+      }
+    }
 
     const { error } = await client.from("user_app_state").upsert(
       {
