@@ -1722,6 +1722,12 @@
     const [regPass, setRegPass]           = useState("");
     const [regPassConfirm, setRegPassConfirm] = useState("");
     const [showRegPass, setShowRegPass]   = useState(false);
+    const [showRegPassConfirm, setShowRegPassConfirm] = useState(false);
+
+    // Забыли пароль (сброс по email/телефону → новый пароль)
+    const [forgotOpen, setForgotOpen] = useState(false);
+    const [forgotPass, setForgotPass] = useState("");
+    const [forgotBusy, setForgotBusy] = useState(false);
 
     // OTP (для входа по телефону без пароля — fallback)
     const [phone, setPhone]               = useState("");
@@ -1800,6 +1806,36 @@
       } catch(err) {
         toast.push(translateAuthError(err?.message));
       } finally { setBusy(false); }
+    };
+
+    // ── Забыли пароль: сброс по телефону/email + новый пароль ───────
+    const handleForgotPassword = async () => {
+      if (forgotBusy) return;
+      const id = String(loginInput || "").trim();
+      if (!id) { toast.push("Сначала введите телефон или email в поле выше"); return; }
+      if (String(forgotPass).trim().length < 6) { toast.push("Новый пароль — минимум 6 символов"); return; }
+      setForgotBusy(true);
+      try {
+        const res = await fetch("/api/partner/reset-password", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ identifier: id, newPassword: forgotPass.trim() })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (data.ok) {
+          setLoginPass(forgotPass.trim());
+          setForgotPass(""); setForgotOpen(false);
+          toast.push("Пароль обновлён — теперь войдите");
+        } else if (data.notFound) {
+          toast.push("Аккаунт с таким телефоном/email не найден");
+        } else if (data.configured === false) {
+          toast.push("Сброс пароля временно недоступен");
+        } else {
+          toast.push(data.error || "Не удалось сбросить пароль");
+        }
+      } catch (err) {
+        toast.push("Нет соединения с сервером");
+      } finally { setForgotBusy(false); }
     };
 
     // ── Регистрация: телефон + имя + пароль ─────────────────────────
@@ -1970,6 +2006,35 @@
                   </div>
                 </div>
 
+                <!-- Забыли пароль? -->
+                <div className="text-right" style=${{ marginTop: "-4px" }}>
+                  <button type="button"
+                    className="text-xs font-semibold"
+                    style=${{ color:"var(--drivex-neon-cyan)", background:"none", border:"none", cursor:"pointer", padding:"2px 4px" }}
+                    onClick=${() => setForgotOpen((v) => !v)}>
+                    Забыли пароль?
+                  </button>
+                </div>
+                ${forgotOpen ? html`
+                  <div className="glass-card-light rounded-2xl p-4 space-y-3">
+                    <p className="text-xs" style=${{ color:"var(--drivex-silver)" }}>
+                      Введите телефон или email в поле выше, затем новый пароль:
+                    </p>
+                    <input type="text"
+                      className="w-full p-3 rounded-xl dx-input"
+                      value=${forgotPass}
+                      onInput=${(e) => setForgotPass(e.target.value)}
+                      placeholder="Новый пароль (мин. 6 символов)"
+                      autocomplete="new-password" />
+                    <button type="button"
+                      className="w-full py-3 rounded-xl font-bold dx-btn"
+                      disabled=${forgotBusy}
+                      onClick=${handleForgotPassword}>
+                      ${forgotBusy ? "Сохраняем…" : "Сбросить пароль"}
+                    </button>
+                  </div>
+                ` : null}
+
                 <!-- Войти -->
                 <button type="submit" className="w-full py-4 rounded-2xl font-bold text-lg dx-btn" disabled=${busy}>
                   ${busy ? "Входим..." : "Войти"}
@@ -2074,15 +2139,12 @@
                 <div className="glass-card-light rounded-3xl p-5 space-y-4">
                   <label className="block">
                     <span className="text-xs font-semibold" style=${{ color:"var(--drivex-silver)" }}>Номер телефона</span>
-                    <div className="relative mt-2">
-                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-lg" style=${{ pointerEvents:"none" }}>📱</span>
-                      <input type="tel"
-                        className="w-full pl-11 pr-4 py-4 rounded-2xl dx-input text-lg tracking-wider"
-                        value=${regPhone}
-                        onInput=${(e) => setRegPhone(e.target.value)}
-                        placeholder="+992 XX XXX XXXX"
-                        autocomplete="tel" autofocus />
-                    </div>
+                    <input type="tel"
+                      className="w-full mt-2 p-4 rounded-2xl dx-input text-lg tracking-wider"
+                      value=${regPhone}
+                      onInput=${(e) => setRegPhone(e.target.value)}
+                      placeholder="+992 XX XXX XXXX"
+                      autocomplete="tel" autofocus />
                   </label>
                   <label className="block">
                     <span className="text-xs font-semibold" style=${{ color:"var(--drivex-silver)" }}>Ваше имя</span>
@@ -2111,12 +2173,19 @@
                   </label>
                   <label className="block">
                     <span className="text-xs font-semibold" style=${{ color:"var(--drivex-silver)" }}>Повторите пароль</span>
-                    <input type="password"
-                      className="w-full mt-2 p-4 rounded-2xl dx-input"
-                      value=${regPassConfirm}
-                      onInput=${(e) => setRegPassConfirm(e.target.value)}
-                      placeholder="Ещё раз"
-                      autocomplete="new-password" />
+                    <div className="relative mt-2">
+                      <input type=${showRegPassConfirm ? "text" : "password"}
+                        className="w-full p-4 rounded-2xl dx-input pr-12"
+                        value=${regPassConfirm}
+                        onInput=${(e) => setRegPassConfirm(e.target.value)}
+                        placeholder="Ещё раз"
+                        autocomplete="new-password" />
+                      <button type="button" onClick=${() => setShowRegPassConfirm(!showRegPassConfirm)}
+                        className="absolute right-4 top-1/2 -translate-y-1/2 text-sm"
+                        style=${{ color:"var(--drivex-silver)",background:"none",border:"none",cursor:"pointer" }}>
+                        ${showRegPassConfirm ? "👁" : "🙈"}
+                      </button>
+                    </div>
                   </label>
                 </div>
                 <button type="submit" className="w-full py-4 rounded-2xl font-bold text-lg dx-btn"

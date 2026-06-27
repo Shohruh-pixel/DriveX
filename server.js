@@ -951,6 +951,8 @@ function supabaseAdminRequest(method, pathAndQuery, bodyObj) {
       });
     });
     req.on("error", () => resolve(null));
+    // Таймаут: не висим вечно, если Supabase/сеть не отвечают
+    req.setTimeout(10000, () => { try { req.destroy(); } catch (e) {} resolve(null); });
     if (payload) req.write(payload);
     req.end();
   });
