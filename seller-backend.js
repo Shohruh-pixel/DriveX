@@ -1440,15 +1440,17 @@
     }));
 
     if (authError) {
-      if (/registered|exists|already/i.test(String(authError.message || ""))) {
-        const loginResult = await client.auth.signInWithPassword({
-          email,
-          password
-        });
-        if (loginResult.error) {
-          throw new Error("Email уже зарегистрирован. Войдите через seller CRM с тем же паролем.");
-        }
+      // Аккаунт уже существует — по email ИЛИ по телефону. Дубль телефона даёт
+      // unique-constraint "users_phone_unique_idx" → Supabase отвечает
+      // "Database error saving new user". Пробуем войти под этим email; если не
+      // вышло — даём понятное сообщение «войдите», а не сырую ошибку.
+      const msg = String(authError.message || authError.msg || "");
+      const looksExisting = /registered|exists|already|saving new user|duplicate|unique/i.test(msg);
+      const loginResult = await client.auth.signInWithPassword({ email, password });
+      if (!loginResult.error) {
         authData = loginResult.data;
+      } else if (looksExisting) {
+        throw new Error("Этот email или номер телефона уже зарегистрирован. Нажмите «Войти» и зайдите в существующий аккаунт — не регистрируйтесь заново.");
       } else {
         throw authError;
       }
