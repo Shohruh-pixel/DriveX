@@ -214,6 +214,9 @@
     const sharedAppStateReadyRef = useRef(false);
     const sharedAppStateUpdatedAtRef = useRef({});
     const buyerStateReadyRef = useRef(!getSupabaseClient());
+    // Ключи, для которых уже применялись НЕпустые облачные данные — чтобы пустые
+    // значения (из гонки фетчей) не затирали показанное на экране (анти-мелькание).
+    const nonEmptyAppliedRef = useRef({});
     const recentBuyerSavesRef = useRef({});
     // Метки недавних локальных изменений seller-заказов/уведомлений. Продавец —
     // владелец этих данных; сразу после его правки (напр. смены статуса заказа)
@@ -1123,6 +1126,25 @@
           if ((key === drivexStorageKeys.sellerOrders || key === drivexStorageKeys.sellerNotifications) && Date.now() - recentSeller < 5000) {
             console.debug && console.debug("[applySharedStateSnapshot] skip applying recent seller key", { key });
             continue;
+          }
+
+          // Анти-мелькание: не затираем уже показанные НЕпустые данные пустыми,
+          // прилетевшими из гонки фетчей (симптом «данные появились и исчезли»).
+          const _isEmptyish = (v) => {
+            if (v === null || v === undefined) return true;
+            if (typeof v === "string") return v.trim() === "";
+            if (typeof v === "number" || typeof v === "boolean") return false;
+            if (Array.isArray(v)) return v.length === 0;
+            if (typeof v === "object") { const ks = Object.keys(v); return ks.length === 0 || ks.every((k) => _isEmptyish(v[k])); }
+            return false;
+          };
+          if (_isEmptyish(value)) {
+            if (nonEmptyAppliedRef.current[key]) {
+              console.debug && console.debug("[applySharedStateSnapshot] skip empty over non-empty", { key });
+              continue;
+            }
+          } else {
+            nonEmptyAppliedRef.current[key] = true;
           }
 
           applySharedStateUpdate(key, value);
