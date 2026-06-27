@@ -1,12 +1,13 @@
 # Render Blueprint для DRIVEX
 # Деплой: https://render.com → New → Blueprint → подключить репозиторий.
-# GEMINI_API_KEY задаётся вручную в дашборде (sync: false) — не хранится в git.
+# Значения с sync:false задаются вручную в дашборде Render (не хранятся в git).
 services:
   - type: web
     name: drivex
     runtime: node
     plan: free
     region: frankfurt
+    branch: claude/frosty-sinoussi-4bc496
     buildCommand: npm install
     startCommand: node server.js
     healthCheckPath: /
@@ -19,4 +20,16 @@ services:
       - key: GEMINI_MODEL
         value: gemini-flash-latest
       - key: GEMINI_API_KEY
+        sync: false
+      # ── Supabase (бэкенд: вход по телефону, сброс пароля, OTP) ──
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      # ── Telegram OTP ──
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_BOT_NAME
+        value: DriiiveX_Bot
+      - key: OTP_SECRET
         sync: false
