@@ -2399,11 +2399,13 @@
             candidateEmails = [email];
           } else if (phone) {
             const digits = phone.replace(/\D/g, "");
-            const normalizedPhone = phone.startsWith("+") ? phone : ("+" + digits);
+            const last9 = digits.slice(-9);
             let lookedUp = [];
             try {
-              const variants = Array.from(new Set([normalizedPhone, phone, "+" + digits]));
-              const r1 = await client.from("users").select("email").in("phone", variants);
+              // Поиск email по ПОСЛЕДНИМ 9 цифрам номера — устойчив к пробелам и формату.
+              // В users телефон хранится как "+992 111180333" (с пробелом), и точный
+              // матч (.in) его не находил → вход по телефону падал в неверный аккаунт.
+              const r1 = await client.from("users").select("email,phone").ilike("phone", "%" + last9 + "%");
               lookedUp = Array.isArray(r1.data) ? r1.data.map((row) => row && row.email).filter(Boolean) : [];
             } catch (_) {}
             candidateEmails = Array.from(new Set([...lookedUp, "phone_" + digits + "@drivex.app"]));
