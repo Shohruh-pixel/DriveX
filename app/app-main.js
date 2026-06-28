@@ -1045,7 +1045,21 @@
           // local cache is best effort
         }
 
-        if (buyerSession?.authenticated && buyerSession.id && buyerStateReadyRef.current) {
+        // Непустые данные (добавленную машину/ТО/заказ) сохраняем ВСЕГДА — даже если
+        // первичная загрузка ещё не завершилась. Раньше на медленном сервере сохранение
+        // блокировалось до загрузки, и новые данные терялись. Профиль сохраняем только
+        // после загрузки (чтобы частичный профиль не затёр аватар из облака). От затирания
+        // пустым защищают saveBuyerAppState (isEmptyish) и триггер БД.
+        const _hasData = (() => {
+          const v = nextValue;
+          if (v === null || v === undefined) return false;
+          if (typeof v === "string") return v.trim() !== "";
+          if (Array.isArray(v)) return v.length > 0;
+          if (typeof v === "object") { const ks = Object.keys(v); return ks.length > 0 && !ks.every((k) => { const x = v[k]; return x == null || (Array.isArray(x) && !x.length) || (typeof x === "object" && x && !Object.keys(x).length); }); }
+          return true;
+        })();
+        const _isProfileKey = key === drivexStorageKeys.profile;
+        if (buyerSession?.authenticated && buyerSession.id && (buyerStateReadyRef.current || (_hasData && !_isProfileKey))) {
           // Сохраняем в Supabase ТОЛЬКО после первичной загрузки серверного состояния
           // (buyerStateReadyRef === true). Иначе сброс к дефолтам при логине/перезагрузке
           // успевает перезаписать реальные данные пользователя пустыми значениями.

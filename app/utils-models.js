@@ -263,24 +263,31 @@
 
     // Таймаут: если облако отвечает дольше 7с, не держим пользователя за
     // блокирующим оверлеем — отдаём управление, приложение работает на локальном кеше.
-    const query = client
-      .from("user_app_state")
-      .select("key,value,updated_at")
-      .eq("user_id", safeSession.id);
-    const timeout = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error("Облако отвечает слишком долго")), 7000)
-    );
-    const { data, error } = await Promise.race([query, timeout]);
-    if (error) throw error;
-
-    return (Array.isArray(data) ? data : []).reduce((acc, row) => {
-      if (!row || typeof row.key !== "string") return acc;
-      acc[row.key] = {
-        value: row.value,
-        updatedAt: row.updated_at || ""
-      };
-      return acc;
-    }, {});
+    // До 2 попыток, таймаут 20с: на медленном соединении / «спящем» сервере
+    // первый запрос мог не успеть за 7с → buyerStateReady не выставлялся и
+    // СОХРАНЕНИЕ новых данных блокировалось (машина/ТО не попадали в облако).
+    let lastErr = null;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const query = client
+          .from("user_app_state")
+          .select("key,value,updated_at")
+          .eq("user_id", safeSession.id);
+        const timeout = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("Облако отвечает слишком долго")), 20000)
+        );
+        const { data, error } = await Promise.race([query, timeout]);
+        if (error) throw error;
+        return (Array.isArray(data) ? data : []).reduce((acc, row) => {
+          if (!row || typeof row.key !== "string") return acc;
+          acc[row.key] = { value: row.value, updatedAt: row.updated_at || "" };
+          return acc;
+        }, {});
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+    throw lastErr || new Error("fetchBuyerAppState failed");
   }
 
   // Убирает data:image/... из значения перед сохранением в Supabase
