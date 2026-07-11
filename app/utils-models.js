@@ -2974,7 +2974,8 @@
           : fallback.ownerFullName,
       phone: normalizeTjPhoneInput(typeof source.phone === "string" ? source.phone : fallback.phone),
       email: typeof source.email === "string" ? source.email.trim() : fallback.email,
-      password: typeof source.password === "string" ? source.password : fallback.password,
+      // Пароль в профиле НЕ храним: раньше он лежал открытым текстом в общем
+      // app-state.json на сервере. Аутентификация — только через Supabase Auth.
       position:
         typeof source.position === "string" && source.position.trim() ? source.position.trim() : fallback.position,
       registrationCompleted:
@@ -3106,7 +3107,15 @@
         typeof source.registrationCompleted === "boolean"
           ? source.registrationCompleted
           : fallback.registrationCompleted,
-      status: typeof source.status === "string" && source.status.trim() ? source.status.trim() : fallback.status
+      status: typeof source.status === "string" && source.status.trim() ? source.status.trim() : fallback.status,
+      // Владелец центра (Supabase auth uid) — по нему восстанавливается кабинет
+      // при входе и сервер запрещает перезапись чужого центра.
+      ownerUserId:
+        typeof source.ownerUserId === "string" && source.ownerUserId.trim()
+          ? source.ownerUserId.trim()
+          : typeof source.owner_user_id === "string" && source.owner_user_id.trim()
+            ? source.owner_user_id.trim()
+            : ""
     };
   }
 
@@ -4399,11 +4408,26 @@
 
   async function saveSharedServiceCenter(center) {
     const safeCenter = normalizeServiceCenter(center, center?.id || servicePrimaryCenterId);
+
+    // Supabase access token владельца: сервер проверяет его и привязывает центр
+    // к uid — чужой центр перезаписать нельзя.
+    let accessToken = "";
+    try {
+      const client = getSupabaseClient();
+      if (client) {
+        const { data } = await client.auth.getSession();
+        accessToken = data?.session?.access_token || "";
+      }
+    } catch {
+      accessToken = "";
+    }
+
     const response = await fetch("/api/service-centers", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Accept: "application/json"
+        Accept: "application/json",
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {})
       },
       body: JSON.stringify(safeCenter)
     });

@@ -894,7 +894,9 @@
         }
 
         if (key === drivexStorageKeys.serviceAuth) {
-          setServiceAuth(nextValue === null ? createDefaultServiceAuthState() : normalizeServiceAuthState(nextValue));
+          // Флаг входа в Service CRM — строго локальный (это устройство).
+          // Раньше он приходил из ОБЩЕГО app-state: любой браузер инстанса
+          // автоматически «входил» в чужой кабинет.
           return;
         }
 
@@ -1656,7 +1658,8 @@
       } catch {
         // ignore
       }
-      if (sharedAppStateReadyRef.current) saveSharedAppState(drivexStorageKeys.serviceAuth, serviceAuth).catch(() => {});
+      // serviceAuth НЕ уходит в общий app-state: вход действует только на
+      // этом устройстве (см. applySharedStateUpdate — оттуда он тоже не читается).
     }, [serviceAuth]);
 
     useEffect(() => {
@@ -2902,17 +2905,81 @@
       navigateToHash("/service-crm/register");
     }, [toast]);
 
-    const registerServiceCrm = useCallback((payload) => {
+    const registerServiceCrm = useCallback(async (payload) => {
       if (!payload || typeof payload !== "object") return;
+
+      // Реальная регистрация: аккаунт владельца создаётся в Supabase Auth.
+      // Пароль НИГДЕ не сохраняется — раньше он лежал открытым текстом в
+      // общем app-state.json, и «логин» сверял строки на клиенте.
+      const authEmail = String(payload?.profile?.email || "").trim().toLowerCase();
+      const authPassword = String(payload?.profile?.password || "");
+      if (!authEmail || authEmail.indexOf("@") === -1) {
+        throw new Error("Укажите корректный email — это логин кабинета");
+      }
+      if (authPassword.length < 6) {
+        throw new Error("Пароль — минимум 6 символов");
+      }
+      const client = getSupabaseClient();
+      if (!client) {
+        throw new Error("Нет соединения с сервером авторизации — попробуйте позже");
+      }
+
+      let ownerUserId = "";
+      // role в metadata НЕ передаём: DB-триггер копирует её в public.users,
+      // а CHECK-ограничение не знает service_owner и валит всю регистрацию
+      // («Database error saving new user»). Права кабинета определяет владение
+      // центром (ownerUserId), а не роль в users.
+      const { data: signUpData, error: signUpError } = await client.auth.signUp({
+        email: authEmail,
+        password: authPassword,
+        options: {
+          data: {
+            full_name: payload?.profile?.ownerFullName || "",
+            phone: payload?.profile?.phone || ""
+          }
+        }
+      });
+      if (signUpError) {
+        const looksExisting = /already|registered|exists/i.test(String(signUpError.message || ""));
+        if (!looksExisting) {
+          throw new Error(signUpError.message || "Не удалось создать аккаунт");
+        }
+        // Email уже занят: пробуем войти с этим паролем (владелец повторяет регистрацию)
+        const { data: signInData, error: signInError } = await client.auth.signInWithPassword({
+          email: authEmail,
+          password: authPassword
+        });
+        if (signInError) {
+          throw new Error("Этот email уже зарегистрирован. Войдите с его паролем или восстановите доступ.");
+        }
+        ownerUserId = signInData?.user?.id || "";
+      } else {
+        ownerUserId = signUpData?.user?.id || "";
+        // signUp может вернуть user БЕЗ сессии — тогда активной остаётся
+        // предыдущая (покупательская) сессия браузера, и сервер привязал бы
+        // центр к ЧУЖОМУ uid. Входим явно, чтобы токен был владельца.
+        if (!signUpData?.session) {
+          const { error: postSignInError } = await client.auth.signInWithPassword({
+            email: authEmail,
+            password: authPassword
+          });
+          if (postSignInError) {
+            throw new Error("Аккаунт создан, но вход не удался. Подтвердите email и войдите.");
+          }
+        }
+      }
+      if (!ownerUserId) {
+        throw new Error("Авторизация не подтвердила аккаунт — попробуйте ещё раз");
+      }
 
       const resolvedCenterId = slugifyText(
         [payload?.center?.name, payload?.center?.city].filter(Boolean).join("-"),
         payload?.center?.id || `service-${Date.now()}`
       );
       const nextSession = normalizeServiceSession({
-        id: `service-owner-${resolvedCenterId}`,
+        id: ownerUserId,
         name: payload?.profile?.ownerFullName || "",
-        email: payload?.profile?.email || "",
+        email: authEmail,
         role: "service_owner",
         serviceCenterId: resolvedCenterId
       });
@@ -2927,6 +2994,7 @@
         {
           ...payload.center,
           id: resolvedCenterId,
+          ownerUserId,
           phone: payload?.center?.phone || nextProfile.phone,
           email: payload?.center?.email || nextProfile.email,
           registrationCompleted: true,
@@ -2966,8 +3034,6 @@
         safePayload.identifier || safePayload.email || safePayload.phone || ""
       ).trim();
       const password = String(safePayload.password || "");
-      const safeProfile = normalizeServiceProfile(serviceProfile, serviceSession);
-      const safeCenter = normalizeServiceCenter(serviceCenter, serviceSession.serviceCenterId);
 
       if (!identifier) {
         throw new Error("Введите email или телефон");
@@ -2975,39 +3041,64 @@
       if (!password) {
         throw new Error("Введите пароль");
       }
-      if (!safeProfile.registrationCompleted || !safeCenter.registrationCompleted) {
-        throw new Error("Сначала зарегистрируйте сервис");
-      }
-      if (!safeProfile.password) {
-        throw new Error("Для этого сервиса пароль ещё не задан");
+      const client = getSupabaseClient();
+      if (!client) {
+        throw new Error("Нет соединения с сервером авторизации — попробуйте позже");
       }
 
-      const loweredIdentifier = identifier.toLowerCase();
-      const phoneIdentifier = identifier.replace(/\D/g, "");
-      const emailCandidates = [safeProfile.email, safeCenter.email]
-        .map((item) => String(item || "").trim().toLowerCase())
-        .filter(Boolean);
-      const phoneCandidates = [safeProfile.phone, safeCenter.phone]
-        .map((item) => String(item || "").replace(/\D/g, ""))
-        .filter(Boolean);
-      const matched =
-        emailCandidates.includes(loweredIdentifier) ||
-        (phoneIdentifier ? phoneCandidates.includes(phoneIdentifier) : false);
-
-      if (!matched) {
-        throw new Error("Неверный email или телефон");
-      }
-      if (safeProfile.password !== password) {
-        throw new Error("Неверный пароль");
+      // Вход по телефону: находим email владельца по реестру центров
+      let email = identifier.toLowerCase();
+      if (email.indexOf("@") === -1) {
+        const phoneDigits = identifier.replace(/\D/g, "");
+        const centers = await fetchSharedServiceCenters().catch(() => []);
+        const byPhone = centers.find(
+          (item) => String(item.phone || "").replace(/\D/g, "") === phoneDigits && item.email
+        );
+        if (!byPhone) {
+          throw new Error("Сервис с таким номером не найден. Войдите по email.");
+        }
+        email = String(byPhone.email).toLowerCase();
       }
 
+      const { data: signInData, error: signInError } = await client.auth.signInWithPassword({ email, password });
+      if (signInError) {
+        throw new Error("Неверный email или пароль");
+      }
+      const ownerUserId = signInData?.user?.id || "";
+
+      // Восстанавливаем кабинет по владельцу: работает с любого устройства
+      const centers = await fetchSharedServiceCenters().catch(() => []);
+      const ownCenter = centers.find((item) => item.ownerUserId === ownerUserId);
+      if (!ownCenter) {
+        throw new Error("Этот аккаунт не привязан к сервису. Зарегистрируйте сервис.");
+      }
+
+      const nextSession = normalizeServiceSession({
+        id: ownerUserId,
+        name: signInData?.user?.user_metadata?.full_name || ownCenter.name || "",
+        email,
+        role: "service_owner",
+        serviceCenterId: ownCenter.id
+      });
+      setServiceSession(nextSession);
+      setServiceProfile(normalizeServiceProfile(
+        {
+          ownerFullName: signInData?.user?.user_metadata?.full_name || "",
+          phone: signInData?.user?.user_metadata?.phone || ownCenter.phone || "",
+          email,
+          registrationCompleted: true
+        },
+        nextSession
+      ));
+      setServiceCenter(ownCenter);
+      setSharedServiceCenters((prev) => mergeServiceCenterList(prev, ownCenter));
       setServiceAuth({
         authenticated: true,
         lastLoginAt: new Date().toISOString()
       });
       toast.push("Вы вошли в Service CRM");
       navigateToHash("/service-crm/dashboard");
-    }, [serviceCenter, serviceProfile, serviceSession, toast]);
+    }, [toast]);
 
     const logoutServiceCrm = useCallback((options = {}) => {
       const shouldRedirect = options?.redirect !== false;

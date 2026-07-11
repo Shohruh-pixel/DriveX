@@ -77,118 +77,66 @@
     };
 
     return html`
-      <div className="min-h-screen" style=${{ background: "var(--drivex-black)" }}>
-        <div
-          className="pt-8 pb-6 px-5"
-          style=${{
-            background: "linear-gradient(180deg, rgba(7, 17, 31, 0.98) 0%, rgba(10, 10, 15, 1) 100%)"
-          }}
-        >
-          <a
-            href="#/services"
-            className="inline-flex items-center gap-2 text-sm font-semibold"
-            style=${{ color: "var(--drivex-silver)" }}
-          >
-            <${Icon} name="chevron-left" size=${16} />
-            В сервисы
-          </a>
-
-          <div className="mt-4 flex items-start justify-between gap-4">
-            <div className="min-w-0">
-              <p className="text-xs font-semibold tracking-[0.24em]" style=${{ color: "var(--drivex-neon-cyan)" }}>
-                DRIVEX SERVICE CRM
-              </p>
-              <h1 className="text-3xl font-bold mt-2" style=${{ color: "var(--drivex-white)" }}>
-                ${title}
-              </h1>
-              <p className="text-sm mt-2 max-w-[260px]" style=${{ color: "var(--drivex-silver)" }}>
-                ${subtitle}
-              </p>
-            </div>
-
-            <div className="flex flex-col items-end gap-3">
-              <div className="flex items-center gap-2">
-                <a
-                  href="#/services"
-                  className="px-3 py-2 rounded-2xl text-xs font-semibold"
-                  style=${{
-                    background: "rgba(255, 255, 255, 0.06)",
-                    color: "var(--drivex-white)"
-                  }}
-                >
-                  Каталог
-                </a>
-                ${showNavigation
-                  ? html`<a
-                      href="#/service-crm/login?logout=1"
-                      className="px-3 py-2 rounded-2xl text-xs font-semibold"
-                      style=${{
-                        background: "rgba(239, 68, 68, 0.14)",
-                        color: "var(--drivex-danger)"
-                      }}
-                    >
-                      Выйти
-                    </a>`
-                  : null}
-              </div>
-              <${SellerLogo} store=${logoStore} size=${60} rounded="20px" />
+      <div className="scx-shell">
+        <header className="scx-header">
+          <div className="scx-header-row">
+            ${showCenterSummary
+              ? html`<${SellerLogo} store=${logoStore} size=${44} rounded="14px" />
+                  <div className="scx-header-id">
+                    <p className="scx-header-name">${safeCenter.name || "Новый сервис"}</p>
+                    <p className="scx-header-meta">
+                      ${[safeCenter.serviceType, safeCenter.city].filter(Boolean).join(" • ") || "Service CRM"}
+                    </p>
+                  </div>`
+              : html`<div className="scx-header-id">
+                    <p className="scx-header-name">DRIVEX Service CRM</p>
+                    <p className="scx-header-meta">Кабинет автосервиса</p>
+                  </div>`}
+            <div className="scx-header-actions">
+              <a href="#/services" className="scx-chip-btn" aria-label="Каталог сервисов">
+                <${Icon} name="layers" size=${15} />
+              </a>
+              ${showNavigation
+                ? html`<a href="#/service-crm/login?logout=1" className="scx-chip-btn is-danger" aria-label="Выйти">
+                    <${Icon} name="close" size=${15} />
+                  </a>`
+                : null}
             </div>
           </div>
 
-          ${showCenterSummary
-            ? html`<div className="glass-card-light rounded-3xl p-4 mt-5">
-                <div className="flex items-center gap-3">
-                  <${SellerLogo} store=${logoStore} size=${46} rounded="16px" />
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold truncate" style=${{ color: "var(--drivex-white)" }}>
-                      ${safeCenter.name || "Новый сервис"}
-                    </p>
-                    <p className="text-sm mt-1 truncate" style=${{ color: "var(--drivex-silver)" }}>
-                      ${safeCenter.serviceType || "Тип сервиса"} • ${safeCenter.city || "Город"} • ${safeCenter.boxesCount} бокса
-                    </p>
-                    <p className="text-xs mt-2" style=${{ color: "var(--drivex-silver)" }}>
-                      ${safeUser.name || "Владелец сервиса"}${safeCenter.phone ? ` • ${safeCenter.phone}` : ""}
-                    </p>
-                  </div>
-                  ${primaryAction
-                    ? html`<a
-                        href=${`#${primaryAction.path}`}
-                        className="px-4 py-3 rounded-2xl text-sm font-semibold dx-btn whitespace-nowrap"
-                      >
-                        ${primaryAction.label}
-                      </a>`
-                    : null}
-                </div>
-              </div>`
-            : null}
-
           ${showNavigation
-            ? html`<div className="flex gap-2 overflow-x-auto pb-1 mt-5 no-scrollbar">
+            ? html`<nav className="scx-nav no-scrollbar" aria-label="Разделы CRM">
                 ${serviceCrmNavigationItems.map((item) => {
                   const isActive = item.id === activeItem;
                   return html`
                     <a
                       key=${item.id}
                       href=${`#${item.path}`}
-                      className="px-4 py-3 rounded-2xl text-sm font-semibold whitespace-nowrap flex items-center gap-2"
-                      style=${{
-                        background: isActive ? "rgba(6, 182, 212, 0.18)" : "var(--glass-bg)",
-                        color: isActive ? "var(--drivex-neon-cyan)" : "var(--drivex-white)",
-                        border: isActive
-                          ? "1px solid rgba(6, 182, 212, 0.32)"
-                          : "1px solid var(--glass-border)"
-                      }}
+                      className=${`scx-nav-item ${isActive ? "is-active" : ""}`}
+                      aria-current=${isActive ? "page" : "false"}
                     >
-                      <${Icon} name=${item.icon} size=${16} />
+                      <${Icon} name=${item.icon} size=${15} />
                       ${item.label}
                     </a>
                   `;
                 })}
-              </div>`
+              </nav>`
+            : null}
+        </header>
+
+        <div className="scx-title-row">
+          <div className="min-w-0">
+            <h1 className="scx-title">${title}</h1>
+            ${subtitle ? html`<p className="scx-subtitle">${subtitle}</p>` : null}
+          </div>
+          ${primaryAction && showNavigation
+            ? html`<a href=${`#${primaryAction.path}`} className="scx-primary-link">
+                ${primaryAction.label}
+              </a>`
             : null}
         </div>
 
-        <div className="px-5 py-5 space-y-4">${children}</div>
+        <div className="scx-content">${children}</div>
       </div>
     `;
   }
@@ -475,7 +423,12 @@
 
   function ServiceRegistrationScreen({ currentUser, profile, center, onRegister }) {
     const toast = useToast();
-    const [profileForm, setProfileForm] = useState(() => normalizeServiceProfile(profile, currentUser));
+    // password живёт ТОЛЬКО в состоянии формы: он уходит в Supabase Auth
+    // при регистрации и нигде не сохраняется (normalizeServiceProfile его режет).
+    const [profileForm, setProfileForm] = useState(() => ({
+      ...normalizeServiceProfile(profile, currentUser),
+      password: ""
+    }));
     const [centerForm, setCenterForm] = useState(() => createServiceCenterFormState(center));
     const [formError, setFormError] = useState("");
     const [submitting, setSubmitting] = useState(false);
@@ -865,67 +818,23 @@
               </span>
             </a>`
           : null}
-        <div
-          className="rounded-[32px] p-6"
-          style=${{
-            background: "linear-gradient(145deg, rgba(6, 182, 212, 0.14) 0%, rgba(15, 23, 42, 0.96) 100%)",
-            border: "1px solid rgba(6, 182, 212, 0.16)"
-          }}
-        >
-          <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0">
-              <p className="text-xs font-semibold tracking-[0.18em]" style=${{ color: "var(--drivex-neon-cyan)" }}>
-                DIGITAL FORMAT
-              </p>
-              <h2 className="text-2xl font-bold mt-3" style=${{ color: "var(--drivex-white)" }}>
-                ${safeCenter.name || "Ваш сервис"}
-              </h2>
-              <p className="text-sm mt-2" style=${{ color: "var(--drivex-silver)", lineHeight: 1.7 }}>
-                ${safeCenter.serviceType || "Тип сервиса"} • ${safeCenter.city || "Город"} • ${safeCenter.address || "Адрес добавите в настройках"}
-              </p>
-              <div className="flex flex-wrap gap-2 mt-4">
-                ${[
-                  `${safeCenter.boxesCount} бокса`,
-                  safeCenter.workingHours || "08:00 — 19:00",
-                  `${stats.freeBoxes} свободно сейчас`
-                ].map((chip) => html`
-                  <span
-                    key=${chip}
-                    className="px-3 py-1.5 rounded-full text-xs font-semibold"
-                    style=${{
-                      background: "rgba(255, 255, 255, 0.06)",
-                      color: "var(--drivex-white)"
-                    }}
-                  >
-                    ${chip}
-                  </span>
-                `)}
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <${ServicePhoneButton} phone=${safeCenter.phone} compact=${true} label="Позвонить в сервис" />
-              <a
-                href="#/service-crm/settings"
-                className="w-11 h-11 rounded-full inline-flex items-center justify-center"
-                style=${{
-                  background: "rgba(255, 255, 255, 0.06)",
-                  color: "var(--drivex-white)",
-                  border: "1px solid rgba(255, 255, 255, 0.08)"
-                }}
-                aria-label="Настройки сервиса"
-              >
-                <${Icon} name="settings" size=${18} />
-              </a>
-            </div>
-          </div>
+        <div className="scx-status-strip">
+          ${[
+            `${safeCenter.boxesCount} ${pluralize(Number(safeCenter.boxesCount) || 1, "бокс", "бокса", "боксов")}`,
+            safeCenter.workingHours || "08:00 — 19:00",
+            `свободно сейчас: ${stats.freeBoxes}`
+          ].map((chip) => html`<span key=${chip} className="scx-status-chip">${chip}</span>`)}
+          <a href="#/service-crm/settings" className="scx-status-chip is-link" aria-label="Настройки сервиса">
+            <${Icon} name="settings" size=${13} />
+            Настройки
+          </a>
         </div>
 
         <div className="grid grid-cols-2 gap-3">
           <${SellerMetricCard}
             label="Клиенты"
             value=${String(stats.clients)}
-            hint=${`${stats.vehicles} машин`}
+            hint=${`${stats.vehicles} ${pluralize(stats.vehicles, "машина", "машины", "машин")}`}
             color="var(--drivex-electric-blue)"
             icon="user"
             path="/service-crm/clients"
@@ -934,7 +843,7 @@
           <${SellerMetricCard}
             label="Активные ремонты"
             value=${String(stats.activeRepairs)}
-            hint=${`${stats.readyRepairs} готовы`}
+            hint=${`готово: ${stats.readyRepairs}`}
             color="var(--drivex-warning)"
             icon="wrench"
             path="/service-crm/orders"
@@ -943,7 +852,7 @@
           <${SellerMetricCard}
             label="Свободные боксы"
             value=${String(stats.freeBoxes)}
-            hint=${`${stats.busyBoxes} заняты`}
+            hint=${`занято: ${stats.busyBoxes}`}
             color="var(--drivex-success)"
             icon="layers"
             path="/service-crm/schedule"
@@ -952,7 +861,7 @@
           <${SellerMetricCard}
             label="Выручка месяца"
             value=${formatTjsPrice(stats.monthRevenue)}
-            hint=${`${stats.todayBookings} записи сегодня`}
+            hint=${`сегодня: ${stats.todayBookings} ${pluralize(stats.todayBookings, "запись", "записи", "записей")}`}
             color="var(--drivex-neon-cyan)"
             icon="card"
             path="/service-crm/finance"

@@ -628,6 +628,46 @@ async function handleReferralsRoute(req, res, url) {
   sendJson(res, 405, { error: "Method not allowed" });
 }
 
+// Проверяет Supabase access token пользователя и возвращает его uid.
+// null — токен отсутствует/невалиден или Supabase не настроен.
+async function verifySupabaseUserToken(req) {
+  const authHeader = String(req.headers["authorization"] || "");
+  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
+  if (!token) return null;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+  const supabaseUrl = process.env.SUPABASE_URL || "";
+  if (!serviceRoleKey || !supabaseUrl) return null;
+
+  return new Promise((resolve) => {
+    let url;
+    try { url = new URL(`${supabaseUrl}/auth/v1/user`); }
+    catch { resolve(null); return; }
+    const request = https.request(
+      {
+        hostname: url.hostname,
+        path: url.pathname,
+        method: "GET",
+        headers: { apikey: serviceRoleKey, Authorization: `Bearer ${token}` }
+      },
+      (response) => {
+        const chunks = [];
+        response.on("data", (chunk) => chunks.push(chunk));
+        response.on("end", () => {
+          try {
+            const data = JSON.parse(Buffer.concat(chunks).toString() || "{}");
+            resolve(response.statusCode === 200 && data.id ? data.id : null);
+          } catch {
+            resolve(null);
+          }
+        });
+      }
+    );
+    request.on("error", () => resolve(null));
+    request.setTimeout(8000, () => { try { request.destroy(); } catch (e) {} resolve(null); });
+    request.end();
+  });
+}
+
 async function handleServiceCentersRoute(req, res) {
   if (req.method === "GET") {
     sendJson(res, 200, { centers: readServiceCenters() });
@@ -640,9 +680,23 @@ async function handleServiceCentersRoute(req, res) {
   }
 
   try {
+    // Запись центра — только с валидным Supabase-токеном владельца.
+    const ownerUserId = await verifySupabaseUserToken(req);
+    if (!ownerUserId) {
+      sendJson(res, 401, { error: "Требуется вход: токен авторизации не подтверждён." });
+      return;
+    }
+
     const body = await readJsonBody(req);
     const center = normalizeServiceCenter(body);
     const centers = readServiceCenters();
+    const existing = centers.find((item) => item.id === center.id);
+    // Чужой центр перезаписать нельзя (раньше POST был полностью открыт).
+    if (existing && existing.ownerUserId && existing.ownerUserId !== ownerUserId) {
+      sendJson(res, 403, { error: "Этот сервис принадлежит другому аккаунту." });
+      return;
+    }
+    center.ownerUserId = ownerUserId; // владельца назначает сервер, не клиент
     const withoutDuplicate = centers.filter((item) => item.id !== center.id);
     withoutDuplicate.unshift(center);
     writeServiceCenters(withoutDuplicate.slice(0, 300));
