@@ -1001,6 +1001,137 @@ textarea {
   border-radius: 14px;
 }
 
+/* ── Карточка «Мой автомобиль» (замена карусели Smart Dashboard) ──── */
+.car-status-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.car-status-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.car-status-head .smart-dashboard-icon-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.car-status-title {
+  margin: 0;
+  color: var(--drivex-white);
+  font-size: 0.98rem;
+  font-weight: 800;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.car-status-sub {
+  margin: 0.1rem 0 0;
+  color: var(--drivex-silver);
+  font-size: 0.7rem;
+  line-height: 1.2;
+}
+
+.car-status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.32rem;
+  margin-left: auto;
+  flex-shrink: 0;
+  padding: 0.26rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.car-status-chip-dot {
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 999px;
+  box-shadow: 0 0 8px currentColor;
+}
+
+.car-status-message {
+  margin: 0.62rem 0 0;
+  color: var(--drivex-light-silver);
+  font-size: 0.74rem;
+  line-height: 1.4;
+}
+
+.car-status-tiles {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.45rem;
+  margin-top: 0.7rem;
+}
+
+.car-status-tile {
+  padding: 0.5rem 0.55rem;
+  border-radius: 12px;
+  background: rgba(148, 163, 184, 0.08);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.car-status-tile-value {
+  margin: 0;
+  color: var(--drivex-white);
+  font-size: 0.82rem;
+  font-weight: 800;
+  line-height: 1.15;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.car-status-tile-value span {
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: var(--drivex-silver);
+}
+
+.car-status-tile-label {
+  margin: 0.2rem 0 0;
+  color: var(--drivex-silver);
+  font-size: 0.6rem;
+  line-height: 1.25;
+}
+
+.car-status-benefits {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.7rem;
+  margin-top: 0.7rem;
+  color: var(--drivex-light-silver);
+  font-size: 0.68rem;
+  font-weight: 600;
+}
+
+.car-status-cta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  margin-top: 0.75rem;
+  padding: 0.62rem 1rem;
+  border-radius: 12px;
+  color: var(--drivex-white);
+  font-size: 0.78rem;
+  font-weight: 800;
+  transition: transform 0.15s ease;
+}
+
+.car-status-cta:active {
+  transform: scale(0.97);
+}
+
 .home-redesign .smart-dashboard-cta {
   min-width: 5rem;
   padding: 0.42rem 0.62rem !important;

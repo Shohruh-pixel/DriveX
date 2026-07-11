@@ -977,7 +977,185 @@
     return html`<span>${prefix}${normalized}${suffix}</span>`;
   }
 
+  // Карточка «Мой автомобиль» — одна персональная сводка вместо карусели
+  // из 4 сценариев (сервис/погода/контекст/маркетинг). Пользователь за пару
+  // секунд видит статус СВОЕГО авто и одно уместное действие; никакого
+  // «Свайп влево или вправо», дев-жаргона и выдуманных цифр экономии.
   function SmartDashboard({ profileName, activeCarId, maintenance }) {
+    const car = findGarageCar(activeCarId);
+    const mileage = parseMileageLabel(car?.mileage);
+    const feed = buildDashboardMaintenanceFeed(maintenance, activeCarId);
+    const records = feed.records;
+    const inspection = feed.inspection || {};
+    const nowMs = Date.now();
+
+    // Ближайшее плановое ТО по пробегу (минимальный остаток из всех записей)
+    let nextServiceRemaining = null;
+    for (const record of records) {
+      const nextAt = Number(record?.nextServiceAt);
+      if (!Number.isFinite(nextAt) || nextAt <= 0) continue;
+      const remaining = nextAt - mileage;
+      if (nextServiceRemaining === null || remaining < nextServiceRemaining) {
+        nextServiceRemaining = remaining;
+      }
+    }
+
+    // Честные расходы за текущий календарный месяц (никаких минимумов «320 TJS»)
+    const monthStart = new Date();
+    monthStart.setDate(1);
+    monthStart.setHours(0, 0, 0, 0);
+    const monthSpent = records.reduce((sum, record) => {
+      const ts = new Date(record?.date || 0).getTime();
+      if (!ts || ts < monthStart.getTime()) return sum;
+      return sum + (Number(record?.price) || 0);
+    }, 0);
+
+    const lastRecord = records[0] || null;
+    const lastServiceLabel = lastRecord?.date
+      ? new Date(lastRecord.date).toLocaleDateString("ru-RU", { day: "numeric", month: "short" })
+      : "—";
+
+    const inspectionExpired =
+      inspection.validUntil && new Date(inspection.validUntil).getTime() < nowMs;
+    const overdue = nextServiceRemaining !== null && nextServiceRemaining <= 0;
+    const dueSoon = nextServiceRemaining !== null && nextServiceRemaining > 0 && nextServiceRemaining < 500;
+    const lastMs = lastRecord?.date ? new Date(lastRecord.date).getTime() : 0;
+    const longNoService = lastMs > 0 && nowMs - lastMs > 180 * 24 * 60 * 60 * 1000;
+
+    let status;
+    if (!car) {
+      status = {
+        accent: "#3ba7ff",
+        chip: "Начните здесь",
+        title: "Ваш гараж пуст",
+        subtitle: "1 минута на подключение",
+        message: "Добавьте автомобиль — DRIVEX напомнит о ТО, посчитает расходы и сохранит документы.",
+        actionLabel: "Добавить авто",
+        actionHref: "#/garage"
+      };
+    } else if (overdue || inspectionExpired) {
+      status = {
+        accent: "#ff6b57",
+        chip: "Пора на сервис",
+        message: inspectionExpired
+          ? "Техосмотр просрочен — обновите его в ближайшее время."
+          : "Порог планового ТО пройден по пробегу.",
+        actionLabel: "Записаться на сервис",
+        actionHref: "#/services"
+      };
+    } else if (dueSoon || longNoService) {
+      status = {
+        accent: "#ff9f43",
+        chip: "ТО скоро",
+        message: dueSoon
+          ? `До планового ТО осталось около ${formatPrice(nextServiceRemaining)} км.`
+          : "Давно не было записей — загляните на диагностику.",
+        actionLabel: "Записаться на сервис",
+        actionHref: "#/services"
+      };
+    } else {
+      status = {
+        accent: "#29d391",
+        chip: "Всё в порядке",
+        message: nextServiceRemaining !== null
+          ? `Следующее ТО через ~${formatPrice(nextServiceRemaining)} км.`
+          : "Критичных событий по журналу нет. Хорошей дороги!",
+        actionLabel: "Мой гараж",
+        actionHref: "#/garage"
+      };
+    }
+
+    const accent = status.accent;
+    const nextServiceValue = nextServiceRemaining === null
+      ? "—"
+      : nextServiceRemaining <= 0
+        ? "пройдено"
+        : `${formatPrice(nextServiceRemaining)} км`;
+
+    return html`
+      <div
+        className="smart-dashboard-shell car-status-card rounded-3xl p-6"
+        style=${{
+          background: `linear-gradient(140deg, ${alphaBg(accent, 0.26)} 0%, rgba(10, 18, 31, 0.96) 48%, rgba(7, 11, 18, 0.98) 100%)`,
+          border: `1px solid ${alphaBg(accent, 0.38)}`,
+          boxShadow: `0 24px 60px ${alphaBg(accent, 0.18)}, inset 0 1px 0 rgba(255,255,255,0.06)`
+        }}
+      >
+        <div className="smart-dashboard-grid"></div>
+
+        <div className="relative z-10">
+          <div className="car-status-head">
+            <div
+              className="smart-dashboard-icon-wrap"
+              style=${{
+                background: `linear-gradient(135deg, ${alphaBg(accent, 0.3)} 0%, ${alphaBg(accent, 0.12)} 100%)`,
+                color: accent,
+                border: `1px solid ${alphaBg(accent, 0.4)}`
+              }}
+            >
+              <${Icon} name="car" size=${22} />
+            </div>
+            <div className="min-w-0">
+              <p className="car-status-title">${car ? (car.name || "Мой автомобиль") : status.title}</p>
+              <p className="car-status-sub">
+                ${car
+                  ? (mileage ? `Пробег ${formatPrice(mileage)} км` : "Пробег не указан")
+                  : status.subtitle}
+              </p>
+            </div>
+            <span
+              className="car-status-chip"
+              style=${{
+                color: accent,
+                background: alphaBg(accent, 0.14),
+                border: `1px solid ${alphaBg(accent, 0.36)}`
+              }}
+            >
+              <span className="car-status-chip-dot" style=${{ background: accent }}></span>
+              ${status.chip}
+            </span>
+          </div>
+
+          <p className="car-status-message">${status.message}</p>
+
+          ${car
+            ? html`<div className="car-status-tiles">
+                <div className="car-status-tile">
+                  <p className="car-status-tile-value">${nextServiceValue}</p>
+                  <p className="car-status-tile-label">До планового ТО</p>
+                </div>
+                <div className="car-status-tile">
+                  <p className="car-status-tile-value">${formatPrice(monthSpent)} <span>TJS</span></p>
+                  <p className="car-status-tile-label">Расходы за месяц</p>
+                </div>
+                <div className="car-status-tile">
+                  <p className="car-status-tile-value">${lastServiceLabel}</p>
+                  <p className="car-status-tile-label">Последнее ТО</p>
+                </div>
+              </div>`
+            : html`<div className="car-status-benefits">
+                <span>✓ Напоминания о ТО</span>
+                <span>✓ Журнал расходов</span>
+                <span>✓ Документы под рукой</span>
+              </div>`}
+
+          <a
+            href=${status.actionHref}
+            className="car-status-cta"
+            style=${{
+              background: `linear-gradient(135deg, ${accent} 0%, ${alphaBg(accent, 0.72)} 100%)`,
+              boxShadow: `0 10px 26px ${alphaBg(accent, 0.3)}`
+            }}
+          >
+            ${status.actionLabel}
+            <span aria-hidden="true">→</span>
+          </a>
+        </div>
+      </div>
+    `;
+  }
+
+  function LegacySmartDashboardCarousel({ profileName, activeCarId, maintenance }) {
     const [weatherStatus, setWeatherStatus] = useState(null);
     const [activeIndex, setActiveIndex] = useState(0);
     const [transitionKey, setTransitionKey] = useState(0);
