@@ -977,11 +977,142 @@
     return html`<span>${prefix}${normalized}${suffix}</span>`;
   }
 
-  // Карточка «Мой автомобиль» — одна персональная сводка вместо карусели
-  // из 4 сценариев (сервис/погода/контекст/маркетинг). Пользователь за пару
-  // секунд видит статус СВОЕГО авто и одно уместное действие; никакого
-  // «Свайп влево или вправо», дев-жаргона и выдуманных цифр экономии.
-  function SmartDashboard({ profileName, activeCarId, maintenance }) {
+  // Премиум-хиро главного экрана: 5 полноэкранных фото-баннеров с автопрокруткой,
+  // свайпом и точками — по референсу дизайнера (тёмное фото + крупный заголовок
+  // + CTA). Заменяет прежнюю статус-карточку (сохранена ниже как Unused).
+  function SmartDashboard() {
+    const slides = [
+      {
+        id: "car",
+        title: html`Твой автомобиль<br/>под контролем`,
+        text: "Все сервисы, которые нужны для заботы о твоём авто — в одном приложении",
+        cta: "Начать",
+        href: "#/garage",
+        image: "./assets/dashboard/hero-car.jpg",
+        pos: "72% 40%"
+      },
+      {
+        id: "market",
+        title: html`Маркетплейс<br/>автозапчастей`,
+        text: "Оригинал, аналоги и б/у с гарантией — с доставкой в день заказа",
+        cta: "В каталог",
+        href: "#/market",
+        image: "./assets/dashboard/hero-market.jpg",
+        pos: "62% 50%"
+      },
+      {
+        id: "service",
+        title: html`Ремонт и ТО<br/>онлайн`,
+        text: "Проверенные СТО рядом: рейтинги, отзывы и запись за минуту",
+        cta: "Найти сервис",
+        href: "#/services",
+        image: "./assets/dashboard/hero-service.jpg",
+        pos: "70% 45%"
+      },
+      {
+        id: "sos",
+        title: html`SOS помощь<br/>на дороге`,
+        text: "Эвакуатор и мастер приедут по одной кнопке — где бы вы ни были",
+        cta: "Как это работает",
+        href: "#/emergency",
+        image: "./assets/dashboard/hero-sos.jpg",
+        pos: "60% 45%"
+      },
+      {
+        id: "trips",
+        title: html`История поездок<br/>с GPS`,
+        text: "Маршруты, пробег и сводка за месяц — автоматически",
+        cta: "Мои поездки",
+        href: "#/trips",
+        image: "./assets/dashboard/hero-trips.jpg",
+        pos: "55% 55%"
+      }
+    ];
+
+    const [active, setActive] = useState(0);
+    const timerRef = useRef(null);
+    const touchStartXRef = useRef(0);
+
+    const restartTimer = useCallback(() => {
+      if (timerRef.current) window.clearInterval(timerRef.current);
+      timerRef.current = window.setInterval(() => {
+        setActive((prev) => (prev + 1) % slides.length);
+      }, 5000);
+    }, [slides.length]);
+
+    useEffect(() => {
+      restartTimer();
+      return () => {
+        if (timerRef.current) window.clearInterval(timerRef.current);
+      };
+    }, [restartTimer]);
+
+    const goTo = useCallback((index) => {
+      setActive((index + slides.length) % slides.length);
+      restartTimer();
+    }, [restartTimer, slides.length]);
+
+    const handleTouchStart = useCallback((event) => {
+      touchStartXRef.current = event.changedTouches?.[0]?.clientX || 0;
+    }, []);
+
+    const handleTouchEnd = useCallback((event) => {
+      const diff = (event.changedTouches?.[0]?.clientX || 0) - touchStartXRef.current;
+      if (Math.abs(diff) < 36) return;
+      goTo(diff < 0 ? active + 1 : active - 1);
+    }, [active, goTo]);
+
+    return html`
+      <div
+        className="hero-carousel"
+        role="region"
+        aria-label="Возможности DRIVEX"
+        onTouchStart=${handleTouchStart}
+        onTouchEnd=${handleTouchEnd}
+      >
+        ${slides.map((slide, index) => html`
+          <div
+            key=${slide.id}
+            className=${`hero-slide ${index === active ? "is-active" : ""}`}
+            aria-hidden=${index === active ? "false" : "true"}
+          >
+            <img
+              className="hero-slide-img"
+              src=${slide.image}
+              alt=""
+              style=${{ objectPosition: slide.pos }}
+              loading=${index === 0 ? "eager" : "lazy"}
+              decoding="async"
+            />
+            <div className="hero-slide-shade"></div>
+            <div className="hero-slide-body">
+              <h2>${slide.title}</h2>
+              <p>${slide.text}</p>
+              <a href=${slide.href} className="hero-slide-cta" tabIndex=${index === active ? 0 : -1}>
+                ${slide.cta}
+              </a>
+            </div>
+          </div>
+        `)}
+        <div className="hero-dots" role="tablist" aria-label="Баннеры">
+          ${slides.map((slide, index) => html`
+            <button
+              key=${slide.id}
+              type="button"
+              role="tab"
+              aria-selected=${index === active ? "true" : "false"}
+              aria-label=${`Баннер ${index + 1}`}
+              className=${index === active ? "is-active" : ""}
+              onClick=${() => goTo(index)}
+            ></button>
+          `)}
+        </div>
+      </div>
+    `;
+  }
+
+  // Прежняя статус-карточка (не используется — оставлена на случай возврата)
+  function UnusedCarStatusCard({ profileName, activeCarId, maintenance }) {
     const car = findGarageCar(activeCarId);
     const mileage = parseMileageLabel(car?.mileage);
     const feed = buildDashboardMaintenanceFeed(maintenance, activeCarId);
