@@ -894,29 +894,99 @@
     `;
   }
 
+  // Герой-карусель маркетплейса: 3 актуальных слайда, автопрокрутка каждые 5с.
   function PromoBanner({ onShowDeals }) {
+    const slides = [
+      {
+        id: "sale",
+        badge: "Акция месяца",
+        title: "Скидки до −30%",
+        text: "Масла, фильтры и расходники по сниженным ценам",
+        cta: "Смотреть",
+        theme: "is-sale",
+        image: "./assets/marketplace/motor-oil-shelf.jpg",
+        onClick: onShowDeals
+      },
+      {
+        id: "used",
+        badge: "Проверено магазином",
+        title: "Б/У запчасти с гарантией",
+        text: "Оригинальные детали с разборки — проверяем до продажи",
+        cta: "К запчастям",
+        theme: "is-used",
+        image: "https://fppczriwvbflrhnorgqv.supabase.co/storage/v1/object/public/product-images/avtomir/BU-001-v2.jpg",
+        onClick: () => navigateToHash("/marketplace/store/автомир-худжанд")
+      },
+      {
+        id: "delivery",
+        badge: "DRIVEX доставка",
+        title: "Привезём в день заказа",
+        text: "По Худжанду — сегодня, самовывоз с рынка Панчшанбе",
+        cta: "Выбрать товары",
+        theme: "is-delivery",
+        image: "https://fppczriwvbflrhnorgqv.supabase.co/storage/v1/object/public/product-images/avtomir/TIR-003-v2.jpg",
+        onClick: () => navigateToHash("/marketplace/catalog")
+      }
+    ];
+
+    const [active, setActive] = useState(0);
+    const timerRef = useRef(null);
+
+    const restartTimer = useCallback(() => {
+      if (timerRef.current) window.clearInterval(timerRef.current);
+      timerRef.current = window.setInterval(() => {
+        setActive((prev) => (prev + 1) % slides.length);
+      }, 5000);
+    }, [slides.length]);
+
+    useEffect(() => {
+      restartTimer();
+      return () => {
+        if (timerRef.current) window.clearInterval(timerRef.current);
+      };
+    }, [restartTimer]);
+
+    const goTo = useCallback((index) => {
+      setActive(index);
+      restartTimer(); // ручной выбор не должен тут же перелистнуться автотаймером
+    }, [restartTimer]);
+
     return html`
-      <div className="market-ui-promo">
-        <div>
-          <h2>
-            Весенняя распродажа
-          </h2>
-          <p>
-            Скидки на масла, фильтры и расходники до 30%
-          </p>
-          <button
-            type="button"
-            onClick=${onShowDeals}
+      <div className="market-ui-promo" role="region" aria-label="Акции и предложения">
+        ${slides.map((slide, index) => html`
+          <div
+            key=${slide.id}
+            className=${`market-ui-promo-slide ${slide.theme} ${index === active ? "is-active" : ""}`}
+            aria-hidden=${index === active ? "false" : "true"}
           >
-            Смотреть
-          </button>
+            <div className="market-ui-promo-body">
+              <span className="market-ui-promo-badge">${slide.badge}</span>
+              <h2>${slide.title}</h2>
+              <p>${slide.text}</p>
+              <button type="button" tabIndex=${index === active ? 0 : -1} onClick=${slide.onClick}>
+                ${slide.cta}
+                <span aria-hidden="true">→</span>
+              </button>
+            </div>
+            <div className="market-ui-promo-media">
+              <img src=${slide.image} alt="" loading=${index === 0 ? "eager" : "lazy"} decoding="async" />
+            </div>
+            <span className="market-ui-promo-glow" aria-hidden="true"></span>
+          </div>
+        `)}
+        <div className="market-ui-promo-dots" role="tablist" aria-label="Слайды">
+          ${slides.map((slide, index) => html`
+            <button
+              key=${slide.id}
+              type="button"
+              role="tab"
+              aria-selected=${index === active ? "true" : "false"}
+              aria-label=${`Слайд ${index + 1}`}
+              className=${index === active ? "is-active" : ""}
+              onClick=${() => goTo(index)}
+            ></button>
+          `)}
         </div>
-        <img
-          src="./assets/marketplace/motor-oil-shelf.jpg"
-          alt="Масла и фильтры"
-          loading="eager"
-          decoding="async"
-        />
       </div>
     `;
   }
