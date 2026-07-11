@@ -68,53 +68,75 @@
       .join(" • ");
     const shortAddress = [service.city, service.address || service.locationLabel].filter(Boolean).join(", ");
     const workingHours = String(service.workingHours || "").trim();
-    const endTime = parseServiceWorkingHoursRange(workingHours).endTime || "18:00";
-    const availability = service.available === false
-      ? { label: `Занято до ${endTime}`, color: "var(--drivex-danger)" }
-      : { label: "Свободно сейчас", color: "var(--drivex-success)" };
-    const startingPrice = (() => {
-      const typeLabel = `${service.type || ""} ${service.category || ""}`.toLowerCase();
-      if (typeLabel.includes("детейл")) return 120;
-      if (typeLabel.includes("шин")) return 60;
-      if (typeLabel.includes("диаг")) return 50;
-      if (typeLabel.includes("элект")) return 70;
-      return 80;
+    // Честная доступность — по графику работы, а не выдуманное «Свободно сейчас»
+    const hoursRange = parseServiceWorkingHoursRange(workingHours);
+    const endTime = hoursRange.endTime || "18:00";
+    const startTime = hoursRange.startTime || "08:00";
+    const availability = (() => {
+      if (service.available === false) return { label: "Временно не работает", color: "var(--drivex-danger)" };
+      const now = new Date();
+      const minutesNow = now.getHours() * 60 + now.getMinutes();
+      const toMin = (t) => { const m = String(t).match(/(\d{1,2}):(\d{2})/); return m ? Number(m[1]) * 60 + Number(m[2]) : null; };
+      const start = toMin(startTime);
+      const end = toMin(endTime);
+      if (start !== null && end !== null && (minutesNow < start || minutesNow >= end)) {
+        return { label: `Закрыто • откроется в ${startTime}`, color: "var(--drivex-warning)" };
+      }
+      return { label: `Открыто до ${endTime}`, color: "var(--drivex-success)" };
     })();
-    const returnRate = Math.max(40, Math.round(Number(service.repeatClientsPercent) || 67));
-    const monthlyClients = Math.max(18, Math.round((Number(service.completedCars) || 216) / 12));
+    // Честные метрики: без выдуманных цен, процентов и «клиентов в месяц».
+    const returnRate = Math.round(Number(service.repeatClientsPercent) || 0);
+    const completedCarsCount = Math.max(0, Math.round(Number(service.completedCars) || 0));
     const trustChips = [
-      { id: "verified", label: "Проверено DRIVEX", color: "var(--drivex-neon-cyan)" },
-      { id: "monthly", label: `${monthlyClients} клиентов в месяц`, color: "var(--drivex-electric-blue)" }
+      ...(service.isRegisteredCenter
+        ? [{ id: "verified", label: "Проверено DRIVEX", color: "var(--drivex-neon-cyan)" }]
+        : []),
+      ...(completedCarsCount > 0
+        ? [{ id: "completed", label: `${completedCarsCount} выполненных работ`, color: "var(--drivex-electric-blue)" }]
+        : [{ id: "new", label: "Новый сервис на DRIVEX", color: "var(--drivex-electric-blue)" }])
     ];
     const summaryMetrics = [
-      { id: "rating", icon: "star", value: ratingValue, label: "рейтинг", color: "var(--drivex-warning)" },
-      { id: "time", icon: "clock", value: service.averageRepairTime || "25 мин", label: "среднее время", color: "var(--drivex-electric-blue)" },
-      { id: "price", icon: "coins", value: `от ${formatTjsPrice(startingPrice)}`, label: "старт по цене", color: "var(--drivex-warning)" },
-      { id: "repeat", icon: "repeat", value: `${returnRate}%`, label: "возвращаются", color: "var(--drivex-success)" }
+      {
+        id: "rating",
+        icon: "star",
+        value: reviewCount > 0 ? ratingValue : "—",
+        label: reviewCount > 0 ? "рейтинг" : "нет отзывов",
+        color: "var(--drivex-warning)"
+      },
+      { id: "boxes", icon: "wrench", value: String(Number(service.boxesCount) || 1), label: "боксов", color: "var(--drivex-electric-blue)" },
+      { id: "price", icon: "coins", value: "по запросу", label: "цены работ", color: "var(--drivex-warning)" },
+      {
+        id: "repeat",
+        icon: "repeat",
+        value: returnRate > 0 ? `${returnRate}%` : "—",
+        label: "возвращаются",
+        color: "var(--drivex-success)"
+      }
     ];
+    // Типовые работы категории — подсказки для записи; цены сервис называет сам.
     const servicesList = (() => {
       const typeLabel = `${service.type || ""} ${service.category || ""}`.toLowerCase();
       if (typeLabel.includes("детейл")) {
         return [
-          { id: "wash", title: "Комплексная мойка", duration: "45 мин", price: 80 },
-          { id: "salon", title: "Химчистка салона", duration: "2 ч", price: 180 },
-          { id: "polish", title: "Полировка кузова", duration: "3 ч", price: 260 },
-          { id: "coat", title: "Защитное покрытие", duration: "4 ч", price: 420 }
+          { id: "wash", title: "Комплексная мойка" },
+          { id: "salon", title: "Химчистка салона" },
+          { id: "polish", title: "Полировка кузова" },
+          { id: "coat", title: "Защитное покрытие" }
         ];
       }
       if (typeLabel.includes("шин")) {
         return [
-          { id: "tires", title: "Комплект шиномонтажа", duration: "35 мин", price: 60 },
-          { id: "balance", title: "Балансировка", duration: "20 мин", price: 40 },
-          { id: "repair", title: "Ремонт прокола", duration: "15 мин", price: 25 },
-          { id: "storage", title: "Сезонная замена", duration: "30 мин", price: 70 }
+          { id: "tires", title: "Комплект шиномонтажа" },
+          { id: "balance", title: "Балансировка" },
+          { id: "repair", title: "Ремонт прокола" },
+          { id: "storage", title: "Сезонная замена" }
         ];
       }
       return [
-        { id: "oil", title: "Замена масла", duration: "25 мин", price: 95 },
-        { id: "diag", title: "Диагностика", duration: "15 мин", price: 40 },
-        { id: "brakes", title: "Проверка тормозов", duration: "30 мин", price: 70 },
-        { id: "suspension", title: "Ходовая и подвеска", duration: "45 мин", price: 120 }
+        { id: "oil", title: "Замена масла" },
+        { id: "diag", title: "Диагностика" },
+        { id: "brakes", title: "Проверка тормозов" },
+        { id: "suspension", title: "Ходовая и подвеска" }
       ];
     })();
     const messageHref = (() => {
@@ -218,13 +240,17 @@
               ${service.name}
             </h1>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mt-3 text-sm">
-              <span className="inline-flex items-center gap-1.5" style=${{ color: "var(--drivex-warning)" }}>
-                <${Icon} name="star" size=${14} />
-                ${ratingValue} • ${reviewCount} отзывов
-              </span>
+              ${reviewCount > 0
+                ? html`<span className="inline-flex items-center gap-1.5" style=${{ color: "var(--drivex-warning)" }}>
+                    <${Icon} name="star" size=${14} />
+                    ${ratingValue} • ${reviewCount} ${pluralize(reviewCount, "отзыв", "отзыва", "отзывов")}
+                  </span>`
+                : html`<span className="inline-flex items-center gap-1.5" style=${{ color: "var(--drivex-light-silver)" }}>
+                    Новый сервис — отзывов пока нет
+                  </span>`}
               <span className="inline-flex items-center gap-1.5" style=${{ color: "var(--drivex-light-silver)" }}>
                 <${Icon} name="map" size=${14} />
-                ${distanceLabel} • ${travelMinutes} мин
+                ${[service.city, service.locationLabel].filter(Boolean).join(" • ") || distanceLabel}
               </span>
             </div>
             <p className="text-sm mt-2" style=${{ color: "var(--drivex-silver)" }}>
@@ -333,7 +359,7 @@
                       ${item.title}
                     </p>
                     <p className="text-sm mt-1" style=${{ color: "var(--drivex-silver)" }}>
-                      ${item.duration} • ${formatTjsPrice(item.price)}
+                      Цену и время уточнит сервис при записи
                     </p>
                   </div>
                   <button

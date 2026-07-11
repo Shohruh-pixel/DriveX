@@ -3749,16 +3749,22 @@
 
   function normalizeServiceRequestStatusId(statusId) {
     const safeStatus = String(statusId || "").trim().toLowerCase();
-    if (safeStatus === "ready") return "ready";
+    if (safeStatus === "ready" || safeStatus === "done" || safeStatus === "completed") return "ready";
     if (safeStatus === "progress" || safeStatus === "in-progress" || safeStatus === "working") return "progress";
-    if (safeStatus === "accepted" || safeStatus === "sent" || safeStatus === "queued" || safeStatus === "new") {
+    if (safeStatus === "declined" || safeStatus === "rejected" || safeStatus === "cancelled") return "declined";
+    if (safeStatus === "accepted" || safeStatus === "confirmed" || safeStatus === "sent" || safeStatus === "queued") {
       return "accepted";
     }
-    return serviceRequestStatusOptions[0].id;
+    // «new» и всё неизвестное — заявка ещё не подтверждена сервисом.
+    return "new";
   }
 
   function getServiceRequestStatusMeta(statusId) {
     const normalizedStatusId = normalizeServiceRequestStatusId(statusId);
+    if (normalizedStatusId === "declined") {
+      return (window.DX && window.DX.serviceRequestDeclinedMeta) ||
+        { id: "declined", label: "Отклонена", color: "var(--drivex-danger)" };
+    }
     return (
       serviceRequestStatusOptions.find((status) => status.id === normalizedStatusId) ||
       serviceRequestStatusOptions[0]
@@ -3791,6 +3797,7 @@
       carLabel: typeof source.carLabel === "string" ? source.carLabel.trim() : "",
       workLabel: typeof source.workLabel === "string" ? source.workLabel.trim() : "",
       note: typeof source.note === "string" ? source.note.trim() : "",
+      declineReason: typeof source.declineReason === "string" ? source.declineReason.trim() : "",
       sourceOrderId: typeof source.sourceOrderId === "string" ? source.sourceOrderId.trim() : "",
       completedWork: typeof source.completedWork === "string" ? source.completedWork.trim() : "",
       completedAt: typeof source.completedAt === "string" ? source.completedAt.trim() : "",
@@ -4077,7 +4084,9 @@
   function clampServiceMetric(value, fallback = 80) {
     const numericValue = Number(value);
     if (!Number.isFinite(numericValue)) return fallback;
-    return Math.max(45, Math.min(99, Math.round(numericValue)));
+    // 0 — честное «нет данных», не поднимаем до минимума 45
+    if (numericValue <= 0) return 0;
+    return Math.max(1, Math.min(99, Math.round(numericValue)));
   }
 
   function normalizeServiceBrands(list) {
@@ -4304,7 +4313,8 @@
       const loyalty = String(client.loyalty || "").toLowerCase();
       return loyalty.includes("vip") || loyalty.includes("постоян");
     }).length;
-    const repeatClientsPercent = safeClients.length ? Math.round((repeatedClients / safeClients.length) * 100) : 62;
+    // 0, а не выдуманные «62%», пока клиентов реально нет
+    const repeatClientsPercent = safeClients.length ? Math.round((repeatedClients / safeClients.length) * 100) : 0;
     const averageRepairMinutes =
       safeOrders
         .map((order) => estimateServiceDurationMinutes(order.estimate))
@@ -4331,8 +4341,10 @@
       workingHours: safeCenter.workingHours,
       boxesCount: safeCenter.boxesCount,
       geolocation: safeCenter.geolocation,
-      rating: 5.0,
-      reviews: Math.max(18, dashboardStats.clients * 6 + dashboardStats.readyRepairs * 8),
+      // Честные цифры: отзывов на сервисы пока нет — не выдумываем «5.0» и
+      // «18 отзывов». UI показывает «Новый сервис», пока нет реальных данных.
+      rating: 0,
+      reviews: 0,
       distance: locationText || "Новый сервис",
       price: financeSummary.averageTicket ? `Средний чек ${formatTjsPrice(financeSummary.averageTicket)}` : "Новый сервис DRIVEX",
       image: primaryImage,
@@ -4344,7 +4356,7 @@
       reviewScore,
       repeatClientsPercent,
       premiumScore,
-      completedCars: Math.max(dashboardStats.readyRepairs, dashboardStats.clients * 12, safeOrders.length * 16),
+      completedCars: dashboardStats.readyRepairs,
       averageRepairTime: formatServiceAverageTime(averageRepairMinutes),
       suitableBrands: ["BMW", "Toyota", "Kia", "Hyundai", "Chevrolet", "Lexus"],
       gallery: realGallery,

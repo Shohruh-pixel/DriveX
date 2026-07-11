@@ -311,11 +311,19 @@
   ALL_FNS.concat(CONSTS).forEach(function(name) {
     try {
       Object.defineProperty(window, name, {
-        get: function() { return window.DX ? window.DX[name] : undefined; },
+        // Сначала DX[name], затем DX.screens[name]: компоненты экранов
+        // регистрируются только в DX.screens, и bare-ссылки на них из других
+        // файлов (напр. SellerLogo в service-crm.js) иначе получают undefined
+        // и роняют рендер (React #130).
+        get: function() {
+          if (!window.DX) return undefined;
+          if (window.DX[name] !== undefined) return window.DX[name];
+          return window.DX.screens ? window.DX.screens[name] : undefined;
+        },
         configurable: true,
         enumerable: false
       });
-    } catch(e) { /* СѓР¶Рµ РѕРїСЂРµРґРµР»С‘РЅ вЂ” РёРіРЅРѕСЂРёСЂСѓРµРј */ }
+    } catch(e) { /* уже определён — игнорируем */ }
   });
 
   // Mutable live refs (garageCars/savedPlaces РѕР±РЅРѕРІР»СЏСЋС‚СЃСЏ App())

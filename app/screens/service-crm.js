@@ -819,7 +819,7 @@
     `;
   }
 
-  function ServiceDashboardScreen({ currentUser, center, clients, orders, finance, appointments }) {
+  function ServiceDashboardScreen({ currentUser, center, clients, orders, finance, appointments, newRequestsCount = 0 }) {
     const safeCenter = normalizeServiceCenter(center);
     const safeClients = normalizeServiceClientsList(clients, safeCenter.id).filter((item) => !isDemoServiceClient(item));
     const safeOrders = normalizeServiceRepairOrdersList(orders, safeCenter.id).filter((item) => !isDemoServiceOrder(item));
@@ -843,6 +843,28 @@
         center=${safeCenter}
         primaryAction=${{ path: "/service-crm/orders", label: "Ремонты" }}
       >
+        ${newRequestsCount > 0
+          ? html`<a
+              href="#/service-crm/requests"
+              className="flex items-center justify-between gap-3 rounded-3xl p-4"
+              style=${{
+                background: "rgba(245, 158, 11, 0.12)",
+                border: "1px solid rgba(245, 158, 11, 0.3)"
+              }}
+            >
+              <div>
+                <p className="font-bold" style=${{ color: "var(--drivex-warning)" }}>
+                  ${newRequestsCount} ${pluralize(newRequestsCount, "новая заявка", "новые заявки", "новых заявок")}
+                </p>
+                <p className="text-xs mt-1" style=${{ color: "var(--drivex-silver)" }}>
+                  Клиенты ждут подтверждения записи
+                </p>
+              </div>
+              <span className="px-4 py-2 rounded-2xl text-sm font-bold" style=${{ background: "var(--drivex-warning)", color: "#1a1206" }}>
+                Открыть
+              </span>
+            </a>`
+          : null}
         <div
           className="rounded-[32px] p-6"
           style=${{
@@ -1304,6 +1326,162 @@
               </div>
             </div>`
           : null}
+      </${ServiceCrmLayout}>
+    `;
+  }
+
+  // ── Входящие заявки: клиент записался онлайн → сервис подтверждает ──
+  function ServiceRequestsScreen({ currentUser, center, requests, onAcceptRequest, onDeclineRequest }) {
+    const safeCenter = normalizeServiceCenter(center);
+    const safeRequests = normalizeServiceRequestsList(requests)
+      .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
+    const newRequests = safeRequests.filter((item) => item.status === "new");
+    const acceptedCount = safeRequests.filter((item) => ["accepted", "progress", "ready"].includes(item.status)).length;
+    const declinedCount = safeRequests.filter((item) => item.status === "declined").length;
+    const [declineDraftId, setDeclineDraftId] = useState("");
+    const [declineReason, setDeclineReason] = useState("");
+
+    const submitDecline = (requestId) => {
+      onDeclineRequest && onDeclineRequest(requestId, declineReason);
+      setDeclineDraftId("");
+      setDeclineReason("");
+    };
+
+    return html`
+      <${ServiceCrmLayout}
+        title="Входящие заявки"
+        subtitle="Онлайн-записи клиентов. Подтвердите — и заявка превратится в клиента, слот и ремонтный заказ."
+        activeItem="requests"
+        currentUser=${currentUser}
+        center=${safeCenter}
+        primaryAction=${{ path: "/service-crm/schedule", label: "Запись" }}
+      >
+        <div className="grid grid-cols-3 gap-3">
+          <${SellerMetricCard}
+            label="Новые"
+            value=${String(newRequests.length)}
+            color="var(--drivex-warning)"
+            icon="bell"
+          />
+          <${SellerMetricCard}
+            label="Подтверждено"
+            value=${String(acceptedCount)}
+            color="var(--drivex-electric-blue)"
+            icon="check"
+          />
+          <${SellerMetricCard}
+            label="Отклонено"
+            value=${String(declinedCount)}
+            color="var(--drivex-danger)"
+            icon="close"
+          />
+        </div>
+
+        ${safeRequests.length
+          ? html`<div className="space-y-4">
+              ${safeRequests.map((request) => html`
+                <div key=${request.id} className="glass-card-light rounded-3xl p-5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-bold" style=${{ color: "var(--drivex-white)" }}>
+                        ${request.clientName}
+                      </p>
+                      <p className="text-sm mt-1" style=${{ color: "var(--drivex-silver)" }}>
+                        ${[request.carLabel, request.clientPhone].filter(Boolean).join(" • ")}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <${ServicePhoneButton} phone=${request.clientPhone} compact=${true} label="Позвонить клиенту" />
+                      <${ServiceStatusChip} label=${request.statusLabel} color=${request.statusColor} />
+                    </div>
+                  </div>
+
+                  <div className="glass-card rounded-3xl p-4 mt-4">
+                    <p className="font-semibold" style=${{ color: "var(--drivex-white)" }}>
+                      ${request.workLabel || "Работы уточняются"}
+                    </p>
+                    ${request.note
+                      ? html`<p className="text-sm mt-2" style=${{ color: "var(--drivex-silver)", lineHeight: 1.7 }}>
+                          ${request.note}
+                        </p>`
+                      : null}
+                    <div className="flex flex-wrap gap-2 mt-4">
+                      ${[
+                        `${formatRuDate(request.day)} • ${request.time}`,
+                        request.carLabel || "Машина не указана"
+                      ].map((chip) => html`
+                        <span
+                          key=${`${request.id}-${chip}`}
+                          className="px-3 py-1.5 rounded-full text-xs font-semibold"
+                          style=${{ background: "rgba(255, 255, 255, 0.05)", color: "var(--drivex-silver)" }}
+                        >
+                          ${chip}
+                        </span>
+                      `)}
+                    </div>
+                    ${request.status === "declined" && request.declineReason
+                      ? html`<p className="text-sm mt-3" style=${{ color: "var(--drivex-danger)" }}>
+                          Причина: ${request.declineReason}
+                        </p>`
+                      : null}
+                  </div>
+
+                  ${request.status === "new"
+                    ? declineDraftId === request.id
+                      ? html`<div className="mt-4 space-y-3">
+                          <input
+                            className="dx-input w-full"
+                            placeholder="Причина отказа (клиент увидит её)"
+                            value=${declineReason}
+                            onInput=${(event) => setDeclineReason(event.target.value)}
+                          />
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              className="flex-1 px-4 py-3 rounded-2xl text-sm font-semibold"
+                              style=${{ background: "rgba(239, 68, 68, 0.16)", color: "var(--drivex-danger)", border: "1px solid rgba(239, 68, 68, 0.3)" }}
+                              onClick=${() => submitDecline(request.id)}
+                            >
+                              Отклонить заявку
+                            </button>
+                            <button
+                              type="button"
+                              className="px-4 py-3 rounded-2xl text-sm font-semibold"
+                              style=${{ background: "var(--glass-bg)", color: "var(--drivex-white)", border: "1px solid var(--glass-border)" }}
+                              onClick=${() => { setDeclineDraftId(""); setDeclineReason(""); }}
+                            >
+                              Отмена
+                            </button>
+                          </div>
+                        </div>`
+                      : html`<div className="flex gap-2 mt-4">
+                          <button
+                            type="button"
+                            className="flex-1 px-4 py-3 rounded-2xl text-sm font-bold dx-btn"
+                            onClick=${() => onAcceptRequest && onAcceptRequest(request.id)}
+                          >
+                            Подтвердить запись
+                          </button>
+                          <button
+                            type="button"
+                            className="px-4 py-3 rounded-2xl text-sm font-semibold"
+                            style=${{ background: "rgba(239, 68, 68, 0.12)", color: "var(--drivex-danger)", border: "1px solid rgba(239, 68, 68, 0.24)" }}
+                            onClick=${() => { setDeclineDraftId(request.id); setDeclineReason(""); }}
+                          >
+                            Отклонить
+                          </button>
+                        </div>`
+                    : null}
+                </div>
+              `)}
+            </div>`
+          : html`<div className="glass-card-light rounded-3xl p-8 text-center">
+              <p className="font-bold" style=${{ color: "var(--drivex-white)" }}>Заявок пока нет</p>
+              <p className="text-sm mt-2" style=${{ color: "var(--drivex-silver)", lineHeight: 1.7 }}>
+                Когда клиент запишется к вам через DRIVEX, заявка появится здесь —
+                подтвердите её, и она превратится в клиента, слот и ремонтный заказ.
+              </p>
+            </div>`}
       </${ServiceCrmLayout}>
     `;
   }
@@ -2910,6 +3088,7 @@
   if (typeof ServiceLoginScreen !== 'undefined') DX.screens['ServiceLoginScreen'] = ServiceLoginScreen;
   if (typeof ServiceNotFoundScreen !== 'undefined') DX.screens['ServiceNotFoundScreen'] = ServiceNotFoundScreen;
   if (typeof ServiceOrdersScreen !== 'undefined') DX.screens['ServiceOrdersScreen'] = ServiceOrdersScreen;
+  if (typeof ServiceRequestsScreen !== 'undefined') DX.screens['ServiceRequestsScreen'] = ServiceRequestsScreen;
   if (typeof ServicePartnerRegisterIntroScreen !== 'undefined') DX.screens['ServicePartnerRegisterIntroScreen'] = ServicePartnerRegisterIntroScreen;
   if (typeof ServicePhoneButton !== 'undefined') DX.screens['ServicePhoneButton'] = ServicePhoneButton;
   if (typeof ServiceRegistrationScreen !== 'undefined') DX.screens['ServiceRegistrationScreen'] = ServiceRegistrationScreen;

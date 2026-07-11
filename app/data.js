@@ -30,62 +30,10 @@
     }
   ];
 
-  const nearbyServices = [
-    {
-      id: 1,
-      name: "АвтоМастер Премиум",
-      type: "СТО общего ремонта",
-      category: "СТО",
-      city: "Худжанд",
-      address: "пр-т Исмоили Сомони, 28",
-      distance: "1.2 км",
-      rating: 4.8,
-      reviews: 234,
-      price: "Честные цены",
-      phone: "+992 92 777 21 10",
-      workingHours: "08:00 — 20:00",
-      boxesCount: 6,
-      image:
-        "https://images.unsplash.com/photo-1487754180451-c456f719a1fc?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1200",
-      available: true
-    },
-    {
-      id: 2,
-      name: "ШиноМонтаж 24/7",
-      type: "Шиномонтаж",
-      category: "Шиномонтаж",
-      city: "Худжанд",
-      address: "8 мкр, рядом с кольцом",
-      distance: "0.8 км",
-      rating: 4.9,
-      reviews: 167,
-      price: "Быстро и по записи",
-      phone: "+992 93 555 44 00",
-      workingHours: "Круглосуточно",
-      boxesCount: 4,
-      image:
-        "https://images.unsplash.com/photo-1619642751034-765dfdf7c58e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1200",
-      available: true
-    },
-    {
-      id: 3,
-      name: "Detail Garage Premium",
-      type: "Детейлинг",
-      category: "Детейлинг",
-      city: "Худжанд",
-      address: "ул. Гагарина, 14",
-      distance: "2.1 км",
-      rating: 4.7,
-      reviews: 445,
-      price: "Премиум уход",
-      phone: "+992 90 440 88 11",
-      workingHours: "09:00 — 21:00",
-      boxesCount: 3,
-      image:
-        "https://images.unsplash.com/photo-1607861716497-e65ab29fc7ac?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1200",
-      available: true
-    }
-  ];
+  // Каталог сервисов — только реальные центры: зарегистрированные через
+  // Service CRM (/api/service-centers) и записи из Supabase service_centers.
+  // Выдуманные «АвтоМастер Премиум» и т.п. с фейковыми рейтингами удалены.
+  const nearbyServices = [];
 
   let garageCars = [];
   let savedPlaces = [];
@@ -131,61 +79,52 @@
     { id: "parking", label: "Парковки", icon: "parking" }
   ];
 
-  const mapPoints = [
-    { id: 1, type: "fuel", name: "Роснефть", distance: "500 м", rating: 4.5 },
-    { id: 2, type: "wash", name: "Мойка 24/7", distance: "1.2 км", rating: 4.8 },
-    {
-      id: 3,
-      type: "service",
-      name: "СТО Премиум",
-      distance: "2.3 км",
-      rating: 4.9
-    },
-    { id: 4, type: "tire", name: "ШиноМонтаж", distance: "800 м", rating: 4.7 }
-  ];
+  // Точки карты — только реальные центры каталога; выдуманные POI удалены.
+  const mapPoints = [];
 
   const serviceCategories = [
+    // count не выдумываем — UI считает реальное число сервисов в категории
     {
       id: "repair",
       name: "Ремонт авто",
       icon: "wrench",
       color: "var(--drivex-electric-blue)",
-      count: "156 сервисов"
+      count: ""
     },
     {
       id: "tire",
       name: "Шиномонтаж",
       icon: "tire",
       color: "var(--drivex-neon-cyan)",
-      count: "89 сервисов"
+      count: ""
     },
     {
       id: "wash",
       name: "Автомойка",
       icon: "wash",
       color: "#06b6d4",
-      count: "203 сервиса"
+      count: ""
     },
     {
       id: "diagnostics",
       name: "Диагностика",
       icon: "scan",
       color: "#f59e0b",
-      count: "78 сервисов"
+      count: ""
     },
     {
       id: "towing",
       name: "Эвакуатор",
       icon: "truck",
       color: "#ef4444",
-      count: "45 сервисов"
+      count: ""
     },
     {
       id: "detailing",
       name: "Детейлинг",
       icon: "sparkles",
       color: "#8b5cf6",
-      count: "34 сервиса"
+      count: ""
     }
   ];
 
@@ -236,59 +175,8 @@
     return serviceCategories.find((category) => category.id === categoryId) || serviceCategories[0];
   }
 
-  const recommendedServices = [
-    {
-      id: 1,
-      name: "АвтоМастер Премиум",
-      category: "СТО",
-      rating: 4.9,
-      reviews: 234,
-      distance: "1.2 км",
-      price: "Честные цены",
-      city: "Худжанд",
-      address: "пр-т Исмоили Сомони, 28",
-      phone: "+992 92 777 21 10",
-      workingHours: "08:00 — 20:00",
-      boxesCount: 6,
-      image:
-        "https://images.unsplash.com/photo-1487754180451-c456f719a1fc?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1200",
-      available: true
-    },
-    {
-      id: 2,
-      name: "ШиноМонтаж 24/7",
-      category: "Шиномонтаж",
-      rating: 4.8,
-      reviews: 167,
-      distance: "800 м",
-      price: "Быстро и по записи",
-      city: "Худжанд",
-      address: "8 мкр, рядом с кольцом",
-      phone: "+992 93 555 44 00",
-      workingHours: "Круглосуточно",
-      boxesCount: 4,
-      image:
-        "https://images.unsplash.com/photo-1619642751034-765dfdf7c58e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1200",
-      available: true
-    },
-    {
-      id: 3,
-      name: "Detail Garage Premium",
-      category: "Детейлинг",
-      rating: 4.7,
-      reviews: 445,
-      distance: "2.1 км",
-      price: "Премиум уход",
-      city: "Худжанд",
-      address: "ул. Гагарина, 14",
-      phone: "+992 90 440 88 11",
-      workingHours: "09:00 — 21:00",
-      boxesCount: 3,
-      image:
-        "https://images.unsplash.com/photo-1607861716497-e65ab29fc7ac?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1200",
-      available: true
-    }
-  ];
+  // Рекомендации — из реальных центров (Supabase top-3 / CRM); фейк-сид удалён.
+  const recommendedServices = [];
 
   const serviceShowcaseProfiles = {
     "1": {
@@ -483,6 +371,7 @@
 
   const serviceCrmNavigationItems = [
     { id: "dashboard", label: "Дашборд", path: "/service-crm/dashboard", icon: "layers" },
+    { id: "requests", label: "Заявки", path: "/service-crm/requests", icon: "bell" },
     { id: "clients", label: "Клиенты", path: "/service-crm/clients", icon: "user" },
     { id: "orders", label: "Ремонты", path: "/service-crm/orders", icon: "wrench" },
     { id: "parts", label: "Склад", path: "/service-crm/parts", icon: "bag" },
@@ -507,11 +396,20 @@
     { id: "ready", label: "Готов", color: "var(--drivex-success)" }
   ];
 
+  // Честный жизненный цикл заявки: сервис ДОЛЖЕН подтвердить запись.
+  // «declined» вне линейного таймлайна — см. serviceRequestDeclinedMeta.
   const serviceRequestStatusOptions = [
-    { id: "accepted", label: "Приняли", color: "var(--drivex-warning)" },
-    { id: "progress", label: "В работе", color: "var(--drivex-electric-blue)" },
+    { id: "new", label: "Отправлена", color: "var(--drivex-warning)" },
+    { id: "accepted", label: "Подтверждена", color: "var(--drivex-electric-blue)" },
+    { id: "progress", label: "В работе", color: "var(--drivex-neon-cyan)" },
     { id: "ready", label: "Готово", color: "var(--drivex-success)" }
   ];
+
+  const serviceRequestDeclinedMeta = {
+    id: "declined",
+    label: "Отклонена",
+    color: "var(--drivex-danger)"
+  };
 
   const serviceAppointmentStatusOptions = [
     { id: "free", label: "Свободно", color: "var(--drivex-success)" },
@@ -962,6 +860,7 @@
   try { if (typeof servicePrimaryCenterId !== 'undefined') window.DX['servicePrimaryCenterId'] = servicePrimaryCenterId; } catch(e) {}
   try { if (typeof serviceRepairStatusOptions !== 'undefined') window.DX['serviceRepairStatusOptions'] = serviceRepairStatusOptions; } catch(e) {}
   try { if (typeof serviceRequestStatusOptions !== 'undefined') window.DX['serviceRequestStatusOptions'] = serviceRequestStatusOptions; } catch(e) {}
+  try { if (typeof serviceRequestDeclinedMeta !== 'undefined') window.DX['serviceRequestDeclinedMeta'] = serviceRequestDeclinedMeta; } catch(e) {}
   try { if (typeof serviceShowcaseProfiles !== 'undefined') window.DX['serviceShowcaseProfiles'] = serviceShowcaseProfiles; } catch(e) {}
   try { if (typeof vehicleDocumentKinds !== 'undefined') window.DX['vehicleDocumentKinds'] = vehicleDocumentKinds; } catch(e) {}
   try { if (typeof normalizeServiceCategoryText !== 'undefined') window.DX['normalizeServiceCategoryText'] = normalizeServiceCategoryText; } catch(e) {}

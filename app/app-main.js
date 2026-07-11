@@ -3185,10 +3185,13 @@
       }
 
       const createdAt = new Date().toISOString();
+      // Заявка рождается «new» — сервис должен подтвердить её в своей CRM.
+      // Раньше статус сразу был «accepted», и клиент видел «Приняли», хотя
+      // сервис заявку даже не открывал.
       let request = normalizeServiceRequest({
         ...payload,
         createdAt,
-        status: "accepted",
+        status: "new",
         statusUpdatedAt: createdAt
       });
 
@@ -3251,6 +3254,10 @@
 
         request = normalizeServiceRequest({
           ...request,
+          // Владелец CRM записывает клиента в СВОЙ центр — слот и заказ уже
+          // созданы, поэтому заявка сразу подтверждена.
+          status: "accepted",
+          statusUpdatedAt: new Date().toISOString(),
           sourceOrderId: nextOrder.id
         });
         setServiceClients(clientResult.clients);
@@ -3279,7 +3286,11 @@
         });
       }
 
-      toast.push(`Запись добавлена в Журнал обслуживания: ${formatRuDate(request.day)} • ${request.time}`);
+      toast.push(
+        request.status === "accepted"
+          ? `Запись подтверждена: ${formatRuDate(request.day)} • ${request.time}`
+          : `Заявка отправлена в «${request.serviceName}» — сервис подтвердит запись`
+      );
       return request;
     }, [
       addMaintenanceRecord,
@@ -3291,6 +3302,101 @@
       serviceSession.serviceCenterId,
       toast
     ]);
+
+    // ── Входящие заявки сервиса: подтверждение и отклонение ────────────
+    // Принятие заявки — то же, что владелец делал при записи в свой центр:
+    // клиент + слот в расписании + ремонтный заказ, и только потом «accepted».
+    const acceptServiceRequest = useCallback((requestId) => {
+      const request = normalizeServiceRequestsList(serviceRequests).find((item) => item.id === requestId);
+      if (!request) {
+        toast.push("Заявка не найдена");
+        return;
+      }
+      if (request.status !== "new") return;
+
+      const safeCenter = normalizeServiceCenter(serviceCenter, serviceSession.serviceCenterId);
+      const activeCar = findGarageCar(request.carId);
+      const clientResult = upsertServiceClientFromBooking(serviceClients, safeCenter.id, request, activeCar);
+      const boxLabel = pickServiceBookingBox(safeCenter, serviceAppointments, request.day, request.time);
+      const nextAppointment = normalizeServiceAppointment(
+        {
+          id: genId("service-slot"),
+          centerId: safeCenter.id,
+          day: request.day,
+          startTime: request.time,
+          endTime: addMinutesToClock(request.time, 60),
+          boxLabel,
+          status: "booked",
+          clientName: request.clientName,
+          phone: request.clientPhone,
+          carLabel: request.carLabel,
+          workLabel: request.workLabel
+        },
+        safeCenter.id
+      );
+      const nextOrder = normalizeServiceRepairOrder(
+        {
+          id: createServiceOrderCode(),
+          centerId: safeCenter.id,
+          clientId: clientResult.clientId,
+          clientName: request.clientName,
+          clientPhone: request.clientPhone,
+          carLabel: request.carLabel,
+          problem: request.workLabel,
+          note: request.note || "Онлайн заявка из приложения DRIVEX.",
+          boxLabel,
+          estimate: "1-2 часа",
+          createdAt: request.createdAt,
+          appointmentTime: request.time,
+          total: 0,
+          status: "queued",
+          sourceRequestId: request.id,
+          parts: []
+        },
+        safeCenter.id
+      );
+
+      setServiceClients(clientResult.clients);
+      setServiceAppointments([
+        nextAppointment,
+        ...normalizeServiceAppointmentsList(serviceAppointments, safeCenter.id).filter((item) => !isDemoServiceAppointment(item))
+      ]);
+      setServiceOrders([nextOrder, ...normalizeServiceRepairOrdersList(serviceOrders, safeCenter.id)]);
+      setServiceRequests((prev) =>
+        normalizeServiceRequestsList(prev).map((item) =>
+          item.id === requestId
+            ? normalizeServiceRequest({
+                ...item,
+                status: "accepted",
+                statusUpdatedAt: new Date().toISOString(),
+                sourceOrderId: nextOrder.id
+              })
+            : item
+        )
+      );
+      toast.push(`Заявка подтверждена: ${request.clientName} • ${formatRuDate(request.day)} ${request.time}`);
+    }, [serviceAppointments, serviceCenter, serviceClients, serviceOrders, serviceRequests, serviceSession.serviceCenterId, toast]);
+
+    const declineServiceRequest = useCallback((requestId, reason = "") => {
+      const request = normalizeServiceRequestsList(serviceRequests).find((item) => item.id === requestId);
+      if (!request) {
+        toast.push("Заявка не найдена");
+        return;
+      }
+      setServiceRequests((prev) =>
+        normalizeServiceRequestsList(prev).map((item) =>
+          item.id === requestId
+            ? normalizeServiceRequest({
+                ...item,
+                status: "declined",
+                declineReason: String(reason || "").trim(),
+                statusUpdatedAt: new Date().toISOString()
+              })
+            : item
+        )
+      );
+      toast.push("Заявка отклонена — клиент увидит статус в приложении");
+    }, [serviceRequests, toast]);
 
     const updateServiceRepairStatus = useCallback((orderId, status, completion = {}) => {
       const safeOrderId = String(orderId || "").trim();
@@ -3812,6 +3918,20 @@
       appointments: serviceScopedAppointments,
       sharedCenters: sharedServiceCenters
     });
+    // Заявки ИМЕННО этого центра: id заявки ссылается на карточку каталога,
+    // которая детерминированно строится из центра (service-<slug(center.id)>).
+    const serviceCatalogSelf = createCatalogServiceFromCenter(serviceCurrentCenter, {
+      clients: serviceScopedClients,
+      orders: serviceScopedOrders,
+      finance: serviceScopedFinance,
+      appointments: serviceScopedAppointments
+    });
+    const serviceScopedRequests = serviceCatalogSelf
+      ? normalizeServiceRequestsList(serviceRequests).filter(
+          (item) => String(item.serviceId) === String(serviceCatalogSelf.id)
+        )
+      : [];
+    const serviceNewRequestsCount = serviceScopedRequests.filter((item) => item.status === "new").length;
     const serviceRegistrationDraft = serviceRegistrationDraftState;
     const serviceNeedsRegistration =
       !serviceCurrentProfile.registrationCompleted ||
@@ -4052,6 +4172,7 @@
                 orders=${serviceScopedOrders}
                 finance=${serviceScopedFinance}
                 appointments=${serviceScopedAppointments}
+                newRequestsCount=${serviceNewRequestsCount}
               />`
             : html`<${getScreen('ServiceLoginScreen')}
                 onLogin=${loginServiceCrm}
@@ -4085,6 +4206,7 @@
           orders=${serviceScopedOrders}
           finance=${serviceScopedFinance}
           appointments=${serviceScopedAppointments}
+          newRequestsCount=${serviceNewRequestsCount}
         />`;
       } else if (normalized === "/service-crm/clients") {
         content = html`<${getScreen('ServiceClientsScreen')}
@@ -4100,6 +4222,14 @@
           center=${serviceCurrentCenter}
           orders=${serviceScopedOrders}
           onUpdateStatus=${updateServiceRepairStatus}
+        />`;
+      } else if (normalized === "/service-crm/requests") {
+        content = html`<${getScreen('ServiceRequestsScreen')}
+          currentUser=${serviceCurrentSession}
+          center=${serviceCurrentCenter}
+          requests=${serviceScopedRequests}
+          onAcceptRequest=${acceptServiceRequest}
+          onDeclineRequest=${declineServiceRequest}
         />`;
       } else if (normalized === "/service-crm/parts") {
         content = html`<${getScreen('ServiceInventoryScreen')}

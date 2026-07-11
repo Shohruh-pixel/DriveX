@@ -302,13 +302,17 @@
             </div>
 
             <div className="services-redesign-meta">
-              <span><${Icon} name="star" size=${11} /> ${service.smartRating || service.rating || "4.8"}</span>
-              <span>${service.reviews || "200+"} отзывов</span>
-              <span>${service.boxesCount || 3} бокса</span>
+              ${Number(service.reviews) > 0
+                ? html`<span><${Icon} name="star" size=${11} /> ${service.rating}</span>
+                    <span>${service.reviews} ${pluralize(Number(service.reviews), "отзыв", "отзыва", "отзывов")}</span>`
+                : html`<span>Новый сервис</span>`}
+              <span>${Number(service.boxesCount) || 1} ${pluralize(Number(service.boxesCount) || 1, "бокс", "бокса", "боксов")}</span>
             </div>
 
             <div className="services-redesign-card-foot">
-              <strong>от ${service.averagePrice || service.priceFrom || "250"} TJS</strong>
+              <strong>${service.averagePrice || service.priceFrom
+                ? `от ${service.averagePrice || service.priceFrom} TJS`
+                : "Цена по запросу"}</strong>
               <button
                 type="button"
                 onClick=${(event) => openServiceBooking(event, service.id)}
@@ -677,10 +681,27 @@
     `;
   }
 
-  function ServiceRequestStatusTimeline({ status = "accepted" }) {
+  function ServiceRequestStatusTimeline({ status = "new" }) {
+    const normalizedStatus = normalizeServiceRequestStatusId(status);
+
+    // Отклонённая заявка — вне линейного таймлайна: показываем явный статус.
+    if (normalizedStatus === "declined") {
+      return html`
+        <div
+          className="flex items-center gap-2 rounded-2xl px-4 py-3"
+          style=${{ background: "rgba(239, 68, 68, 0.12)", border: "1px solid rgba(239, 68, 68, 0.26)" }}
+        >
+          <span className="w-3 h-3 rounded-full flex-shrink-0" style=${{ background: "var(--drivex-danger)" }}></span>
+          <span className="text-sm font-semibold" style=${{ color: "var(--drivex-danger)" }}>
+            Сервис отклонил заявку — выберите другое время или сервис
+          </span>
+        </div>
+      `;
+    }
+
     const currentIndex = Math.max(
       0,
-      serviceRequestStatusOptions.findIndex((item) => item.id === normalizeServiceRequestStatusId(status))
+      serviceRequestStatusOptions.findIndex((item) => item.id === normalizedStatus)
     );
 
     return html`
@@ -3326,7 +3347,9 @@
                     ${service.name}
                   </p>
                   <p className="text-sm mt-2" style=${{ color: "var(--drivex-silver)", lineHeight: 1.7 }}>
-                    Сервис принял запись на ${formatRuDate(submittedRequest.day)} в ${submittedRequest.time}.
+                    ${normalizeServiceRequestStatusId(submittedRequest.status) === "accepted"
+                      ? `Сервис подтвердил запись на ${formatRuDate(submittedRequest.day)} в ${submittedRequest.time}.`
+                      : `Заявка на ${formatRuDate(submittedRequest.day)} в ${submittedRequest.time} отправлена — сервис подтвердит её в ближайшее время.`}
                   </p>
                   <p className="text-sm mt-2" style=${{ color: "var(--drivex-neon-cyan)" }}>
                     ${submittedRequest.clientName}${submittedRequest.carLabel ? ` • ${submittedRequest.carLabel}` : ""}
@@ -3347,7 +3370,7 @@
 
               <div className="glass-card rounded-3xl p-4 mt-4">
                 <p className="text-xs font-semibold tracking-[0.16em]" style=${{ color: "var(--drivex-silver)" }}>
-                  СТАТУС РЕМОНТА
+                  СТАТУС ЗАЯВКИ
                 </p>
                 <div className="mt-4">
                   <${ServiceRequestStatusTimeline} status=${submittedRequest.status} />
