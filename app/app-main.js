@@ -4021,6 +4021,13 @@
           orderChats=${orderChats}
           onUpdateOrderStatus=${updateSellerOrderStatus}
         />`;
+      } else if (normalized === "/seller/clients") {
+        // Вкладка «Клиенты» нижней навигации CRM — база формируется из заказов.
+        content = html`<${getScreen('SellerClientsScreen')}
+          currentUser=${sellerSession}
+          store=${sellerCurrentStore}
+          orders=${sellerScopedOrders}
+        />`;
       } else {
         content = html`<${getScreen('SellerNotFoundScreen')} currentUser=${sellerSession} store=${sellerCurrentStore} />`;
       }

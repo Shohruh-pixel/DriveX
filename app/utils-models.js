@@ -2725,6 +2725,34 @@
     };
   }
 
+  // База клиентов CRM: группировка заказов по телефону (или имени, если телефона
+  // нет). Экран «Клиенты» и счётчик на дашборде ждут { name, phone, ordersCount,
+  // totalAmount } — до этого функции не существовало и клиенты всегда были «0».
+  function buildSellerClientsFromOrders(orders) {
+    const safeOrders = Array.isArray(orders) ? orders : [];
+    const byKey = {};
+    for (const order of safeOrders) {
+      if (!order || order.status === "cancelled") continue;
+      const phoneDigits = String(order.customerPhone || "").replace(/\D/g, "");
+      const name = String(order.customerName || "").trim() || "Клиент DRIVEX";
+      const key = phoneDigits || name.toLowerCase();
+      const entry = byKey[key] || {
+        id: key,
+        name,
+        phone: order.customerPhone || "",
+        ordersCount: 0,
+        totalAmount: 0,
+        lastDate: ""
+      };
+      entry.ordersCount += 1;
+      entry.totalAmount += Number(order.amount) || 0;
+      if (!entry.phone && order.customerPhone) entry.phone = order.customerPhone;
+      if (String(order.date || "") > String(entry.lastDate || "")) entry.lastDate = order.date || "";
+      byKey[key] = entry;
+    }
+    return Object.values(byKey).sort((a, b) => String(b.lastDate).localeCompare(String(a.lastDate)));
+  }
+
   function createSellerNotifications({ setupState, products, orders }) {
     const notifications = [];
     const safeProducts = Array.isArray(products) ? products : [];
@@ -5252,6 +5280,7 @@
   try { if (typeof buildBuyerServiceNotifications !== 'undefined') window.DX['buildBuyerServiceNotifications'] = buildBuyerServiceNotifications; } catch(e) {}
   try { if (typeof buildMarketplaceRuntimeData !== 'undefined') window.DX['buildMarketplaceRuntimeData'] = buildMarketplaceRuntimeData; } catch(e) {}
   try { if (typeof buildSellerDashboardStats !== 'undefined') window.DX['buildSellerDashboardStats'] = buildSellerDashboardStats; } catch(e) {}
+  try { if (typeof buildSellerClientsFromOrders !== 'undefined') window.DX['buildSellerClientsFromOrders'] = buildSellerClientsFromOrders; } catch(e) {}
   try { if (typeof buildServiceBookingSlotOptions !== 'undefined') window.DX['buildServiceBookingSlotOptions'] = buildServiceBookingSlotOptions; } catch(e) {}
   try { if (typeof buildServiceDashboardStats !== 'undefined') window.DX['buildServiceDashboardStats'] = buildServiceDashboardStats; } catch(e) {}
   try { if (typeof buildServiceDirectoryData !== 'undefined') window.DX['buildServiceDirectoryData'] = buildServiceDirectoryData; } catch(e) {}
