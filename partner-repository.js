@@ -6,8 +6,19 @@
   function getSharedClient() {
     if (!supaEnabled) return null;
     if (window.__DRIVEX_SUPABASE_CLIENT__) return window.__DRIVEX_SUPABASE_CLIENT__;
+    // In-memory lock вместо navigator.locks — иначе зависший держатель лока
+    // в другой вкладке вешает все auth-операции навсегда (см. seller-backend).
+    if (!window.__DRIVEX_AUTH_LOCK__) {
+      const chains = {};
+      window.__DRIVEX_AUTH_LOCK__ = function (name, _acquireTimeout, fn) {
+        const prev = chains[name] || Promise.resolve();
+        const run = prev.then(() => fn(), () => fn());
+        chains[name] = run.then(() => {}, () => {});
+        return run;
+      };
+    }
     window.__DRIVEX_SUPABASE_CLIENT__ = window.supabase.createClient(supaCfg.url, supaCfg.anonKey, {
-      auth: { persistSession: true, autoRefreshToken: true, storageKey: "drivex-auth" }
+      auth: { persistSession: true, autoRefreshToken: true, storageKey: "drivex-auth", lock: window.__DRIVEX_AUTH_LOCK__ }
     });
     return window.__DRIVEX_SUPABASE_CLIENT__;
   }

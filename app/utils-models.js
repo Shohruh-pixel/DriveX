@@ -229,6 +229,20 @@
     };
   }
 
+  // ⛔ АНТИ-ЭХО: polling каждые 3.5с применяет снапшот к state с новой identity,
+  // после чего useEffect-ы «сохранения» отправляли ТЕ ЖЕ данные обратно на сервер
+  // (13 POST за цикл, бесконечно). Кешируем последнее известное содержимое по ключу:
+  // POST уходит только если данные реально изменились.
+  const _lastSharedSent = Object.create(null);
+
+  function _stableSharedSerialize(value) {
+    try {
+      return JSON.stringify(value === undefined ? null : value);
+    } catch {
+      return null; // не сериализуется — не кешируем, шлём как раньше
+    }
+  }
+
   async function fetchSharedAppState() {
     const response = await fetch("/api/app-state", {
       method: "GET",
@@ -237,10 +251,24 @@
     });
     if (!response.ok) throw new Error("App state load failed");
     const payload = await response.json();
-    return payload && typeof payload.state === "object" && payload.state ? payload.state : {};
+    const state = payload && typeof payload.state === "object" && payload.state ? payload.state : {};
+    // Запоминаем серверное содержимое: эффекты, эхо-сохраняющие применённый
+    // снапшот, увидят совпадение и не будут дублировать POST.
+    for (const [key, entry] of Object.entries(state)) {
+      const value = entry && typeof entry === "object" && Object.prototype.hasOwnProperty.call(entry, "value")
+        ? entry.value
+        : entry;
+      const s = _stableSharedSerialize(value);
+      if (s !== null) _lastSharedSent[key] = s;
+    }
+    return state;
   }
 
   async function saveSharedAppState(key, value) {
+    const serialized = _stableSharedSerialize(value);
+    if (serialized !== null && _lastSharedSent[key] === serialized) {
+      return {}; // содержимое не изменилось — POST не нужен
+    }
     const response = await fetch("/api/app-state", {
       method: "POST",
       headers: {
@@ -253,6 +281,9 @@
       const payload = await response.json().catch(() => ({}));
       throw new Error(payload?.error || "App state save failed");
     }
+    // Кеш обновляем ТОЛЬКО после успешной записи — иначе неудачный POST
+    // заблокировал бы повторную отправку тех же данных.
+    if (serialized !== null) _lastSharedSent[key] = serialized;
     return response.json().catch(() => ({}));
   }
 
@@ -281,6 +312,10 @@
         return (Array.isArray(data) ? data : []).reduce((acc, row) => {
           if (!row || typeof row.key !== "string") return acc;
           acc[row.key] = { value: row.value, updatedAt: row.updated_at || "" };
+          // Анти-эхо: применение этого значения к state не должно породить
+          // повторный upsert того же содержимого (см. saveBuyerAppState).
+          const s = _stableSharedSerialize(row.value);
+          if (s !== null) _lastBuyerSent[safeSession.id + "::" + row.key] = s;
           return acc;
         }, {});
       } catch (e) {
@@ -333,6 +368,10 @@
     return false;
   }
 
+  // Анти-эхо для облака покупателя: ключ — "<userId>::<key>", значение —
+  // последнее успешно отправленное/загруженное содержимое (JSON-строка).
+  const _lastBuyerSent = Object.create(null);
+
   async function saveBuyerAppState(session, key, value) {
     const safeSession = normalizeBuyerSession(session);
     const client = getSupabaseClient();
@@ -341,6 +380,14 @@
     // Убираем data URL перед сохранением в облако
     // Они хранятся только в localStorage (быстрый локальный кеш)
     const cloudValue = slimValueForCloud(value);
+
+    // Содержимое не изменилось с последней успешной записи/загрузки — не гоняем
+    // одинаковые upsert-ы в Supabase на каждый re-render.
+    const _cacheKey = safeSession.id + "::" + key;
+    const _serialized = _stableSharedSerialize(cloudValue);
+    if (_serialized !== null && _lastBuyerSent[_cacheKey] === _serialized) {
+      return true;
+    }
 
     // ⛔ ЗАЩИТА ОТ ПОТЕРИ ДАННЫХ: не перезаписываем облако ПУСТЫМ значением,
     // если по этому ключу там уже лежат НЕпустые данные. Пустое почти всегда
@@ -381,6 +428,8 @@
       { onConflict: "user_id,key" }
     );
     if (error) throw error;
+    // Кеш — только после успешной записи, чтобы сбой не блокировал повтор.
+    if (_serialized !== null) _lastBuyerSent[_cacheKey] = _serialized;
     return true;
   }
 

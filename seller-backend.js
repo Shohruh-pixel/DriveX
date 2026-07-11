@@ -62,6 +62,19 @@
     ]);
   }
 
+  // id авторизованного пользователя БЕЗ client.auth.getUser(): getUser — сетевой
+  // вызов GoTrue под Web Lock, который зависает навсегда (кнопка «Сохраняем…»
+  // висела вечно, хотя upsert уже прошёл). getSession читает токен локально из
+  // storage — мгновенно. Таймаут-страховка на случай залипшего Web Lock.
+  async function getAuthUserId(client) {
+    try {
+      const { data } = await withTimeout(client.auth.getSession(), 5000, "Таймаут чтения сессии");
+      return data?.session?.user?.id || null;
+    } catch (e) {
+      return null;
+    }
+  }
+
   function slugify(value, fallback = "item") {
     return (
       String(value || fallback)
@@ -250,11 +263,24 @@
     if (!window.supabase || typeof window.supabase.createClient !== "function") return null;
     // ВАЖНО: используем единый shared клиент чтобы избежать Lock "auth-token" conflicts
     if (window.__DRIVEX_SUPABASE_CLIENT__) return window.__DRIVEX_SUPABASE_CLIENT__;
+    // In-memory lock вместо navigator.locks (тот же, что в auth-phone/utils-models):
+    // navigator.locks общий на все вкладки — зависший держатель в другой вкладке
+    // вешал signInWithPassword/getSession НАВСЕГДА (кнопка «Входим…» не завершалась).
+    if (!window.__DRIVEX_AUTH_LOCK__) {
+      const chains = {};
+      window.__DRIVEX_AUTH_LOCK__ = function (name, _acquireTimeout, fn) {
+        const prev = chains[name] || Promise.resolve();
+        const run = prev.then(() => fn(), () => fn());
+        chains[name] = run.then(() => {}, () => {});
+        return run;
+      };
+    }
     window.__DRIVEX_SUPABASE_CLIENT__ = window.supabase.createClient(config.url, config.anonKey, {
       auth: {
         persistSession: true,
         autoRefreshToken: true,
-        storageKey: "drivex-auth"  // единый ключ для всех клиентов
+        storageKey: "drivex-auth",  // единый ключ для всех клиентов
+        lock: window.__DRIVEX_AUTH_LOCK__
       }
     });
     return window.__DRIVEX_SUPABASE_CLIENT__;
@@ -1352,8 +1378,17 @@
     const client = createSupabaseClient();
     if (!client) return buildLocalAppState();
 
-    const { data: authData } = await client.auth.getSession();
-    const session = authData?.session || null;
+    // getSession с таймаутом: залипший Web Lock в GoTrue подвешивал ВЕСЬ
+    // loadAppState навсегда — приложение оставалось на устаревшей localStorage-
+    // identity (показывало чужой магазин). Таймаут → считаем «нет сессии».
+    let session = null;
+    try {
+      const { data: authData } = await withTimeout(client.auth.getSession(), 5000, "Таймаут чтения сессии");
+      session = authData?.session || null;
+    } catch (e) {
+      console.warn("[seller-backend] getSession:", e && e.message);
+      session = null;
+    }
 
     const [{ data: storesRows }, { data: productsRows }] = await Promise.all([
       client.from("stores").select("*").eq("status", "active"),
@@ -1400,7 +1435,7 @@
         })()
       : null;
 
-    return {
+    const appState = {
       ...getStatus(),
       session: session?.user
         ? {
@@ -1417,6 +1452,45 @@
         products: catalogProductRows.map(mapProductRowToCatalog).filter(Boolean)
       }
     };
+    _lastSupabaseAppState = appState;
+    return appState;
+  }
+
+  // Последний удачный снапшот: страховка, когда полная перезагрузка состояния
+  // после записи упирается в медленный каталог (запрос шёл 25-30с — кнопка
+  // «Сохраняем…» висела всё это время, хотя сама запись давно прошла).
+  let _lastSupabaseAppState = null;
+
+  async function loadSupabaseAppStateBounded(ms, patchFn) {
+    try {
+      return await withTimeout(loadSupabaseAppState(), ms, "Таймаут обновления данных");
+    } catch (e) {
+      if (!_lastSupabaseAppState) throw e;
+      console.warn("[seller-backend] loadAppState медленный — отдаю кеш:", e && e.message);
+      const cached = _lastSupabaseAppState;
+      try {
+        return typeof patchFn === "function" ? (patchFn(cached) || cached) : cached;
+      } catch {
+        return cached;
+      }
+    }
+  }
+
+  // Вписывает только что сохранённый товар (DB-строка) в кешированный снапшот,
+  // чтобы UI не откатывал правку, пока полный рефреш не догонит.
+  function patchProductIntoAppState(appState, productRow) {
+    if (!appState || !productRow) return appState;
+    const mapped = mapProductRowToFrontend(productRow);
+    if (mapped && appState.seller && Array.isArray(appState.seller.products)) {
+      const rest = appState.seller.products.filter((p) => p && p.id !== mapped.id);
+      appState.seller = { ...appState.seller, products: [mapped, ...rest] };
+    }
+    const catalogMapped = typeof mapProductRowToCatalog === "function" ? mapProductRowToCatalog(productRow) : null;
+    if (catalogMapped && appState.catalog && Array.isArray(appState.catalog.products)) {
+      const rest = appState.catalog.products.filter((p) => p && p.id !== catalogMapped.id);
+      appState.catalog = { ...appState.catalog, products: [catalogMapped, ...rest] };
+    }
+    return appState;
   }
 
   async function registerSupabasePartner(payload) {
@@ -1532,7 +1606,8 @@
       password: String(payload.password || "")
     });
     if (error) throw error;
-    return loadSupabaseAppState();
+    // Ограничение по времени: медленный каталог не должен держать «Входим…» вечно.
+    return loadSupabaseAppStateBounded(25000);
   }
 
   async function resetSupabasePartnerPassword(payload) {
@@ -1577,15 +1652,14 @@
     if (!client) return logoutLocalPartner();
     await client.auth.signOut();
     emitSync("partner-logout");
-    return loadSupabaseAppState();
+    return loadSupabaseAppStateBounded(12000, (s) => ({ ...s, session: null, seller: null }));
   }
 
   async function saveSupabaseStore(payload) {
     const client = createSupabaseClient();
     if (!client) return saveLocalStore(payload);
 
-    const { data: authData } = await client.auth.getUser();
-    const userId = authData?.user?.id;
+    const userId = await getAuthUserId(client);
     if (!userId) throw new Error("Партнёр не авторизован");
 
     const { data: existingStore, error: storeLookupError } = await client
@@ -1623,15 +1697,14 @@
     });
 
     emitSync("store-save");
-    return loadSupabaseAppState();
+    return loadSupabaseAppStateBounded(12000);
   }
 
   async function saveSupabaseProduct(payload) {
     const client = createSupabaseClient();
     if (!client) return saveLocalProduct(payload);
 
-    const { data: authData } = await client.auth.getUser();
-    const userId = authData?.user?.id;
+    const userId = await getAuthUserId(client);
     if (!userId) throw new Error("Партнёр не авторизован");
     const { data: storeRow } = await client.from("stores").select("*").eq("owner_user_id", userId).maybeSingle();
     if (!storeRow) throw new Error("Магазин не найден");
@@ -1647,25 +1720,30 @@
     const { error } = await client.from("products").upsert(productRow);
     if (error) throw error;
 
-    await client.from("seller_notifications").insert({
-      store_id: storeRow.id,
-      type: Number(productRow.stock || 0) > 0 && Number(productRow.stock || 0) <= 3 ? "product_low_stock" : "product_published",
-      title: payload.id ? "Карточка товара обновлена" : "Новый товар опубликован",
-      message:
-        Number(productRow.stock || 0) > 0 && Number(productRow.stock || 0) <= 3
-          ? `${productRow.title} • осталось ${productRow.stock} шт.`
-          : productRow.title
-    });
+    // Уведомление — best-effort с таймаутом: товар уже сохранён, зависший insert
+    // не должен держать кнопку «Сохраняем…».
+    try {
+      await withTimeout(client.from("seller_notifications").insert({
+        store_id: storeRow.id,
+        type: Number(productRow.stock || 0) > 0 && Number(productRow.stock || 0) <= 3 ? "product_low_stock" : "product_published",
+        title: payload.id ? "Карточка товара обновлена" : "Новый товар опубликован",
+        message:
+          Number(productRow.stock || 0) > 0 && Number(productRow.stock || 0) <= 3
+            ? `${productRow.title} • осталось ${productRow.stock} шт.`
+            : productRow.title
+      }), 6000, "notification timeout");
+    } catch (e) {
+      console.warn("[seller-backend] product notification:", e && e.message);
+    }
 
     emitSync("product-save");
-    return loadSupabaseAppState();
+    return loadSupabaseAppStateBounded(12000, (s) => patchProductIntoAppState(s, productRow));
   }
 
   async function deleteSupabaseProduct(productId) {
     const client = createSupabaseClient();
     if (!client) return deleteLocalProduct(productId);
-    const { data: authData } = await client.auth.getUser();
-    const userId = authData?.user?.id;
+    const userId = await getAuthUserId(client);
     if (!userId) throw new Error("Партнёр не авторизован");
     const { data: storeRow } = await client.from("stores").select("*").eq("owner_user_id", userId).maybeSingle();
     if (!storeRow) throw new Error("Магазин не найден");
@@ -1690,14 +1768,21 @@
     }
 
     emitSync("product-delete");
-    return loadSupabaseAppState();
+    return loadSupabaseAppStateBounded(12000, (s) => {
+      if (s.seller && Array.isArray(s.seller.products)) {
+        s.seller = { ...s.seller, products: s.seller.products.filter((p) => p && p.id !== productId) };
+      }
+      if (s.catalog && Array.isArray(s.catalog.products)) {
+        s.catalog = { ...s.catalog, products: s.catalog.products.filter((p) => p && p.id !== productId) };
+      }
+      return s;
+    });
   }
 
   async function updateSupabaseOrderStatus(payload) {
     const client = createSupabaseClient();
     if (!client) return updateLocalOrderStatus(payload);
-    const { data: authData } = await client.auth.getUser();
-    const userId = authData?.user?.id;
+    const userId = await getAuthUserId(client);
     if (!userId) throw new Error("Партнёр не авторизован");
     const { data: storeRow } = await client.from("stores").select("*").eq("owner_user_id", userId).maybeSingle();
     if (!storeRow) throw new Error("Магазин не найден");
@@ -1728,7 +1813,15 @@
     });
 
     emitSync("order-status");
-    return loadSupabaseAppState();
+    return loadSupabaseAppStateBounded(12000, (s) => {
+      if (s.seller && Array.isArray(s.seller.orders)) {
+        s.seller = {
+          ...s.seller,
+          orders: s.seller.orders.map((o) => (o && o.id === payload.orderId ? { ...o, status: payload.status } : o))
+        };
+      }
+      return s;
+    });
   }
 
   async function recordSupabaseMarketplaceCheckout(payload) {
@@ -1822,6 +1915,9 @@
       createdOrders.push({ storeId: order.storeId, code: order.id || null, id: createdOrderId });
 
       const orderItems = (order.items || []).map((item) => ({
+        // id: колонка uuid NOT NULL без DEFAULT — без явного id вставка падает
+        // с 23502 и позиции заказа терялись (CRM выживала на JSONB-фолбэке orders.items).
+        id: makeUuid(),
         order_id: createdOrderId,
         // product_id — uuid-FK на products. Рантайм-id каталога ("628299") не uuid,
         // поэтому пишем null (название всё равно сохраняется в product_title).
