@@ -4272,6 +4272,18 @@
                   ? `Войдите, чтобы открыть кабинет сервиса ${serviceCurrentCenter.name}.`
                   : "Войдите в свой сервисный кабинет."}
               />`;
+      } else if (normalized === "/service-crm/register") {
+        // Регистрация доступна ВСЕГДА — даже если на устройстве уже есть
+        // кабинет. Раньше маршрут проваливался в экран входа, и кнопка
+        // «Регистрация» на логине выглядела неработающей.
+        content = serviceRegistrationDraft
+          ? html`<${getScreen('ServiceRegistrationScreen')}
+              currentUser=${serviceRegistrationDraft.session}
+              profile=${serviceRegistrationDraft.profile}
+              center=${serviceRegistrationDraft.center}
+              onRegister=${registerServiceCrm}
+            />`
+          : html`<${getScreen('ServicePartnerRegisterIntroScreen')} onStart=${beginServiceRegistration} />`;
       } else if (serviceNeedsRegistration) {
         content = serviceRegistrationDraft
           ? html`<${getScreen('ServiceRegistrationScreen')}

@@ -78,6 +78,12 @@
           <path d="M20 21a8 8 0 0 0-16 0"></path>
           <circle cx="12" cy="8" r="4"></circle>
         </svg>`;
+      case "logout":
+        return html`<svg ...${commonProps} className=${className} style=${style}>
+          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+          <path d="M16 17l5-5-5-5"></path>
+          <path d="M21 12H9"></path>
+        </svg>`;
       case "smile":
         return html`<svg ...${commonProps} className=${className} style=${style}>
           <circle cx="12" cy="12" r="9"></circle>

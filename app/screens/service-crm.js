@@ -75,6 +75,9 @@
       ...safeCenter,
       accent: "var(--drivex-electric-blue)"
     };
+    // Выход — только через подтверждение: случайный тап не должен выкидывать
+    // владельца из кабинета.
+    const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
 
     return html`
       <div className="scx-shell">
@@ -97,12 +100,48 @@
                 <${Icon} name="layers" size=${15} />
               </a>
               ${showNavigation
-                ? html`<a href="#/service-crm/login?logout=1" className="scx-chip-btn is-danger" aria-label="Выйти">
-                    <${Icon} name="close" size=${15} />
-                  </a>`
+                ? html`<button
+                    type="button"
+                    className="scx-chip-btn is-danger"
+                    aria-label="Выйти из кабинета"
+                    onClick=${() => setLogoutConfirmOpen(true)}
+                  >
+                    <${Icon} name="logout" size=${15} />
+                  </button>`
                 : null}
             </div>
           </div>
+
+          ${logoutConfirmOpen
+            ? html`<div className="scx-modal-backdrop" onClick=${() => setLogoutConfirmOpen(false)}>
+                <div className="scx-modal" onClick=${(event) => event.stopPropagation()}>
+                  <p className="scx-modal-title">Выйти из кабинета?</p>
+                  <p className="scx-modal-text">
+                    Данные сервиса сохранены. Для входа понадобятся email и пароль владельца.
+                  </p>
+                  <div className="scx-modal-actions">
+                    <button
+                      type="button"
+                      className="scx-modal-btn is-danger"
+                      onClick=${() => {
+                        setLogoutConfirmOpen(false);
+                        navigateToHash("/service-crm/login?logout=1");
+                      }}
+                    >
+                      <${Icon} name="logout" size=${15} />
+                      Выйти
+                    </button>
+                    <button
+                      type="button"
+                      className="scx-modal-btn"
+                      onClick=${() => setLogoutConfirmOpen(false)}
+                    >
+                      Остаться
+                    </button>
+                  </div>
+                </div>
+              </div>`
+            : null}
 
           ${showNavigation
             ? html`<nav className="scx-nav no-scrollbar" aria-label="Разделы CRM">
@@ -272,6 +311,7 @@
     const toast = useToast();
     const [identifier, setIdentifier] = useState("");
     const [password, setPassword] = useState("");
+    const [showPassword, setShowPassword] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [formError, setFormError] = useState("");
 
@@ -310,113 +350,66 @@
     return html`
       <${ServiceCrmLayout}
         title="Вход в Service CRM"
-        subtitle="Войдите по email или телефону и продолжайте работу с клиентами, ремонтом, записью и финансами."
+        subtitle=${message || "Email или телефон владельца — и вы в кабинете"}
         activeItem="dashboard"
         currentUser=${createDefaultServiceSession()}
         center=${createServiceCenterSeed("service-login")}
         showCenterSummary=${false}
         showNavigation=${false}
       >
-        <div className="glass-card-light rounded-[32px] p-6 text-center">
-          <div
-            className="mx-auto w-[72px] h-[72px] rounded-[22px] flex items-center justify-center"
-            style=${{
-              background: "linear-gradient(135deg, rgba(14, 165, 233, 0.94) 0%, rgba(6, 182, 212, 0.96) 100%)",
-              color: "var(--drivex-white)",
-              boxShadow: "0 18px 36px rgba(14, 165, 233, 0.24)"
-            }}
-          >
-            <${Icon} name="wrench" size=${32} />
+        <form className="scx-login-card" onSubmit=${handleSubmit}>
+          <div className="scx-login-logo">
+            <${Icon} name="wrench" size=${26} />
           </div>
 
-          <p className="text-xs font-semibold mt-4 tracking-[0.22em]" style=${{ color: "var(--drivex-neon-cyan)" }}>
-            DRIVEX SERVICE LOGIN
-          </p>
-          <h2 className="text-[34px] font-bold mt-3" style=${{ color: "var(--drivex-white)", lineHeight: "1.1" }}>
-            Добро пожаловать
-          </h2>
-          <p className="text-sm mt-3" style=${{ color: "var(--drivex-silver)" }}>
-            Используйте email или телефон владельца и пароль, который задали при регистрации сервиса.
-          </p>
-        </div>
-
-        ${message
-          ? html`<div className="glass-card-light rounded-3xl p-4">
-              <p className="text-sm" style=${{ color: "var(--drivex-silver)" }}>
-                ${message}
-              </p>
-            </div>`
-          : null}
-
-        <form className="space-y-4" onSubmit=${handleSubmit}>
-          <div className="glass-card-light rounded-3xl p-5">
-            <div className="space-y-4">
-              <${SellerField} label="Email или телефон">
-                <${SellerInput}
-                  type="text"
-                  placeholder="Например: service@drivex.app или +992..."
-                  value=${identifier}
-                  onInput=${(e) => {
-                    setFormError("");
-                    setIdentifier(e.target.value);
-                  }}
-                />
-              </${SellerField}>
-
-              <${SellerField} label="Пароль">
-                <${SellerInput}
-                  type="password"
-                  placeholder="Ваш пароль"
-                  value=${password}
-                  onInput=${(e) => {
-                    setFormError("");
-                    setPassword(e.target.value);
-                  }}
-                />
-              </${SellerField}>
-            </div>
-
-            ${formError
-              ? html`<div className="glass-card rounded-2xl p-4 mt-4">
-                  <p className="text-sm" style=${{ color: "var(--drivex-warning)" }}>
-                    ${formError}
-                  </p>
-                </div>`
-              : null}
-
-            <button
-              type="submit"
-              className="w-full mt-5 py-4 rounded-2xl text-sm font-bold dx-btn"
-              disabled=${submitting}
-            >
-              ${submitting ? "Входим..." : "Войти в CRM"}
-            </button>
-          </div>
-        </form>
-
-        <div className="glass-card-light rounded-3xl p-5">
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            <div>
-              <p className="font-semibold" style=${{ color: "var(--drivex-white)" }}>
-                Ещё не зарегистрировали сервис?
-              </p>
-              <p className="text-sm mt-1" style=${{ color: "var(--drivex-silver)" }}>
-                Сначала создайте сервис, потом входите в кабинет по своим данным.
-              </p>
-            </div>
-            <button
-              type="button"
-              className="px-4 py-3 rounded-2xl text-sm font-semibold"
-              style=${{
-                background: "rgba(6, 182, 212, 0.16)",
-                color: "var(--drivex-neon-cyan)"
+          <${SellerField} label="Email или телефон">
+            <${SellerInput}
+              type="text"
+              placeholder="service@mail.com или +992…"
+              value=${identifier}
+              onInput=${(e) => {
+                setFormError("");
+                setIdentifier(e.target.value);
               }}
-              onClick=${() => onGoRegister && onGoRegister()}
-            >
-              Регистрация
+            />
+          </${SellerField}>
+
+          <${SellerField} label="Пароль">
+            <div className="scx-pass-wrap">
+              <${SellerInput}
+                type=${showPassword ? "text" : "password"}
+                placeholder="Ваш пароль"
+                value=${password}
+                onInput=${(e) => {
+                  setFormError("");
+                  setPassword(e.target.value);
+                }}
+              />
+              <button
+                type="button"
+                className="scx-pass-toggle"
+                onClick=${() => setShowPassword((v) => !v)}
+              >
+                ${showPassword ? "Скрыть" : "Показать"}
+              </button>
+            </div>
+          </${SellerField}>
+
+          ${formError
+            ? html`<p className="scx-form-error">${formError}</p>`
+            : null}
+
+          <button type="submit" className="scx-login-submit" disabled=${submitting}>
+            ${submitting ? "Входим…" : "Войти в CRM"}
+          </button>
+
+          <p className="scx-login-alt">
+            Нет сервиса?
+            <button type="button" onClick=${() => onGoRegister && onGoRegister()}>
+              Зарегистрировать
             </button>
-          </div>
-        </div>
+          </p>
+        </form>
       </${ServiceCrmLayout}>
     `;
   }
