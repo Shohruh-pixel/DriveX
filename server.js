@@ -737,47 +737,12 @@ async function handleServiceCentersRoute(req, res) {
     withoutDuplicate.unshift(center);
     writeServiceCenters(withoutDuplicate.slice(0, 300));
 
-    // Зеркалим центр в Supabase service_centers (прод-хранилище каталога):
-    // локальный реестр отвечает за этот инстанс, облако делает сервис видимым
-    // всем клиентам через supabase-data.loadServiceCenters. Best-effort.
-    // id в Supabase — uuid: строим детерминированный uuid из слага, чтобы
-    // повторная регистрация обновляла ту же строку.
-    const centerUuid = (() => {
-      const hash = crypto.createHash("sha1").update(`drivex-service:${center.id}`).digest("hex");
-      return [
-        hash.slice(0, 8),
-        hash.slice(8, 12),
-        "5" + hash.slice(13, 16),
-        ((parseInt(hash.slice(16, 17), 16) & 0x3) | 0x8).toString(16) + hash.slice(17, 20),
-        hash.slice(20, 32)
-      ].join("-");
-    })();
-    supabaseAdminRequest(
-      "POST",
-      "/rest/v1/service_centers?on_conflict=id",
-      {
-        id: centerUuid,
-        name: center.name,
-        category: center.serviceType,
-        city: center.city,
-        address: center.address,
-        phones: center.phone ? [center.phone] : [],
-        working_hours: center.workingHours,
-        boxes_count: center.boxesCount,
-        description: center.description,
-        logo_url: center.logo || "",
-        photos: Array.isArray(center.gallery) ? center.gallery.slice(0, 6) : [],
-        rating: 0,
-        reviews_count: 0,
-        status: "active",
-        updated_at: new Date().toISOString()
-      },
-      { Prefer: "resolution=merge-duplicates" }
-    ).then((result) => {
-      if (result && result.status >= 400) {
-        console.warn("[service-centers] Supabase upsert:", result.status, JSON.stringify(result.data).slice(0, 160));
-      }
-    }).catch(() => {});
+    // ⛔ Зеркалирование в Supabase service_centers УБРАНО: id там — uuid,
+    // синтезированный отдельно от локального слага (center.id), поэтому
+    // приложение видело ОДИН сервис ДВАЖДЫ в каталоге (карточка "ТОП" из
+    // локального /api/service-centers + карточка "СТО" из Supabase — с
+    // разными id, dedupeServicesById их не склеивал). Локальный реестр —
+    // единственный источник для CRM-центров этого инстанса.
 
     sendJson(res, 201, { center });
   } catch (error) {
