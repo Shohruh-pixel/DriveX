@@ -306,6 +306,40 @@ function cleanImage(value) {
   return "";
 }
 
+function cleanServicePriceList(value) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      const title = cleanString(item?.title, 80);
+      if (!title) return null;
+      return {
+        id: cleanString(item?.id, 60) || `service-price-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+        title,
+        price: Math.max(0, Math.floor(Number(item?.price) || 0)),
+        durationMinutes: Math.max(0, Math.floor(Number(item?.durationMinutes ?? item?.duration) || 0))
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 40);
+}
+
+function cleanServiceMastersList(value) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      const name = cleanString(item?.name, 60);
+      if (!name) return null;
+      return {
+        id: cleanString(item?.id, 60) || `service-master-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+        name,
+        specialty: cleanString(item?.specialty, 80),
+        experience: cleanString(item?.experience, 40)
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 12);
+}
+
 function slugifyServerText(value, fallback = "service") {
   const raw = cleanString(value, 140)
     .toLowerCase()
@@ -436,6 +470,8 @@ function normalizeServiceCenter(input) {
     coverImage: cleanImage(source.coverImage || source.heroImage || source.image),
     gallery: cleanPhotoArray(source.gallery || source.photos || source.workPhotos),
     videoUrl: cleanString(source.videoUrl || source.video_url || source.video, 300),
+    priceList: cleanServicePriceList(source.priceList || source.price_list),
+    masters: cleanServiceMastersList(source.masters),
     registrationCompleted: true,
     status: cleanString(source.status || "active", 40),
     verified: true,

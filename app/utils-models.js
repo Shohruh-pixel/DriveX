@@ -3051,6 +3051,44 @@
     return "";
   }
 
+  // Прайс-лист сервиса: владелец добавляет/редактирует/удаляет позиции в CRM
+  // (Настройки → «Услуги и цены»). Раньше клиент видел фиксированные 4
+  // заглушки по категории — эти позиции реальные, с ценой и длительностью.
+  function normalizeServicePriceItem(value) {
+    const source = value && typeof value === "object" ? value : {};
+    const title = typeof source.title === "string" ? source.title.trim() : "";
+    if (!title) return null;
+    return {
+      id: typeof source.id === "string" && source.id.trim() ? source.id.trim() : genId("service-price"),
+      title: title.slice(0, 80),
+      price: Math.max(0, Math.floor(Number(source.price) || 0)),
+      durationMinutes: Math.max(0, Math.floor(Number(source.durationMinutes ?? source.duration) || 0))
+    };
+  }
+
+  function normalizeServicePriceList(list) {
+    return (Array.isArray(list) ? list : []).map(normalizeServicePriceItem).filter(Boolean).slice(0, 40);
+  }
+
+  // Мастера сервиса: тоже управляются владельцем в CRM. Раньше на карточке
+  // сервиса ВСЕГДА показывался один выдуманный «Главный мастер / CRM owner» —
+  // теперь список пуст, пока владелец сам не добавит реальных сотрудников.
+  function normalizeServiceMasterEntry(value) {
+    const source = value && typeof value === "object" ? value : {};
+    const name = typeof source.name === "string" ? source.name.trim() : "";
+    if (!name) return null;
+    return {
+      id: typeof source.id === "string" && source.id.trim() ? source.id.trim() : genId("service-master"),
+      name: name.slice(0, 60),
+      specialty: typeof source.specialty === "string" ? source.specialty.trim().slice(0, 80) : "",
+      experience: typeof source.experience === "string" ? source.experience.trim().slice(0, 40) : ""
+    };
+  }
+
+  function normalizeServiceMastersList(list) {
+    return (Array.isArray(list) ? list : []).map(normalizeServiceMasterEntry).filter(Boolean).slice(0, 12);
+  }
+
   function normalizeServiceCenter(value, fallbackCenterId = servicePrimaryCenterId) {
     const fallback = createServiceCenterSeed(fallbackCenterId);
     const source = value && typeof value === "object" ? value : {};
@@ -3115,7 +3153,11 @@
           ? source.ownerUserId.trim()
           : typeof source.owner_user_id === "string" && source.owner_user_id.trim()
             ? source.owner_user_id.trim()
-            : ""
+            : "",
+      // Услуги с ценами и мастера — управляются владельцем в CRM
+      // (Настройки → «Услуги и цены» / «Мастера»).
+      priceList: normalizeServicePriceList(source.priceList || source.price_list),
+      masters: normalizeServiceMastersList(source.masters)
     };
   }
 
@@ -3137,7 +3179,9 @@
       logo: normalized.logo,
       coverImage: normalized.coverImage,
       gallery: [...normalized.gallery],
-      videoUrl: normalized.videoUrl
+      videoUrl: normalized.videoUrl,
+      priceList: [...normalized.priceList],
+      masters: [...normalized.masters]
     };
   }
 
@@ -4371,15 +4415,11 @@
       gallery: realGallery,
       videoPoster: videoUrl ? primaryImage : "",
       videoUrl,
-      masters: [
-        {
-          id: `${serviceId}-master-1`,
-          name: "Главный мастер",
-          role: "Сервис команда",
-          experience: "CRM owner",
-          specialty: safeCenter.serviceType || "Работы сервиса"
-        }
-      ],
+      // Реальные мастера и прайс — из CRM (Настройки). Раньше здесь всегда
+      // подставлялся один выдуманный «Главный мастер / CRM owner»; пустой
+      // список — это честно, пока владелец сам не заполнил команду.
+      masters: safeCenter.masters,
+      priceList: safeCenter.priceList,
       isRegisteredCenter: true
     }, { averageRepairMinutes });
   }
@@ -5538,6 +5578,10 @@
   try { if (typeof normalizeServiceImageAsset !== 'undefined') window.DX['normalizeServiceImageAsset'] = normalizeServiceImageAsset; } catch(e) {}
   try { if (typeof normalizeServiceInventoryItem !== 'undefined') window.DX['normalizeServiceInventoryItem'] = normalizeServiceInventoryItem; } catch(e) {}
   try { if (typeof normalizeServiceInventoryList !== 'undefined') window.DX['normalizeServiceInventoryList'] = normalizeServiceInventoryList; } catch(e) {}
+  try { if (typeof normalizeServiceMasterEntry !== 'undefined') window.DX['normalizeServiceMasterEntry'] = normalizeServiceMasterEntry; } catch(e) {}
+  try { if (typeof normalizeServiceMastersList !== 'undefined') window.DX['normalizeServiceMastersList'] = normalizeServiceMastersList; } catch(e) {}
+  try { if (typeof normalizeServicePriceItem !== 'undefined') window.DX['normalizeServicePriceItem'] = normalizeServicePriceItem; } catch(e) {}
+  try { if (typeof normalizeServicePriceList !== 'undefined') window.DX['normalizeServicePriceList'] = normalizeServicePriceList; } catch(e) {}
   try { if (typeof normalizeServiceProfile !== 'undefined') window.DX['normalizeServiceProfile'] = normalizeServiceProfile; } catch(e) {}
   try { if (typeof normalizeServiceRepairOrder !== 'undefined') window.DX['normalizeServiceRepairOrder'] = normalizeServiceRepairOrder; } catch(e) {}
   try { if (typeof normalizeServiceRepairOrdersList !== 'undefined') window.DX['normalizeServiceRepairOrdersList'] = normalizeServiceRepairOrdersList; } catch(e) {}

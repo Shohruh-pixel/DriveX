@@ -2492,6 +2492,68 @@
     const [submitting, setSubmitting] = useState(false);
     const centerSyncToken = useMemo(() => JSON.stringify(createServiceCenterFormState(center)), [center]);
 
+    // Черновики для добавления новой услуги / нового мастера — сама услуга
+    // и сам мастер живут в form.priceList / form.masters (сохраняются вместе
+    // с остальной карточкой сервиса по кнопке «Сохранить настройки»).
+    const [priceDraft, setPriceDraft] = useState({ title: "", price: "", durationMinutes: "" });
+    const [masterDraft, setMasterDraft] = useState({ name: "", specialty: "", experience: "" });
+
+    const addPriceItem = useCallback(() => {
+      const title = String(priceDraft.title || "").trim();
+      if (!title) {
+        toast.push("Введите название услуги");
+        return;
+      }
+      setForm((prev) => ({
+        ...prev,
+        priceList: [
+          ...normalizeServicePriceList(prev.priceList),
+          {
+            id: genId("service-price"),
+            title,
+            price: Math.max(0, Math.floor(Number(priceDraft.price) || 0)),
+            durationMinutes: Math.max(0, Math.floor(Number(priceDraft.durationMinutes) || 0))
+          }
+        ]
+      }));
+      setPriceDraft({ title: "", price: "", durationMinutes: "" });
+    }, [priceDraft, toast]);
+
+    const removePriceItem = useCallback((id) => {
+      setForm((prev) => ({
+        ...prev,
+        priceList: normalizeServicePriceList(prev.priceList).filter((item) => item.id !== id)
+      }));
+    }, []);
+
+    const addMaster = useCallback(() => {
+      const name = String(masterDraft.name || "").trim();
+      if (!name) {
+        toast.push("Введите имя мастера");
+        return;
+      }
+      setForm((prev) => ({
+        ...prev,
+        masters: [
+          ...normalizeServiceMastersList(prev.masters),
+          {
+            id: genId("service-master"),
+            name,
+            specialty: String(masterDraft.specialty || "").trim(),
+            experience: String(masterDraft.experience || "").trim()
+          }
+        ]
+      }));
+      setMasterDraft({ name: "", specialty: "", experience: "" });
+    }, [masterDraft, toast]);
+
+    const removeMaster = useCallback((id) => {
+      setForm((prev) => ({
+        ...prev,
+        masters: normalizeServiceMastersList(prev.masters).filter((item) => item.id !== id)
+      }));
+    }, []);
+
     useEffect(() => {
       try {
         setForm(JSON.parse(centerSyncToken));
@@ -2949,6 +3011,169 @@
                       Пока нет фото работ. Добавьте несколько кадров, и они появятся в карточке сервиса вместо demo-галереи.
                     </p>
                   </div>`}
+            </div>
+          </div>
+
+          <div className="glass-card-light rounded-3xl p-5">
+            <h2 className="text-lg font-bold" style=${{ color: "var(--drivex-white)" }}>
+              Услуги и цены
+            </h2>
+            <p className="text-sm mt-1" style=${{ color: "var(--drivex-silver)" }}>
+              Список появится в карточке сервиса. Без цены клиент увидит «цена по запросу».
+            </p>
+
+            ${form.priceList.length
+              ? html`<div className="space-y-2 mt-4">
+                  ${form.priceList.map((item) => html`
+                    <div
+                      key=${item.id}
+                      className="rounded-2xl p-3 flex items-center gap-3"
+                      style=${{ background: "rgba(255, 255, 255, 0.035)", border: "1px solid rgba(255, 255, 255, 0.05)" }}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="font-semibold truncate" style=${{ color: "var(--drivex-white)" }}>
+                          ${item.title}
+                        </p>
+                        <p className="text-xs mt-1" style=${{ color: "var(--drivex-silver)" }}>
+                          ${[
+                            item.price > 0 ? formatTjsPrice(item.price) : "цена по запросу",
+                            item.durationMinutes > 0 ? `${item.durationMinutes} мин` : ""
+                          ].filter(Boolean).join(" • ")}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+                        style=${{ background: "rgba(239, 68, 68, 0.12)", color: "var(--drivex-danger)" }}
+                        onClick=${() => removePriceItem(item.id)}
+                        aria-label=${`Удалить «${item.title}»`}
+                      >
+                        <${Icon} name="close" size=${15} />
+                      </button>
+                    </div>
+                  `)}
+                </div>`
+              : html`<p className="text-sm mt-4" style=${{ color: "var(--drivex-light-silver)" }}>
+                  Пока нет ни одной услуги — добавьте первую ниже.
+                </p>`}
+
+            <div className="rounded-2xl p-3 mt-4 space-y-3" style=${{ background: "rgba(255, 255, 255, 0.03)", border: "1px dashed rgba(148, 163, 184, 0.22)" }}>
+              <${SellerField} label="Название услуги">
+                <${SellerInput}
+                  type="text"
+                  placeholder="Например: Замена масла"
+                  value=${priceDraft.title}
+                  onInput=${(e) => setPriceDraft((prev) => ({ ...prev, title: e.target.value }))}
+                />
+              </${SellerField}>
+              <div className="grid grid-cols-2 gap-3">
+                <${SellerField} label="Цена, TJS" note="необяз.">
+                  <${SellerInput}
+                    type="number"
+                    inputMode="numeric"
+                    min="0"
+                    placeholder="0"
+                    value=${priceDraft.price}
+                    onInput=${(e) => setPriceDraft((prev) => ({ ...prev, price: e.target.value }))}
+                  />
+                </${SellerField}>
+                <${SellerField} label="Минут" note="необяз.">
+                  <${SellerInput}
+                    type="number"
+                    inputMode="numeric"
+                    min="0"
+                    placeholder="0"
+                    value=${priceDraft.durationMinutes}
+                    onInput=${(e) => setPriceDraft((prev) => ({ ...prev, durationMinutes: e.target.value }))}
+                  />
+                </${SellerField}>
+              </div>
+              <button
+                type="button"
+                className="w-full py-3 rounded-xl text-sm font-semibold"
+                style=${{ background: "rgba(6, 182, 212, 0.16)", color: "var(--drivex-neon-cyan)" }}
+                onClick=${addPriceItem}
+              >
+                + Добавить услугу
+              </button>
+            </div>
+          </div>
+
+          <div className="glass-card-light rounded-3xl p-5">
+            <h2 className="text-lg font-bold" style=${{ color: "var(--drivex-white)" }}>
+              Мастера
+            </h2>
+            <p className="text-sm mt-1" style=${{ color: "var(--drivex-silver)" }}>
+              Команда, которую увидят клиенты в карточке сервиса.
+            </p>
+
+            ${form.masters.length
+              ? html`<div className="space-y-2 mt-4">
+                  ${form.masters.map((master) => html`
+                    <div
+                      key=${master.id}
+                      className="rounded-2xl p-3 flex items-center gap-3"
+                      style=${{ background: "rgba(255, 255, 255, 0.035)", border: "1px solid rgba(255, 255, 255, 0.05)" }}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="font-semibold truncate" style=${{ color: "var(--drivex-white)" }}>
+                          ${master.name}
+                        </p>
+                        <p className="text-xs mt-1" style=${{ color: "var(--drivex-silver)" }}>
+                          ${[master.specialty, master.experience].filter(Boolean).join(" • ") || "Без описания"}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+                        style=${{ background: "rgba(239, 68, 68, 0.12)", color: "var(--drivex-danger)" }}
+                        onClick=${() => removeMaster(master.id)}
+                        aria-label=${`Удалить «${master.name}»`}
+                      >
+                        <${Icon} name="close" size=${15} />
+                      </button>
+                    </div>
+                  `)}
+                </div>`
+              : html`<p className="text-sm mt-4" style=${{ color: "var(--drivex-light-silver)" }}>
+                  Пока никого не добавили — команда не будет показана клиентам.
+                </p>`}
+
+            <div className="rounded-2xl p-3 mt-4 space-y-3" style=${{ background: "rgba(255, 255, 255, 0.03)", border: "1px dashed rgba(148, 163, 184, 0.22)" }}>
+              <${SellerField} label="Имя мастера">
+                <${SellerInput}
+                  type="text"
+                  placeholder="Например: Фарход Азимов"
+                  value=${masterDraft.name}
+                  onInput=${(e) => setMasterDraft((prev) => ({ ...prev, name: e.target.value }))}
+                />
+              </${SellerField}>
+              <div className="grid grid-cols-2 gap-3">
+                <${SellerField} label="Специализация" note="необяз.">
+                  <${SellerInput}
+                    type="text"
+                    placeholder="Ходовая, тормоза"
+                    value=${masterDraft.specialty}
+                    onInput=${(e) => setMasterDraft((prev) => ({ ...prev, specialty: e.target.value }))}
+                  />
+                </${SellerField}>
+                <${SellerField} label="Опыт / роль" note="необяз.">
+                  <${SellerInput}
+                    type="text"
+                    placeholder="9 лет"
+                    value=${masterDraft.experience}
+                    onInput=${(e) => setMasterDraft((prev) => ({ ...prev, experience: e.target.value }))}
+                  />
+                </${SellerField}>
+              </div>
+              <button
+                type="button"
+                className="w-full py-3 rounded-xl text-sm font-semibold"
+                style=${{ background: "rgba(6, 182, 212, 0.16)", color: "var(--drivex-neon-cyan)" }}
+                onClick=${addMaster}
+              >
+                + Добавить мастера
+              </button>
             </div>
           </div>
 

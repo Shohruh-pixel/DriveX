@@ -113,32 +113,38 @@
         color: "var(--drivex-success)"
       }
     ];
-    // Типовые работы категории — подсказки для записи; цены сервис называет сам.
-    const servicesList = (() => {
-      const typeLabel = `${service.type || ""} ${service.category || ""}`.toLowerCase();
-      if (typeLabel.includes("детейл")) {
-        return [
-          { id: "wash", title: "Комплексная мойка" },
-          { id: "salon", title: "Химчистка салона" },
-          { id: "polish", title: "Полировка кузова" },
-          { id: "coat", title: "Защитное покрытие" }
-        ];
-      }
-      if (typeLabel.includes("шин")) {
-        return [
-          { id: "tires", title: "Комплект шиномонтажа" },
-          { id: "balance", title: "Балансировка" },
-          { id: "repair", title: "Ремонт прокола" },
-          { id: "storage", title: "Сезонная замена" }
-        ];
-      }
-      return [
-        { id: "oil", title: "Замена масла" },
-        { id: "diag", title: "Диагностика" },
-        { id: "brakes", title: "Проверка тормозов" },
-        { id: "suspension", title: "Ходовая и подвеска" }
-      ];
-    })();
+    // Реальный прайс-лист сервиса (заполняется владельцем в CRM → Настройки →
+    // «Услуги и цены»). Если сервис его ещё не заполнил — показываем типовые
+    // работы категории как ориентир, честно помечая, что цену назовёт сервис.
+    const ownPriceList = Array.isArray(service.priceList) ? service.priceList.filter(Boolean) : [];
+    const hasOwnPriceList = ownPriceList.length > 0;
+    const servicesList = hasOwnPriceList
+      ? ownPriceList
+      : (() => {
+          const typeLabel = `${service.type || ""} ${service.category || ""}`.toLowerCase();
+          if (typeLabel.includes("детейл")) {
+            return [
+              { id: "wash", title: "Комплексная мойка" },
+              { id: "salon", title: "Химчистка салона" },
+              { id: "polish", title: "Полировка кузова" },
+              { id: "coat", title: "Защитное покрытие" }
+            ];
+          }
+          if (typeLabel.includes("шин")) {
+            return [
+              { id: "tires", title: "Комплект шиномонтажа" },
+              { id: "balance", title: "Балансировка" },
+              { id: "repair", title: "Ремонт прокола" },
+              { id: "storage", title: "Сезонная замена" }
+            ];
+          }
+          return [
+            { id: "oil", title: "Замена масла" },
+            { id: "diag", title: "Диагностика" },
+            { id: "brakes", title: "Проверка тормозов" },
+            { id: "suspension", title: "Ходовая и подвеска" }
+          ];
+        })();
     const messageHref = (() => {
       const safePhone = String(service.phone || "").trim().replace(/[^\d+]/g, "");
       return safePhone ? `sms:${safePhone}` : "";
@@ -163,13 +169,7 @@
           <div className="absolute inset-x-0 top-0 px-5 pt-5 flex items-center justify-between">
             <a
               href="#/services"
-              className="w-11 h-11 rounded-2xl inline-flex items-center justify-center"
-              style=${{
-                background: "rgba(8, 15, 26, 0.5)",
-                color: "var(--drivex-white)",
-                border: "1px solid rgba(255, 255, 255, 0.12)",
-                backdropFilter: "blur(14px)"
-              }}
+              className="dx-hero-icon-btn"
               aria-label="Назад к сервисам"
             >
               <${Icon} name="chevron-left" size=${20} />
@@ -178,13 +178,7 @@
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                className="w-11 h-11 rounded-2xl inline-flex items-center justify-center"
-                style=${{
-                  background: isSaved ? alphaBg("var(--drivex-warning)", 0.22) : "rgba(8, 15, 26, 0.5)",
-                  color: isSaved ? "var(--drivex-warning)" : "var(--drivex-white)",
-                  border: `1px solid ${isSaved ? alphaBg("var(--drivex-warning)", 0.4) : "rgba(255, 255, 255, 0.12)"}`,
-                  backdropFilter: "blur(14px)"
-                }}
+                className=${`dx-hero-icon-btn ${isSaved ? "is-active" : ""}`}
                 onClick=${() => {
                   const next = !isSaved;
                   setIsSaved(next);
@@ -196,13 +190,7 @@
               </button>
               <button
                 type="button"
-                className="w-11 h-11 rounded-2xl inline-flex items-center justify-center"
-                style=${{
-                  background: "rgba(8, 15, 26, 0.5)",
-                  color: "var(--drivex-white)",
-                  border: "1px solid rgba(255, 255, 255, 0.12)",
-                  backdropFilter: "blur(14px)"
-                }}
+                className="dx-hero-icon-btn"
                 onClick=${async () => {
                   const shareLink = `${window.location.href.split("#")[0]}#/service/${service.id}`;
                   try {
@@ -359,7 +347,12 @@
                       ${item.title}
                     </p>
                     <p className="text-sm mt-1" style=${{ color: "var(--drivex-silver)" }}>
-                      Цену и время уточнит сервис при записи
+                      ${hasOwnPriceList
+                        ? [
+                            Number(item.price) > 0 ? formatTjsPrice(item.price) : "цена по запросу",
+                            Number(item.durationMinutes) > 0 ? `${item.durationMinutes} мин` : ""
+                          ].filter(Boolean).join(" • ")
+                        : "Цену и время уточнит сервис при записи"}
                     </p>
                   </div>
                   <button
@@ -377,18 +370,6 @@
                 </div>
               `)}
             </div>
-            <button
-              type="button"
-              className="w-full mt-4 px-4 py-3 rounded-full text-sm font-semibold"
-              style=${{
-                background: "rgba(255, 255, 255, 0.04)",
-                color: "var(--drivex-white)",
-                border: "1px solid rgba(255, 255, 255, 0.08)"
-              }}
-              onClick=${() => toast.push("Полный прайс откроем в следующем обновлении")}
-            >
-              Показать все услуги
-            </button>
           </section>
 
           ${masters.length

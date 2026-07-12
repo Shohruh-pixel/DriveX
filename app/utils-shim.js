@@ -91,7 +91,7 @@
     'serializeServiceCenterForStorage','normalizeServiceImageAsset',
     'normalizeServiceGalleryList','normalizeServiceVideoUrl','normalizeServiceCenter',
     'createServiceCenterSeed','createServiceCenterFormState','createServiceRegistrationDraft',
-    'normalizeServiceBrands',
+    'normalizeServiceBrands','normalizeServicePriceList','normalizeServiceMastersList',
 
     // Auth / Supabase
     'getSupabaseClient','getBuyerAuthStatus',

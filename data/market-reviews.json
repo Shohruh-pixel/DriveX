@@ -1,5 +1,23 @@
 [
   {
+    "id": "review-1783859645135-912adf57bc5a58",
+    "productId": "967785",
+    "authorName": "Покупатель DRIVEX",
+    "rating": 2,
+    "comment": "",
+    "verified": false,
+    "createdAt": "2026-07-12T12:34:05.135Z"
+  },
+  {
+    "id": "review-1783755467402-5f5b4d57f4a608",
+    "productId": "274975",
+    "authorName": "Покупатель DRIVEX",
+    "rating": 3,
+    "comment": "",
+    "verified": false,
+    "createdAt": "2026-07-11T07:37:47.402Z"
+  },
+  {
     "id": "review-1781987653679-999dd1e6f85e8",
     "productId": "628299",
     "authorName": "Покупатель DRIVEX",

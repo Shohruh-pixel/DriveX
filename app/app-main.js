@@ -901,7 +901,11 @@
         }
 
         if (key === drivexStorageKeys.serviceCenter) {
-          setServiceCenter(normalizeServiceCenter(nextValue, serviceSession.serviceCenterId));
+          // serviceCenter больше не пишется в /api/app-state (см. persist-
+          // эффект) — но старые/сторонние записи под этим ключом могли
+          // остаться от прошлых версий. Игнорируем их: применение затирало
+          // свежий serviceCenter устаревшим снимком (терялись priceList/
+          // masters). Источник истины — /api/service-centers.
           return;
         }
 
@@ -1667,7 +1671,16 @@
       if (!persisted.ok) {
         toast.push("Не удалось сохранить карточку сервиса");
       }
-      if (sharedAppStateReadyRef.current) saveSharedAppState(drivexStorageKeys.serviceCenter, serviceCenter).catch(() => {});
+      // ⛔ БОЛЬШЕ не зеркалим serviceCenter в общий /api/app-state. Раньше это
+      // писало сюда И читалось обратно через 3.5с-поллинг (pullLiveState →
+      // applySharedStateUpdate). Как только /api/app-state однажды получал
+      // УСТАРЕВШИЙ снимок (напр. из-за гонки до фикса debounce-автосейва),
+      // следующий же поллинг тем же устаревшим значением затирал корректный
+      // serviceCenter в памяти и localStorage — приорсы/мастера пропадали
+      // насовсем, хотя /api/service-centers (авторитетный источник) был верным.
+      // serviceCenter теперь синкается ТОЛЬКО через явные действия
+      // (saveServiceCenter/registerServiceCrm/loginServiceCrm), которые пишут
+      // прямиком в /api/service-centers.
     }, [serviceCenter, serviceSession.serviceCenterId, toast]);
 
     useEffect(() => {
@@ -1800,24 +1813,13 @@
       };
     }, []);
 
-    useEffect(() => {
-      const safeCenter = normalizeServiceCenter(serviceCenter, serviceSession.serviceCenterId);
-      if (!safeCenter.registrationCompleted || !safeCenter.name || !safeCenter.serviceType || !safeCenter.address) {
-        return undefined;
-      }
-
-      const timer = window.setTimeout(() => {
-        saveSharedServiceCenter(safeCenter)
-          .then((savedCenter) => {
-            setSharedServiceCenters((prev) => mergeServiceCenterList(prev, savedCenter));
-          })
-          .catch(() => {
-            // Локальная CRM остаётся рабочей, даже если общий сервер временно недоступен.
-          });
-      }, 700);
-
-      return () => window.clearTimeout(timer);
-    }, [serviceCenter, serviceSession.serviceCenterId]);
+    // ⛔ УДАЛЁН debounce-автосейв serviceCenter → сервер (был здесь: 700мс после
+    // ЛЮБОГО изменения serviceCenter). Он дублировал явный saveServiceCenter()
+    // (settings-сабмит уже сам зовёт saveSharedServiceCenter) и гонялся с ним:
+    // при быстрой навигации после сохранения этот эффект успевал переотправить
+    // УСТАРЕВШИЙ снимок serviceCenter и затирал на сервере только что
+    // сохранённые priceList/masters пустыми массивами. Сервер теперь получает
+    // центр ТОЛЬКО из явных действий (сохранение настроек, регистрация, вход).
 
     useEffect(() => {
       pushBuyerState(drivexStorageKeys.buyerOrders, buyerOrders);
