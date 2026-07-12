@@ -27,16 +27,24 @@
   function ServicesScreen({ serviceDirectory, activeCarId, serviceCrmReady = false, serviceCenterName = "" }) {
     const toast = useToast();
     const [serviceSearchQuery, setServiceSearchQuery] = useState("");
-    const servicesList =
+    // useMemo: decorateServiceRecord копирует объекты (включая base64-фото) для
+    // каждого сервиса — без мемоизации это гоняется заново на любой ре-рендер
+    // (в т.ч. фоновый poll родителя), что на слабых устройствах ощутимо грузит CPU.
+    const servicesList = useMemo(() => (
       serviceDirectory && Array.isArray(serviceDirectory.featuredServices)
         ? serviceDirectory.featuredServices.map((item) => decorateServiceRecord(item))
-        : recommendedServices.map((item) => decorateServiceRecord(item));
-    const servicePool =
+        : recommendedServices.map((item) => decorateServiceRecord(item))
+    ), [serviceDirectory]);
+    const servicePool = useMemo(() => (
       serviceDirectory && Array.isArray(serviceDirectory.services)
         ? serviceDirectory.services.map((item) => decorateServiceRecord(item))
-        : dedupeServicesById([...recommendedServices, ...nearbyServices]).map((item) => decorateServiceRecord(item));
+        : dedupeServicesById([...recommendedServices, ...nearbyServices]).map((item) => decorateServiceRecord(item))
+    ), [serviceDirectory]);
     const activeCar = findGarageCar(activeCarId);
-    const personalizedServices = getPersonalizedServices(servicePool, activeCarId).slice(0, 3);
+    const personalizedServices = useMemo(
+      () => getPersonalizedServices(servicePool, activeCarId).slice(0, 3),
+      [servicePool, activeCarId]
+    );
 
     const getServiceSavingsLabel = (service) => {
       const priceScore = clampServiceMetric(service?.honestPriceScore, 82);
