@@ -1296,7 +1296,10 @@
           });
       };
 
-      const intervalId = window.setInterval(pullLiveState, 3500);
+      // 8с вместо 3.5с: на каждый цикл JSON.stringify всего app-state (растёт
+      // с демо-данными, уже ~500КБ) — на слабых устройствах частый повтор
+      // этого разбора наблюдался как зависание/чёрный экран через некоторое время.
+      const intervalId = window.setInterval(pullLiveState, 8000);
       const handleFocus = () => pullLiveState();
       const handleVisibility = () => {
         if (!document.hidden) pullLiveState();

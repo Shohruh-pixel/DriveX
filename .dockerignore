@@ -1,0 +1,10 @@
+node_modules
+.git
+.claude
+*.log
+cf-tunnel.log
+cf-tunnel.log.out
+cf.log
+cf.log.o
+cloudflared.exe
+client
