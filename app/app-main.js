@@ -362,6 +362,15 @@
       }
     });
 
+    const [emergencyContact, setEmergencyContact] = useState(() => {
+      try {
+        const raw = readBuyerLocalStorage(drivexStorageKeys.emergencyContact, buyerSession);
+        return raw && typeof raw === "object" ? normalizeEmergencyContact(raw) : createDefaultEmergencyContact();
+      } catch {
+        return createDefaultEmergencyContact();
+      }
+    });
+
     const [documents, setDocuments] = useState(() => {
       const fallback = createEmptyDocumentsState();
 
@@ -735,6 +744,11 @@
 
         if (key === drivexStorageKeys.activeCar) {
           setActiveCarId(ensureCarId(nextValue));
+          return;
+        }
+
+        if (key === drivexStorageKeys.emergencyContact) {
+          setEmergencyContact(normalizeEmergencyContact(nextValue));
           return;
         }
 
@@ -1542,6 +1556,10 @@
     }, [pushBuyerState, favorites]);
 
     useEffect(() => {
+      pushBuyerState(drivexStorageKeys.emergencyContact, emergencyContact);
+    }, [pushBuyerState, emergencyContact]);
+
+    useEffect(() => {
       try {
         if (typeof marketFavoritesStore === "undefined") return;
         marketFavoritesStore.setAll(Array.isArray(favorites) ? favorites : [], { silent: true });
@@ -1961,6 +1979,10 @@
       };
       syncProfileToSupabase(buyerSession, profileForSync).catch(function(){});
     }, [pushBuyerState, buyerSession]);
+
+    const updateEmergencyContact = useCallback((next) => {
+      setEmergencyContact(normalizeEmergencyContact(next));
+    }, []);
 
     const documentsTotalCount = useMemo(() => {
       return countDocumentsState(documents);
@@ -4550,7 +4572,13 @@
         />`;
       } else if (normalized === "/emergency") {
         activePath = "/";
-        content = html`<${getScreen('PlaceholderPage')} title="SOS помощь" backPath="/" />`;
+        content = html`<${getScreen('SosScreen')}
+          serviceDirectory=${serviceDirectory}
+          activeCarId=${activeCarId}
+          profile=${profile}
+          emergencyContact=${emergencyContact}
+          onSaveContact=${updateEmergencyContact}
+        />`;
       } else if (normalized === "/cart" || normalized === "/marketplace/cart") {
         activePath = "/market";
         content = html`<${getScreen('CartScreen')}

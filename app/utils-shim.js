@@ -75,6 +75,7 @@
     'createDefaultServiceSession','createFreshServiceSession',
     'normalizeServiceSession','normalizeServiceProfile',
     'normalizeTjPhoneInput','isCompleteTjPhone',
+    'createDefaultEmergencyContact','normalizeEmergencyContact',
     'normalizeServiceClient','normalizeServiceClientsList','isDemoServiceClient',
     'normalizeServiceRepairOrder','normalizeServiceRepairOrdersList','isDemoServiceOrder',
     'normalizeServiceInventoryItem','normalizeServiceInventoryList','isDemoServiceInventoryItem',

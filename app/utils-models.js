@@ -47,7 +47,8 @@
     serviceInventory: "drivex.service.inventory.v1",
     serviceFinance: "drivex.service.finance.v1",
     serviceAppointments: "drivex.service.appointments.v1",
-    serviceRequests: "drivex.service.requests.v1"
+    serviceRequests: "drivex.service.requests.v1",
+    emergencyContact: "drivex.emergency-contact.v1"
   });
   const liveSharedAppStateKeys = new Set([
     drivexStorageKeys.serviceClients,
@@ -74,7 +75,8 @@
     drivexStorageKeys.savedPlaces,
     drivexStorageKeys.favorites,
     drivexStorageKeys.buyerInvite,
-    drivexStorageKeys.trips
+    drivexStorageKeys.trips,
+    drivexStorageKeys.emergencyContact
   ]);
   const drivexMediaDbName = "drivex.media.v1";
   const drivexMediaStoreName = "media";
@@ -2282,6 +2284,22 @@
       phone: String(source.phone || "").trim(),
       email: String(source.email || "").trim().toLowerCase(),
       avatar
+    };
+  }
+
+  // Экстренный контакт (SOS): один человек, которому можно за секунду
+  // позвонить или отправить геолокацию с дороги. Хранится и синкается как
+  // обычные личные данные покупателя (localStorage + облако).
+  function createDefaultEmergencyContact() {
+    return { name: "", phone: "" };
+  }
+
+  function normalizeEmergencyContact(value) {
+    const fallback = createDefaultEmergencyContact();
+    const source = value && typeof value === "object" ? value : {};
+    return {
+      name: String(source.name || fallback.name).trim().slice(0, 60),
+      phone: normalizeTjPhoneInput(typeof source.phone === "string" ? source.phone : fallback.phone)
     };
   }
 
@@ -5381,6 +5399,8 @@
   try { if (typeof createBuyerOrdersFromCheckout !== 'undefined') window.DX['createBuyerOrdersFromCheckout'] = createBuyerOrdersFromCheckout; } catch(e) {}
   try { if (typeof createCatalogServiceFromCenter !== 'undefined') window.DX['createCatalogServiceFromCenter'] = createCatalogServiceFromCenter; } catch(e) {}
   try { if (typeof createDefaultBuyerProfile !== 'undefined') window.DX['createDefaultBuyerProfile'] = createDefaultBuyerProfile; } catch(e) {}
+  try { if (typeof createDefaultEmergencyContact !== 'undefined') window.DX['createDefaultEmergencyContact'] = createDefaultEmergencyContact; } catch(e) {}
+  try { if (typeof normalizeEmergencyContact !== 'undefined') window.DX['normalizeEmergencyContact'] = normalizeEmergencyContact; } catch(e) {}
   try { if (typeof createDefaultSellerSession !== 'undefined') window.DX['createDefaultSellerSession'] = createDefaultSellerSession; } catch(e) {}
   try { if (typeof createDefaultServiceAuthState !== 'undefined') window.DX['createDefaultServiceAuthState'] = createDefaultServiceAuthState; } catch(e) {}
   try { if (typeof createDefaultServiceSession !== 'undefined') window.DX['createDefaultServiceSession'] = createDefaultServiceSession; } catch(e) {}

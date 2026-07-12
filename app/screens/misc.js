@@ -477,6 +477,355 @@
     `;
   }
 
+  // ── SOS помощник: реальная помощь на дороге ───────────────────────────
+  // Экстренные номера — официальные номера Таджикистана (101/102/103/104),
+  // «ближайшие сервисы» — из настоящего каталога DRIVEX (serviceDirectory),
+  // геолокация — реальный GPS браузера, контакт — реальные личные данные
+  // покупателя (синкаются как остальной профиль, см. emergencyContact в app-main.js)
+  const SOS_NUMBERS = [
+    { id: "police", label: "Милиция", number: "102", color: "var(--drivex-electric-blue)" },
+    { id: "ambulance", label: "Скорая помощь", number: "103", color: "var(--drivex-danger)" },
+    { id: "fire", label: "Пожарная служба", number: "101", color: "var(--drivex-warning)" },
+    { id: "gas", label: "Газовая служба", number: "104", color: "var(--drivex-success)" }
+  ];
+
+  const SOS_SITUATIONS = [
+    {
+      id: "accident",
+      title: "ДТП",
+      icon: "sos",
+      color: "var(--drivex-danger)",
+      categoryId: "repair",
+      tips: [
+        "Включите аварийку и выставьте знак аварийной остановки",
+        "Есть пострадавшие — сразу звоните 103 и 102",
+        "Не покидайте место ДТП до приезда милиции",
+        "Сфотографируйте повреждения, номера машин и расположение на дороге",
+        "Обменяйтесь с водителем ФИО, телефоном и данными страховки"
+      ]
+    },
+    {
+      id: "breakdown",
+      title: "Машина не заводится / поломка",
+      icon: "wrench",
+      color: "var(--drivex-warning)",
+      categoryId: "repair",
+      tips: [
+        "Включите аварийку, если стоите на проезжей части",
+        "Проверьте разъёмы аккумулятора и уровень топлива",
+        "Отойдите в безопасное место и вызовите ближайший сервис"
+      ]
+    },
+    {
+      id: "tire",
+      title: "Проколота шина",
+      icon: "tire",
+      color: "var(--drivex-electric-blue)",
+      categoryId: "tire",
+      tips: [
+        "Съезжайте на обочину подальше от потока машин",
+        "Включите аварийку, поставьте знак за 15–30 м",
+        "Замените на докатку сами или вызовите шиномонтаж"
+      ]
+    },
+    {
+      id: "fuel",
+      title: "Кончился бензин",
+      icon: "fuel",
+      color: "var(--drivex-success)",
+      categoryId: "towing",
+      tips: [
+        "Включите аварийку и отойдите от проезжей части",
+        "Закажите доставку топлива или эвакуацию до ближайшей АЗС"
+      ]
+    },
+    {
+      id: "battery",
+      title: "Сел аккумулятор",
+      icon: "battery",
+      color: "var(--drivex-neon-cyan)",
+      categoryId: "repair",
+      tips: [
+        "Нужна «прикурка» — провода и машина-донор",
+        "Или мастер с пуско-зарядным устройством из сервиса"
+      ]
+    },
+    {
+      id: "towing",
+      title: "Нужен эвакуатор",
+      icon: "truck",
+      color: "var(--drivex-electric-blue)",
+      categoryId: "towing",
+      tips: [
+        "Уточните у сервиса, довозят ли они эвакуатором",
+        "Назовите точный адрес или координаты (кнопка ниже)"
+      ]
+    }
+  ];
+
+  function SosScreen({ serviceDirectory, activeCarId, profile, emergencyContact, onSaveContact }) {
+    const toast = useToast();
+    const [expandedId, setExpandedId] = useState("");
+    const [locating, setLocating] = useState(false);
+    const [locationLink, setLocationLink] = useState("");
+    const [editingContact, setEditingContact] = useState(false);
+    const [contactName, setContactName] = useState(emergencyContact?.name || "");
+    const [contactPhone, setContactPhone] = useState(emergencyContact?.phone || "");
+
+    useEffect(() => {
+      setContactName(emergencyContact?.name || "");
+      setContactPhone(emergencyContact?.phone || "");
+    }, [emergencyContact?.name, emergencyContact?.phone]);
+
+    const activeCar = typeof findGarageCar === "function" ? findGarageCar(activeCarId) : null;
+    const allServices = serviceDirectory && Array.isArray(serviceDirectory.services) ? serviceDirectory.services : [];
+
+    const servicesForCategory = useCallback((categoryId) => {
+      return allServices.filter((s) => s.categoryId === categoryId && s.available !== false);
+    }, [allServices]);
+
+    const shareLocation = useCallback(() => {
+      if (!navigator.geolocation) { toast.push("Геолокация недоступна на устройстве"); return; }
+      if (typeof window !== "undefined" && window.isSecureContext === false) {
+        toast.push("Геолокация работает только по HTTPS");
+        return;
+      }
+      setLocating(true);
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const { latitude, longitude } = pos.coords;
+          const link = `https://maps.google.com/?q=${latitude.toFixed(6)},${longitude.toFixed(6)}`;
+          setLocationLink(link);
+          setLocating(false);
+          if (navigator.share) {
+            navigator.share({ title: "Нужна помощь на дороге", text: "Я здесь:", url: link }).catch(() => {});
+          } else if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(link).then(() => toast.push("Ссылка на местоположение скопирована"));
+          } else {
+            toast.push("Координаты готовы — скопируйте ссылку ниже");
+          }
+        },
+        () => { setLocating(false); toast.push("Не удалось получить геопозицию — разрешите доступ в браузере"); },
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 }
+      );
+    }, [toast]);
+
+    const saveContact = useCallback(() => {
+      const trimmedName = contactName.trim();
+      if (!trimmedName) { toast.push("Введите имя контакта"); return; }
+      if (!isCompleteTjPhone(contactPhone)) { toast.push("Введите полный номер после +992"); return; }
+      onSaveContact && onSaveContact({ name: trimmedName, phone: contactPhone });
+      setEditingContact(false);
+      toast.push("Экстренный контакт сохранён");
+    }, [contactName, contactPhone, onSaveContact, toast]);
+
+    const hasContact = Boolean(emergencyContact && emergencyContact.name && isCompleteTjPhone(emergencyContact.phone));
+    const smsHref = hasContact
+      ? `sms:${String(emergencyContact.phone).replace(/[^\d+]/g, "")}?body=${encodeURIComponent(
+          `Нужна помощь на дороге${activeCar && activeCar.name ? ` (${activeCar.name})` : ""}.${locationLink ? " Я здесь: " + locationLink : ""}`
+        )}`
+      : "";
+
+    return html`
+      <${SimplePage} title="SOS помощь" backPath="/">
+        <div className="px-6 py-6 space-y-5">
+          <div
+            className="rounded-3xl p-5"
+            style=${{
+              background: "linear-gradient(140deg, rgba(239, 68, 68, 0.18) 0%, rgba(15, 23, 42, 0.96) 100%)",
+              border: "1px solid rgba(239, 68, 68, 0.24)"
+            }}
+          >
+            <div className="flex items-center gap-3">
+              <div
+                className="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0"
+                style=${{ background: "rgba(239, 68, 68, 0.18)", color: "var(--drivex-danger)" }}
+              >
+                <${Icon} name="sos" size=${24} />
+              </div>
+              <div>
+                <p className="font-bold" style=${{ color: "var(--drivex-white)" }}>Экстренные номера Таджикистана</p>
+                <p className="text-xs mt-1" style=${{ color: "var(--drivex-silver)" }}>Звонок бесплатный с любого оператора</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 mt-4">
+              ${SOS_NUMBERS.map((item) => html`
+                <a
+                  key=${item.id}
+                  href=${`tel:${item.number}`}
+                  className="rounded-2xl p-4 flex flex-col items-start gap-1"
+                  style=${{ background: "rgba(255,255,255,0.05)", border: `1px solid ${alphaBg(item.color, 0.3)}` }}
+                >
+                  <span className="text-2xl font-bold" style=${{ color: item.color }}>${item.number}</span>
+                  <span className="text-xs" style=${{ color: "var(--drivex-light-silver)" }}>${item.label}</span>
+                </a>
+              `)}
+            </div>
+          </div>
+
+          <div>
+            <h2 className="text-lg font-bold mb-1" style=${{ color: "var(--drivex-white)" }}>Что случилось?</h2>
+            <p className="text-sm mb-3" style=${{ color: "var(--drivex-silver)" }}>Выберите ситуацию — подскажем, что делать, и найдём сервисы рядом</p>
+
+            <div className="space-y-3">
+              ${SOS_SITUATIONS.map((situation) => {
+                const isOpen = expandedId === situation.id;
+                const matches = isOpen ? servicesForCategory(situation.categoryId) : [];
+                return html`
+                  <div key=${situation.id} className="glass-card-light rounded-2xl overflow-hidden">
+                    <button
+                      type="button"
+                      className="w-full flex items-center gap-3 p-4 text-left"
+                      onClick=${() => setExpandedId(isOpen ? "" : situation.id)}
+                    >
+                      <div
+                        className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0"
+                        style=${{ background: alphaBg(situation.color, 0.16), color: situation.color }}
+                      >
+                        <${Icon} name=${situation.icon} size=${20} />
+                      </div>
+                      <span className="flex-1 font-semibold" style=${{ color: "var(--drivex-white)" }}>${situation.title}</span>
+                      <span style=${{ color: "var(--drivex-silver)", display: "inline-block", transform: isOpen ? "rotate(90deg)" : "none" }}>›</span>
+                    </button>
+
+                    ${isOpen ? html`
+                      <div className="px-4 pb-4 space-y-4">
+                        <ul className="space-y-2">
+                          ${situation.tips.map((tip, idx) => html`
+                            <li key=${idx} className="text-sm flex gap-2" style=${{ color: "var(--drivex-light-silver)", lineHeight: 1.5 }}>
+                              <span style=${{ color: situation.color }}>•</span>
+                              <span>${tip}</span>
+                            </li>
+                          `)}
+                        </ul>
+
+                        <div>
+                          <p className="text-xs font-semibold mb-2" style=${{ color: "var(--drivex-silver)" }}>БЛИЖАЙШИЕ СЕРВИСЫ</p>
+                          ${matches.length
+                            ? html`<div className="space-y-2">
+                                ${matches.slice(0, 3).map((service) => html`
+                                  <div key=${service.id} className="rounded-xl p-3 flex items-center gap-3" style=${{ background: "rgba(255,255,255,0.04)" }}>
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm font-semibold truncate" style=${{ color: "var(--drivex-white)" }}>${service.name}</p>
+                                      <p className="text-xs mt-0.5 truncate" style=${{ color: "var(--drivex-silver)" }}>${[service.city, service.address].filter(Boolean).join(", ")}</p>
+                                    </div>
+                                    ${service.phone
+                                      ? html`<a href=${`tel:${String(service.phone).replace(/[^\d+]/g, "")}`} className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style=${{ background: "rgba(14,165,233,0.16)", color: "var(--drivex-electric-blue)" }} aria-label="Позвонить">
+                                          <${Icon} name="phone" size=${16} />
+                                        </a>`
+                                      : null}
+                                    <a href=${`#/service/${service.id}/book`} className="px-3 py-2 rounded-xl text-xs font-semibold flex-shrink-0" style=${{ background: "rgba(6,182,212,0.16)", color: "var(--drivex-neon-cyan)" }}>
+                                      Записаться
+                                    </a>
+                                  </div>
+                                `)}
+                              </div>`
+                            : html`<p className="text-sm" style=${{ color: "var(--drivex-silver)" }}>Пока нет подключённых сервисов рядом — звоните по номерам выше или ищите через раздел «Сервисы».</p>`}
+                        </div>
+                      </div>
+                    ` : null}
+                  </div>
+                `;
+              })}
+            </div>
+          </div>
+
+          <div className="glass-card-light rounded-2xl p-5">
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0" style=${{ background: "rgba(6,182,212,0.16)", color: "var(--drivex-neon-cyan)" }}>
+                <${Icon} name="crosshair" size=${20} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold" style=${{ color: "var(--drivex-white)" }}>Поделиться местоположением</p>
+                <p className="text-xs mt-1" style=${{ color: "var(--drivex-silver)" }}>Точные координаты через GPS — отправьте тому, кто едет на помощь</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="w-full mt-4 py-3 rounded-xl text-sm font-bold dx-btn"
+              disabled=${locating}
+              onClick=${shareLocation}
+            >
+              ${locating ? "Определяем координаты..." : "Отправить моё местоположение"}
+            </button>
+            ${locationLink
+              ? html`<div className="flex items-center gap-2 mt-3">
+                  <a href=${locationLink} target="_blank" rel="noreferrer" className="flex-1 text-xs truncate" style=${{ color: "var(--drivex-neon-cyan)" }}>${locationLink}</a>
+                  <button type="button" className="text-xs font-semibold flex-shrink-0" style=${{ color: "var(--drivex-silver)", background: "transparent", border: "none" }} onClick=${() => { navigator.clipboard && navigator.clipboard.writeText(locationLink); toast.push("Скопировано"); }}>Копировать</button>
+                </div>`
+              : null}
+          </div>
+
+          <div className="glass-card-light rounded-2xl p-5">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0" style=${{ background: "rgba(16,185,129,0.16)", color: "var(--drivex-success)" }}>
+                  <${Icon} name="user" size=${20} />
+                </div>
+                <div className="min-w-0">
+                  <p className="font-semibold" style=${{ color: "var(--drivex-white)" }}>Экстренный контакт</p>
+                  <p className="text-xs mt-1 truncate" style=${{ color: "var(--drivex-silver)" }}>
+                    ${hasContact ? `${emergencyContact.name} • ${emergencyContact.phone}` : "Не указан"}
+                  </p>
+                </div>
+              </div>
+              <button type="button" className="text-xs font-semibold flex-shrink-0" style=${{ color: "var(--drivex-neon-cyan)", background: "transparent", border: "none" }} onClick=${() => setEditingContact((v) => !v)}>
+                ${editingContact ? "Отмена" : hasContact ? "Изменить" : "Добавить"}
+              </button>
+            </div>
+
+            ${editingContact
+              ? html`<div className="space-y-3 mt-4">
+                  <input
+                    type="text"
+                    placeholder="Имя"
+                    value=${contactName}
+                    onInput=${(e) => setContactName(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl text-sm"
+                    style=${{ background: "rgba(255,255,255,0.05)", color: "var(--drivex-white)", border: "1px solid rgba(255,255,255,0.1)" }}
+                  />
+                  <input
+                    type="tel"
+                    placeholder="+992 ..."
+                    value=${contactPhone}
+                    onInput=${(e) => setContactPhone(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl text-sm"
+                    style=${{ background: "rgba(255,255,255,0.05)", color: "var(--drivex-white)", border: "1px solid rgba(255,255,255,0.1)" }}
+                  />
+                  <button type="button" className="w-full py-3 rounded-xl text-sm font-bold dx-btn" onClick=${saveContact}>Сохранить</button>
+                </div>`
+              : hasContact
+                ? html`<div className="flex gap-2 mt-4">
+                    <a href=${`tel:${String(emergencyContact.phone).replace(/[^\d+]/g, "")}`} className="flex-1 py-3 rounded-xl text-sm font-semibold text-center" style=${{ background: "rgba(14,165,233,0.16)", color: "var(--drivex-electric-blue)" }}>Позвонить</a>
+                    ${smsHref ? html`<a href=${smsHref} className="flex-1 py-3 rounded-xl text-sm font-semibold text-center" style=${{ background: "rgba(16,185,129,0.16)", color: "var(--drivex-success)" }}>Отправить SMS</a>` : null}
+                  </div>`
+                : null}
+          </div>
+
+          <div className="glass-card-light rounded-2xl p-5">
+            <p className="font-semibold mb-3" style=${{ color: "var(--drivex-white)" }}>Что делать при ДТП</p>
+            <ol className="space-y-2">
+              ${[
+                "Остановитесь, включите аварийную сигнализацию",
+                "Выставьте знак аварийной остановки",
+                "Если есть пострадавшие — звоните 103 и 102 немедленно",
+                "Не перемещайте автомобиль до приезда милиции (если нет угрозы для жизни)",
+                "Сфотографируйте место аварии, повреждения и номера машин",
+                "Обменяйтесь данными с участниками ДТП"
+              ].map((step, idx) => html`
+                <li key=${idx} className="flex gap-3 text-sm" style=${{ color: "var(--drivex-light-silver)", lineHeight: 1.5 }}>
+                  <span className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold" style=${{ background: "rgba(239,68,68,0.16)", color: "var(--drivex-danger)" }}>${idx + 1}</span>
+                  <span>${step}</span>
+                </li>
+              `)}
+            </ol>
+          </div>
+        </div>
+      </${SimplePage}>
+    `;
+  }
+
   // Универсальный экран-заглушка «Скоро» — честная замена демо-разделов
   function ComingSoonScreen({ title, emoji, subtitle }) {
     return html`
@@ -1554,4 +1903,5 @@
   if (typeof ProfileEditScreen !== 'undefined') DX.screens['ProfileEditScreen'] = ProfileEditScreen;
   if (typeof ProfileSecurityScreen !== 'undefined') DX.screens['ProfileSecurityScreen'] = ProfileSecurityScreen;
   if (typeof SettingsScreen !== 'undefined') DX.screens['SettingsScreen'] = SettingsScreen;
+  if (typeof SosScreen !== 'undefined') DX.screens['SosScreen'] = SosScreen;
 })();
