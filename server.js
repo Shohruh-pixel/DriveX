@@ -5,6 +5,7 @@ const https = require("https");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
+const zlib = require("zlib");
 const { handleAiRoute, handleAiHistoryRoute, handleProductCardRoute, handleVinRoute } = require("./src/ai/ai.router");
 
 const rootDir = __dirname;
@@ -820,16 +821,31 @@ function serveStatic(req, res) {
       }
 
       const ext = path.extname(target).toLowerCase();
-      res.writeHead(200, {
+      const headers = {
         "Content-Type": contentTypes[ext] || "application/octet-stream",
         "Access-Control-Allow-Origin": "*",
-        // no-transform: запрещает промежуточным прокси (Fly edge) пересжимать
-        // ответ (напр. zstd). На некоторых Android/OEM-сборках Chrome (замечено
-        // на Tecno) декодер zstd бракует контент — страница грузится наполовину
-        // (HTML+CSS есть, но <script>-теги теряются), без единой ошибки в консоли.
+        // no-transform: просим прокси (Fly edge) не пересжимать ответ дальше.
         "Cache-Control": "no-cache, no-transform"
-      });
-      res.end(data);
+      };
+
+      // Fly edge пересжимает ответ в zstd, если клиент заявляет его в
+      // Accept-Encoding — а декодер zstd в некоторых Android/OEM-сборках Chrome
+      // (замечено на Tecno) молча портит контент при распаковке: HTML+CSS
+      // долетают, а <script>-теги в конце документа теряются без единой ошибки
+      // в консоли — страница выглядит зависшей на загрузке. gzip старый и
+      // universally-совместимый; сжимая им сами и выставляя Content-Encoding
+      // заранее, не даём Fly решить, чем сжимать — прокси не трогает контент
+      // с уже проставленным Content-Encoding.
+      const acceptEncoding = String(req.headers["accept-encoding"] || "");
+      if (acceptEncoding.includes("gzip") && data.length > 256) {
+        headers["Content-Encoding"] = "gzip";
+        headers["Vary"] = "Accept-Encoding";
+        res.writeHead(200, headers);
+        res.end(zlib.gzipSync(data));
+      } else {
+        res.writeHead(200, headers);
+        res.end(data);
+      }
     });
   });
 }
