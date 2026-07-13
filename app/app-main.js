@@ -982,7 +982,7 @@
 
         if (key === drivexStorageKeys.orderChats) {
           setOrderChats((prev) => {
-            if (nextValue === null) return {};
+            if (nextValue === null) return Object.keys(prev || {}).length ? {} : prev;
             const incoming = normalizeOrderChatsMap(nextValue);
             if (!prev || !Object.keys(prev).length) return incoming;
             const merged = { ...prev };
@@ -999,6 +999,16 @@
                 (a.sentAt || "") < (b.sentAt || "") ? -1 : 1
               );
               merged[orderId] = { ...existingThread, ...thread, messages };
+            }
+            // Анти-петля: входящий снапшот всегда пересобирает объект заново
+            // (spread + пересортировка сообщений), даже если данные не изменились.
+            // Новая ссылка триггерила эффект сохранения (см. ниже), который слал
+            // те же данные обратно на сервер — а те снова прилетали поллингом.
+            // Возвращаем ПРЕЖНЮЮ ссылку, если содержимое не изменилось.
+            try {
+              if (JSON.stringify(merged) === JSON.stringify(prev)) return prev;
+            } catch {
+              // не сериализуется — считаем изменившимся, ведём себя как раньше
             }
             return merged;
           });
