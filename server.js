@@ -66,7 +66,7 @@ function sendJson(res, statusCode, payload) {
   res.writeHead(statusCode, {
     "Content-Type": "application/json; charset=utf-8",
     "Access-Control-Allow-Origin": "*",
-    "Cache-Control": "no-cache"
+    "Cache-Control": "no-cache, no-transform"
   });
   res.end(JSON.stringify(payload));
 }
@@ -823,7 +823,11 @@ function serveStatic(req, res) {
       res.writeHead(200, {
         "Content-Type": contentTypes[ext] || "application/octet-stream",
         "Access-Control-Allow-Origin": "*",
-        "Cache-Control": "no-cache"
+        // no-transform: запрещает промежуточным прокси (Fly edge) пересжимать
+        // ответ (напр. zstd). На некоторых Android/OEM-сборках Chrome (замечено
+        // на Tecno) декодер zstd бракует контент — страница грузится наполовину
+        // (HTML+CSS есть, но <script>-теги теряются), без единой ошибки в консоли.
+        "Cache-Control": "no-cache, no-transform"
       });
       res.end(data);
     });
