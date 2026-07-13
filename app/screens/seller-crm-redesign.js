@@ -106,13 +106,18 @@
     return "DX-" + s.replace(/-/g, "").slice(0, 6).toUpperCase();
   }
 
-  // Карта статус заказа → тон pill
+  // Карта статус заказа → тон pill. Промежуточные статусы (подтверждён/
+  // готов к выдаче/в доставке) — синий "info": раньше они падали в default
+  // "accent" и светились тем же зелёным, что и финальный «Завершён».
   function orderPillTone(statusId) {
     switch (statusId) {
       case "completed": return "accent";
       case "cancelled": return "danger";
       case "new": return "warn";
-      default: return "accent";
+      case "confirmed":
+      case "pickup_ready":
+      case "delivery": return "info";
+      default: return "neutral";
     }
   }
 

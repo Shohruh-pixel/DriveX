@@ -3474,18 +3474,28 @@
                     onInput=${(e) => setClientPhone(e.target.value)}
                   />
                 </${SellerField}>
-                <${SellerField} label="Машина">
-                  <${SellerSelect}
-                    value=${carId}
-                    onChange=${(e) => setCarId(e.target.value)}
-                  >
-                    ${garageCars.map((car) => html`
-                      <option key=${car.id} value=${car.id}>
-                        ${car.name}${car.plate ? ` • ${car.plate}` : ""}
-                      </option>
-                    `)}
-                  </${SellerSelect}>
-                </${SellerField}>
+                ${garageCars.length
+                  ? html`<${SellerField} label="Машина">
+                      <${SellerSelect}
+                        value=${carId}
+                        onChange=${(e) => setCarId(e.target.value)}
+                      >
+                        ${garageCars.map((car) => html`
+                          <option key=${car.id} value=${car.id}>
+                            ${car.name}${car.plate ? ` • ${car.plate}` : ""}
+                          </option>
+                        `)}
+                      </${SellerSelect}>
+                    </${SellerField}>`
+                  : html`<${SellerField} label="Машина">
+                      <div
+                        className="rounded-xl px-4 py-3 text-sm"
+                        style=${{ background: "rgba(255,255,255,0.05)", color: "var(--drivex-silver)", border: "1px solid rgba(255,255,255,0.1)" }}
+                      >
+                        В гараже пока нет машин — запись пройдёт без привязки к авто.${" "}
+                        <a href="#/garage" style=${{ color: "var(--drivex-neon-cyan)" }}>Добавить машину</a>
+                      </div>
+                    </${SellerField}>`}
               </div>
             </div>
 

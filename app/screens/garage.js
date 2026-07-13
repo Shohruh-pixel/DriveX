@@ -1200,34 +1200,8 @@
     `;
   }
 
-  function TripsScreen() {
-    const trips = [
-      { id: 1, date: "Сегодня", from: "Дом", to: "Работа", distance: "12.4 км", time: "18 мин" },
-      { id: 2, date: "Вчера", from: "Работа", to: "СТО Премиум", distance: "7.8 км", time: "14 мин" },
-      { id: 3, date: "10 марта", from: "Дом", to: "ТЦ Галерея", distance: "5.1 км", time: "11 мин" }
-    ];
-
-    return html`
-      <${SimplePage} title="История поездок" backPath="/profile">
-        <div className="px-6 py-6 space-y-3">
-          ${trips.map((t) => html`
-            <div key=${t.id} className="glass-card-light rounded-2xl p-4">
-              <div className="flex items-center justify-between">
-                <p className="text-xs" style=${{ color: "var(--drivex-silver)" }}>${t.date}</p>
-                <span className="text-xs" style=${{ color: "var(--drivex-neon-cyan)" }}>${t.time}</span>
-              </div>
-              <p className="font-bold mt-2" style=${{ color: "var(--drivex-white)" }}>
-                ${t.from} → ${t.to}
-              </p>
-              <p className="text-sm mt-1" style=${{ color: "var(--drivex-silver)" }}>
-                Дистанция: ${t.distance}
-              </p>
-            </div>
-          `)}
-        </div>
-      </${SimplePage}>
-    `;
-  }
+  // (Старый фейковый TripsScreen с захардкоженными поездками удалён —
+  // настоящий GPS-трекер объявлен ниже, в секции «Поездки (GPS-трекер)».)
 
   function SavedLocationsScreen({ places = [], onAddPlace, onRemovePlace }) {
     const toast = useToast();

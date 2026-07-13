@@ -31,7 +31,34 @@
     const secondaryService =
       nearbyList.find((service) => String(service.id) !== String(featuredService?.id)) || personalizedServices[1] || nearbyList[1];
     const nearbyPreview = nearbyList.slice(0, 3);
-    const reminders = buildSmartCareTasks(maintenance, activeCarId);
+
+    // Скрытые напоминания — строго локально (это выбор конкретного устройства,
+    // не синкается в облако; id задачи включает машину и тип, так что при
+    // изменении состояния задача появится снова под новым содержимым).
+    const [dismissedReminders, setDismissedReminders] = useState(() => {
+      try {
+        const raw = window.localStorage.getItem("drivex.dismissed-reminders.v1");
+        const list = raw ? JSON.parse(raw) : [];
+        return Array.isArray(list) ? list : [];
+      } catch {
+        return [];
+      }
+    });
+    const dismissReminder = (id) => {
+      if (!id) return;
+      setDismissedReminders((prev) => {
+        if (prev.includes(id)) return prev;
+        const next = [...prev, id].slice(-30);
+        try {
+          window.localStorage.setItem("drivex.dismissed-reminders.v1", JSON.stringify(next));
+        } catch {
+          // локальный кеш — не критично
+        }
+        return next;
+      });
+    };
+    const reminders = buildSmartCareTasks(maintenance, activeCarId)
+      .filter((task) => !dismissedReminders.includes(task.id));
 
     return html`
       <div className="home-redesign min-h-screen">
@@ -188,17 +215,22 @@
 
               <div className="home-reminder-grid">
                 ${reminders.length
-                  ? reminders.map((reminder, idx) => html`
-                    <div key=${idx} className="home-reminder-card">
-                      <button type="button" aria-label="Скрыть">×</button>
+                  ? reminders.map((reminder) => {
+                      // Иконка и действие — по ТИПУ задачи (id вида "<car>-oil" /
+                      // "<car>-inspection"), а не по позиции в списке.
+                      const isOil = String(reminder.id || "").includes("-oil");
+                      return html`
+                    <div key=${reminder.id} className="home-reminder-card">
+                      <button type="button" aria-label="Скрыть" onClick=${() => dismissReminder(reminder.id)}>×</button>
                       <span className="home-reminder-icon">
-                        <${Icon} name=${idx === 0 ? "scan" : "calendar"} size=${18} />
+                        <${Icon} name=${isOil ? "wrench" : "scan"} size=${18} />
                       </span>
                       <h3>${reminder.task}</h3>
                       <p>${reminder.dueDate}</p>
-                      <a href="#/smart-care">${idx === 0 ? "Проверить сервис" : "Найти рядом"}</a>
+                      <a href=${isOil ? "#/services" : "#/smart-care"}>${isOil ? "Найти сервис" : "Проверить сроки"}</a>
                     </div>
-                  `)
+                  `;
+                    })
                   : html`
                       <div className="home-reminder-card">
                         <span className="home-reminder-icon">

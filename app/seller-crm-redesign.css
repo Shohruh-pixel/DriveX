@@ -265,6 +265,9 @@
 }
 .cx-pill.is-warn { background: rgba(245, 158, 11, 0.14); border-color: rgba(245, 158, 11, 0.28); color: var(--cx-warn); }
 .cx-pill.is-danger { background: rgba(248, 113, 113, 0.14); border-color: rgba(248, 113, 113, 0.28); color: var(--cx-danger); }
+/* Промежуточные статусы заказа (подтверждён/готов к выдаче/в доставке) —
+   синий, чтобы визуально отличались от финального зелёного «Завершён» */
+.cx-pill.is-info { background: rgba(56, 189, 248, 0.14); border-color: rgba(56, 189, 248, 0.28); color: #7DD3FC; }
 
 /* ── Строка товара ────────────────────────────────────────────────── */
 .cx-prow {

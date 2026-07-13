@@ -87,8 +87,7 @@ function readPlaces() {
 }
 
 function writePlaces(places) {
-  ensureDataDir();
-  fs.writeFileSync(placesFilePath, JSON.stringify(places, null, 2), "utf8");
+  writeJsonFileAtomic(placesFilePath, places);
 }
 
 function readServiceCenters() {
@@ -102,8 +101,7 @@ function readServiceCenters() {
 }
 
 function writeServiceCenters(centers) {
-  ensureDataDir();
-  fs.writeFileSync(serviceCentersFilePath, JSON.stringify(centers, null, 2), "utf8");
+  writeJsonFileAtomic(serviceCentersFilePath, centers);
 }
 
 function readAppState() {
@@ -135,6 +133,25 @@ function runExclusiveAppStateWrite(task) {
   const run = appStateWriteChain.then(task, task);
   // Не даём ошибке одной задачи порвать всю цепочку.
   appStateWriteChain = run.then(() => {}, () => {});
+  return run;
+}
+
+// Та же защита для остальных JSON-файлов (places/service-centers/reviews/
+// referrals): атомарная запись tmp+rename (читатель не увидит обрезанный файл)
+// и последовательная очередь read-modify-write на каждый файл (два параллельных
+// POST'а не затирают изменения друг друга).
+function writeJsonFileAtomic(filePath, value) {
+  ensureDataDir();
+  const tmpPath = filePath + "." + process.pid + ".tmp";
+  fs.writeFileSync(tmpPath, JSON.stringify(value, null, 2), "utf8");
+  fs.renameSync(tmpPath, filePath);
+}
+
+const fileWriteChains = new Map();
+function runExclusiveFileWrite(filePath, task) {
+  const prev = fileWriteChains.get(filePath) || Promise.resolve();
+  const run = prev.then(task, task);
+  fileWriteChains.set(filePath, run.then(() => {}, () => {}));
   return run;
 }
 
@@ -426,10 +443,13 @@ async function handlePlacesRoute(req, res) {
   try {
     const body = await readJsonBody(req);
     const place = normalizePlace(body);
-    const places = readPlaces();
-    const withoutDuplicate = places.filter((item) => item.id !== place.id);
-    withoutDuplicate.unshift(place);
-    writePlaces(withoutDuplicate.slice(0, 500));
+    // Read-modify-write под замком файла: параллельный POST не потеряет запись.
+    await runExclusiveFileWrite(placesFilePath, () => {
+      const places = readPlaces();
+      const withoutDuplicate = places.filter((item) => item.id !== place.id);
+      withoutDuplicate.unshift(place);
+      writePlaces(withoutDuplicate.slice(0, 500));
+    });
     sendJson(res, 201, { place });
   } catch (error) {
     sendJson(res, error.statusCode || 400, { error: error.message || "Place save failed" });
@@ -495,8 +515,7 @@ function readMarketReviews() {
 }
 
 function writeMarketReviews(reviews) {
-  ensureDataDir();
-  fs.writeFileSync(marketReviewsFilePath, JSON.stringify(reviews, null, 2), "utf8");
+  writeJsonFileAtomic(marketReviewsFilePath, reviews);
 }
 
 function buildMarketReviewsSummary() {
@@ -551,9 +570,12 @@ async function handleMarketReviewsRoute(req, res, url) {
       const body = await readJsonBody(req);
       const review = normalizeMarketReview(body.review || body);
       if (!review) { sendJson(res, 400, { error: "Нужны productId и оценка от 1 до 5" }); return; }
-      const all = readMarketReviews();
-      all.unshift(review);
-      writeMarketReviews(all.slice(0, 5000));
+      // Read-modify-write под замком файла: два отзыва одновременно не теряются.
+      await runExclusiveFileWrite(marketReviewsFilePath, () => {
+        const all = readMarketReviews();
+        all.unshift(review);
+        writeMarketReviews(all.slice(0, 5000));
+      });
       sendJson(res, 201, { review });
     } catch (error) {
       sendJson(res, error.statusCode || 400, { error: error.message || "Review save failed" });
@@ -576,8 +598,7 @@ function readReferrals() {
 }
 
 function writeReferrals(list) {
-  ensureDataDir();
-  fs.writeFileSync(referralsFilePath, JSON.stringify(list, null, 2), "utf8");
+  writeJsonFileAtomic(referralsFilePath, list);
 }
 
 function normalizeReferralCodeServer(value) {
@@ -614,49 +635,54 @@ async function handleReferralsRoute(req, res, url) {
     try {
       const body = await readJsonBody(req);
       const action = cleanString(body.action, 20) || "register";
-      const all = readReferrals();
 
-      if (action === "register") {
-        const referrerCode = normalizeReferralCodeServer(body.referrerCode);
-        const inviteeId = cleanString(body.inviteeId, 120);
-        if (!referrerCode || !inviteeId) { sendJson(res, 400, { error: "referrerCode и inviteeId обязательны" }); return; }
-        // нельзя пригласить самого себя
-        if (codeFromInviteeId(inviteeId) === referrerCode) { sendJson(res, 200, { ok: false, reason: "self" }); return; }
-        // один приглашённый — одна запись (первый код побеждает)
-        const existing = all.find((r) => r.inviteeId === inviteeId);
-        if (existing) { sendJson(res, 200, { ok: true, referral: existing, existed: true }); return; }
-        const record = {
-          id: "ref-" + inviteeId,
-          referrerCode,
-          inviteeId,
-          inviteeName: cleanString(body.inviteeName, 40),
-          status: "registered",
-          reward: 0,
-          createdAt: new Date().toISOString(),
-          rewardedAt: null
-        };
-        all.push(record);
-        writeReferrals(all.slice(-20000));
-        sendJson(res, 201, { ok: true, referral: record });
-        return;
-      }
+      // Read-modify-write под замком файла: ответ отправляется внутри задачи,
+      // чтобы чтение и запись referrals.json были неразрывной секцией.
+      await runExclusiveFileWrite(referralsFilePath, () => {
+        const all = readReferrals();
 
-      if (action === "reward") {
-        const inviteeId = cleanString(body.inviteeId, 120);
-        if (!inviteeId) { sendJson(res, 400, { error: "inviteeId обязателен" }); return; }
-        const record = all.find((r) => r.inviteeId === inviteeId);
-        if (!record) { sendJson(res, 200, { ok: false, reason: "not_referred" }); return; }
-        if (record.status !== "rewarded") {
-          record.status = "rewarded";
-          record.reward = REFERRAL_REWARD;
-          record.rewardedAt = new Date().toISOString();
-          writeReferrals(all);
+        if (action === "register") {
+          const referrerCode = normalizeReferralCodeServer(body.referrerCode);
+          const inviteeId = cleanString(body.inviteeId, 120);
+          if (!referrerCode || !inviteeId) { sendJson(res, 400, { error: "referrerCode и inviteeId обязательны" }); return; }
+          // нельзя пригласить самого себя
+          if (codeFromInviteeId(inviteeId) === referrerCode) { sendJson(res, 200, { ok: false, reason: "self" }); return; }
+          // один приглашённый — одна запись (первый код побеждает)
+          const existing = all.find((r) => r.inviteeId === inviteeId);
+          if (existing) { sendJson(res, 200, { ok: true, referral: existing, existed: true }); return; }
+          const record = {
+            id: "ref-" + inviteeId,
+            referrerCode,
+            inviteeId,
+            inviteeName: cleanString(body.inviteeName, 40),
+            status: "registered",
+            reward: 0,
+            createdAt: new Date().toISOString(),
+            rewardedAt: null
+          };
+          all.push(record);
+          writeReferrals(all.slice(-20000));
+          sendJson(res, 201, { ok: true, referral: record });
+          return;
         }
-        sendJson(res, 200, { ok: true, referral: record });
-        return;
-      }
 
-      sendJson(res, 400, { error: "Неизвестное действие" });
+        if (action === "reward") {
+          const inviteeId = cleanString(body.inviteeId, 120);
+          if (!inviteeId) { sendJson(res, 400, { error: "inviteeId обязателен" }); return; }
+          const record = all.find((r) => r.inviteeId === inviteeId);
+          if (!record) { sendJson(res, 200, { ok: false, reason: "not_referred" }); return; }
+          if (record.status !== "rewarded") {
+            record.status = "rewarded";
+            record.reward = REFERRAL_REWARD;
+            record.rewardedAt = new Date().toISOString();
+            writeReferrals(all);
+          }
+          sendJson(res, 200, { ok: true, referral: record });
+          return;
+        }
+
+        sendJson(res, 400, { error: "Неизвестное действие" });
+      });
     } catch (error) {
       sendJson(res, 400, { error: error.message || "Referral save failed" });
     }
@@ -726,17 +752,26 @@ async function handleServiceCentersRoute(req, res) {
 
     const body = await readJsonBody(req);
     const center = normalizeServiceCenter(body);
-    const centers = readServiceCenters();
-    const existing = centers.find((item) => item.id === center.id);
-    // Чужой центр перезаписать нельзя (раньше POST был полностью открыт).
-    if (existing && existing.ownerUserId && existing.ownerUserId !== ownerUserId) {
+    // Read-modify-write под замком файла; проверка владельца — тоже внутри,
+    // чтобы существующая запись не сменилась между чтением и записью.
+    let ownershipConflict = false;
+    await runExclusiveFileWrite(serviceCentersFilePath, () => {
+      const centers = readServiceCenters();
+      const existing = centers.find((item) => item.id === center.id);
+      // Чужой центр перезаписать нельзя (раньше POST был полностью открыт).
+      if (existing && existing.ownerUserId && existing.ownerUserId !== ownerUserId) {
+        ownershipConflict = true;
+        return;
+      }
+      center.ownerUserId = ownerUserId; // владельца назначает сервер, не клиент
+      const withoutDuplicate = centers.filter((item) => item.id !== center.id);
+      withoutDuplicate.unshift(center);
+      writeServiceCenters(withoutDuplicate.slice(0, 300));
+    });
+    if (ownershipConflict) {
       sendJson(res, 403, { error: "Этот сервис принадлежит другому аккаунту." });
       return;
     }
-    center.ownerUserId = ownerUserId; // владельца назначает сервер, не клиент
-    const withoutDuplicate = centers.filter((item) => item.id !== center.id);
-    withoutDuplicate.unshift(center);
-    writeServiceCenters(withoutDuplicate.slice(0, 300));
 
     // ⛔ Зеркалирование в Supabase service_centers УБРАНО: id там — uuid,
     // синтезированный отдельно от локального слага (center.id), поэтому

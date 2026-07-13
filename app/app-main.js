@@ -1022,7 +1022,28 @@
       [sellerSession, sellerSession.sellerStoreId, sellerStore, serviceSession, serviceSession.serviceCenterId]
     );
 
+    // ⛔ Анти-петля МЕЖДУ ВКЛАДКАМИ (тот же класс бага, что orderChats):
+    // приём из BroadcastChannel/storage-события создаёт новые ссылки массивов →
+    // эффекты сохранения срабатывают → pushSharedState рассылает ТЕ ЖЕ данные
+    // обратно → вторая вкладка применяет → её эффекты рассылают снова → цикл.
+    // Кешируем последнее известное СОДЕРЖИМОЕ по ключу: и отправка, и приём
+    // пропускаются, если содержимое не изменилось.
+    const crossTabContentRef = useRef({});
+    const crossTabSerialize = (value) => {
+      try {
+        return JSON.stringify(value === undefined ? null : value);
+      } catch {
+        return null; // не сериализуется — не кешируем, ведём себя как раньше
+      }
+    };
+
     const pushSharedState = useCallback((key, nextValue) => {
+      const serialized = crossTabSerialize(nextValue);
+      if (serialized !== null && crossTabContentRef.current[key] === serialized) {
+        return; // это эхо только что применённых данных — не рассылаем повторно
+      }
+      if (serialized !== null) crossTabContentRef.current[key] = serialized;
+
       try {
         if (typeof window !== "undefined" && window.localStorage) {
           if (nextValue === null) {
@@ -1916,6 +1937,11 @@
       channel.onmessage = (event) => {
         const message = event?.data;
         if (!message || typeof message !== "object" || !message.key) return;
+        // Анти-петля: если содержимое уже применялось/отправлялось этой
+        // вкладкой — пропускаем (см. crossTabContentRef у pushSharedState).
+        const serialized = crossTabSerialize(message.value);
+        if (serialized !== null && crossTabContentRef.current[message.key] === serialized) return;
+        if (serialized !== null) crossTabContentRef.current[message.key] = serialized;
         applySharedStateUpdate(message.key, message.value);
       };
 
@@ -1945,6 +1971,11 @@
         try {
           if (!Object.values(drivexStorageKeys).includes(event.key)) return;
           const parsed = event.newValue ? JSON.parse(event.newValue) : null;
+          // Анти-петля: не применяем содержимое, которое эта вкладка уже
+          // применяла/отправляла (см. crossTabContentRef у pushSharedState).
+          const serialized = crossTabSerialize(parsed);
+          if (serialized !== null && crossTabContentRef.current[event.key] === serialized) return;
+          if (serialized !== null) crossTabContentRef.current[event.key] = serialized;
           applySharedStateUpdate(event.key, parsed);
         } catch {
           // ignore cross-tab sync issues
