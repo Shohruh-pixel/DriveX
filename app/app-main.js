@@ -4352,6 +4352,18 @@
               onRegister=${registerServiceCrm}
             />`
           : html`<${getScreen('ServicePartnerRegisterIntroScreen')} onStart=${beginServiceRegistration} />`;
+      } else if (normalized === "/service-crm/login") {
+        // Вход доступен ВСЕГДА — даже на новом устройстве без локального
+        // кабинета: владелец существующего сервиса входит, и кабинет
+        // восстанавливается по владельцу. Раньше этот маршрут перехватывала
+        // ветка serviceNeedsRegistration, и до формы входа было не добраться.
+        content = html`<${getScreen('ServiceLoginScreen')}
+          onLogin=${loginServiceCrm}
+          onGoRegister=${beginServiceRegistration}
+          message=${serviceCurrentCenter.name
+            ? `Войдите, чтобы открыть кабинет сервиса ${serviceCurrentCenter.name}.`
+            : "Войдите в свой сервисный кабинет."}
+        />`;
       } else if (serviceNeedsRegistration) {
         content = serviceRegistrationDraft
           ? html`<${getScreen('ServiceRegistrationScreen')}
@@ -4361,7 +4373,7 @@
               onRegister=${registerServiceCrm}
             />`
           : html`<${getScreen('ServicePartnerRegisterIntroScreen')} onStart=${beginServiceRegistration} />`;
-      } else if (normalized === "/service-crm/login" || !serviceIsAuthenticated) {
+      } else if (!serviceIsAuthenticated) {
         content = html`<${getScreen('ServiceLoginScreen')}
           onLogin=${loginServiceCrm}
           onGoRegister=${beginServiceRegistration}

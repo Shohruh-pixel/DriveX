@@ -303,6 +303,11 @@
         <button type="button" className="w-full py-4 rounded-2xl text-sm font-bold dx-btn" onClick=${() => onStart && onStart()}>
           Зарегистрировать сервис
         </button>
+
+        <p className="text-sm text-center" style=${{ color: "var(--drivex-silver)" }}>
+          Уже есть кабинет?${" "}
+          <a href="#/service-crm/login" style=${{ color: "var(--drivex-neon-cyan)", fontWeight: 600 }}>Войти</a>
+        </p>
       </${ServiceCrmLayout}>
     `;
   }
