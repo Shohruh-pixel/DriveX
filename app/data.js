@@ -102,21 +102,21 @@
       id: "wash",
       name: "Автомойка",
       icon: "wash",
-      color: "#06b6d4",
+      color: "var(--drivex-neon-cyan)",
       count: ""
     },
     {
       id: "diagnostics",
       name: "Диагностика",
       icon: "scan",
-      color: "#f59e0b",
+      color: "var(--drivex-warning)",
       count: ""
     },
     {
       id: "towing",
       name: "Эвакуатор",
       icon: "truck",
-      color: "#ef4444",
+      color: "var(--drivex-danger)",
       count: ""
     },
     {

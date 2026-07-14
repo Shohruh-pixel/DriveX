@@ -225,9 +225,20 @@
 
   function normalizeMarketplacePartnerCatalog(value) {
     const source = value && typeof value === "object" ? value : {};
+    const stores = Array.isArray(source.stores) ? source.stores.filter(Boolean) : [];
+    const products = Array.isArray(source.products) ? source.products.filter(Boolean) : [];
+    // Тестовые магазины и товары (созданные при отладке регистрации продавцов)
+    // скрываем из публичной витрины покупателя. Бекенд-данные не трогаем:
+    // продавец в своём CRM видит их как раньше через seller-backend.
+    const isTestName = (name) => /тест/i.test(String(name || ""));
+    const hiddenStoreIds = new Set(
+      stores.filter((store) => isTestName(store.name)).map((store) => String(store.id))
+    );
     return {
-      stores: Array.isArray(source.stores) ? source.stores.filter(Boolean) : [],
-      products: Array.isArray(source.products) ? source.products.filter(Boolean) : []
+      stores: stores.filter((store) => !hiddenStoreIds.has(String(store.id))),
+      products: products.filter(
+        (product) => !hiddenStoreIds.has(String(product.storeId)) && !isTestName(product.name)
+      )
     };
   }
 
@@ -4242,7 +4253,9 @@
     const smartRating = Math.round((3.4 + smartRawScore / 100 * 1.6) * 10) / 10;
     const gallery = (Array.isArray(merged.gallery) ? merged.gallery : []).filter(Boolean);
     const primaryImage = merged.image || gallery[0] || "";
-    const finalGallery = [primaryImage, ...gallery].filter(Boolean).slice(0, 4);
+    // Без дублей: у CRM-центров обложка часто повторяется в галерее —
+    // «Фото сервиса» показывало один и тот же кадр дважды.
+    const finalGallery = [...new Set([primaryImage, ...gallery].filter(Boolean))].slice(0, 4);
     const categoryMeta = getServiceCategoryMeta(
       merged.categoryId || merged.serviceType || merged.category || merged.type || "repair"
     );

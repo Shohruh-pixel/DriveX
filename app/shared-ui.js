@@ -262,6 +262,7 @@
           <path d="M5 12h14"></path>
         </svg>`;
       case "x":
+      case "close":
         return html`<svg ...${commonProps} className=${className} style=${style}>
           <path d="M18 6 6 18"></path>
           <path d="m6 6 12 12"></path>
@@ -282,10 +283,8 @@
         </svg>`;
       case "wash":
         return html`<svg ...${commonProps} className=${className} style=${style}>
-          <path d="M7 3h10"></path>
-          <path d="M9 3v4"></path>
-          <path d="M15 3v4"></path>
-          <path d="M6 7h12l-1 14H7L6 7Z"></path>
+          <path d="M12 3c3.4 4.1 6 7.3 6 10.4a6 6 0 0 1-12 0C6 10.3 8.6 7.1 12 3Z"></path>
+          <path d="M9.5 14.5a2.5 2.5 0 0 0 2.5 2.5"></path>
         </svg>`;
       case "tire":
         return html`<svg ...${commonProps} className=${className} style=${style}>
@@ -312,6 +311,21 @@
       case "chevron-left":
         return html`<svg ...${commonProps} className=${className} style=${style}>
           <path d="M15 18 9 12l6-6"></path>
+        </svg>`;
+      case "chevron-right":
+      case "chev":
+        return html`<svg ...${commonProps} className=${className} style=${style}>
+          <path d="m9 18 6-6-6-6"></path>
+        </svg>`;
+      case "heart":
+        return html`<svg ...${commonProps} className=${className} style=${style}>
+          <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"></path>
+        </svg>`;
+      case "store":
+        return html`<svg ...${commonProps} className=${className} style=${style}>
+          <path d="M3 9 4.5 4h15L21 9"></path>
+          <path d="M4 9v11h16V9"></path>
+          <path d="M9 20v-6h6v6"></path>
         </svg>`;
       case "truck":
         return html`<svg ...${commonProps} className=${className} style=${style}>

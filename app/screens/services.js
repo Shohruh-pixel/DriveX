@@ -273,11 +273,19 @@
 
     const renderServiceRow = (service, index) => {
       const isTop = index === 0;
+      // Компактная мета-строка: город не дублируем (distance у CRM-центров
+      // уже «Город • Ориентир»), часы сокращаем до «до 18:00» — полная строка
+      // «08:00 — 18:00» обрезалась многоточием посреди цифр («· 0...»).
+      const distanceStr = String(service.distance || "");
+      const cityL = String(service.city || "").trim().toLowerCase();
+      const hoursRange = typeof parseServiceWorkingHoursRange === "function"
+        ? parseServiceWorkingHoursRange(service.workingHours || "")
+        : {};
       const meta = [
-        service.distance,
-        service.workingHours,
-        service.city
-      ].filter(Boolean).slice(0, 3).join(" · ");
+        distanceStr,
+        cityL && !distanceStr.toLowerCase().includes(cityL) ? service.city : "",
+        hoursRange.endTime ? `до ${hoursRange.endTime}` : ""
+      ].filter(Boolean).join(" · ");
       const primaryBadge = isTop ? "ТОП" : getCompactServiceKind(service);
 
       return html`
@@ -1384,7 +1392,16 @@
                 <${MarketStoreAvatar} store=${store} size=${44} rounded="8px" />
                 <div>
                   <h3>${store.name}</h3>
-                  <p>${store.rating} (${store.reviews}) • ${store.productsCount} товаров</p>
+                  <p>${(() => {
+                    // Честный рейтинг магазина: по реальным отзывам на его товары,
+                    // без дефолтного «4.8 (0)».
+                    const info = typeof getMarketStoreRating === "function"
+                      ? getMarketStoreRating(store.id)
+                      : { has: false };
+                    const ratingPart = info.has ? `★ ${info.rating} (${info.count})` : "Нет отзывов";
+                    const count = Number(store.productsCount) || 0;
+                    return `${ratingPart} • ${count} ${pluralize(count, "товар", "товара", "товаров")}`;
+                  })()}</p>
                 </div>
               </a>
             `)}

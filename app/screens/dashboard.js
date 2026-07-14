@@ -148,7 +148,7 @@
                           <p className="home-service-category">${featuredService.category || featuredService.type}</p>
                           <h3>${featuredService.name}</h3>
                         </div>
-                        <span className="home-save-icon"><${Icon} name="scan" size=${16} /></span>
+                        <span className="home-save-icon"><${Icon} name="star" size=${16} /></span>
                       </div>
                       <div className="home-meta-line">
                         <span>${featuredService.distance || featuredService.city || "Рядом"}</span>
@@ -160,7 +160,7 @@
                           return count > 0
                             ? html`<span className="home-rating"><${Icon} name="star" size=${11} /> ${featuredService.rating}</span>
                                 <span>${count} ${pluralize(count, "отзыв", "отзыва", "отзывов")}</span>`
-                            : html`<span>Новый сервис — отзывов пока нет</span>`;
+                            : html`<span>Отзывов пока нет</span>`;
                         })()}
                       </div>
                       <div className="home-featured-chips">

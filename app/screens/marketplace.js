@@ -47,8 +47,10 @@
       "https://images.unsplash.com/photo-1525609004556-c46c7d6cf023?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1200";
     const heroImage = service.image || service.coverImage || fallbackImage;
     const serviceRenderKey = `${String(service.id || "service")}:${heroImage.length}:${heroImage.slice(-24)}`;
-    const gallery = Array.from(new Set([heroImage, ...(Array.isArray(service.gallery) ? service.gallery.filter(Boolean) : [])]))
-      .filter(Boolean)
+    // Галерея БЕЗ обложки: hero-фото уже занимает шапку страницы — его повтор
+    // в «Фото сервиса» выглядел как два одинаковых кадра рядом.
+    const gallery = Array.from(new Set(Array.isArray(service.gallery) ? service.gallery.filter(Boolean) : []))
+      .filter((photo) => photo !== heroImage)
       .slice(0, 6);
     const masters = Array.isArray(service.masters) ? service.masters.filter(Boolean).slice(0, 6) : [];
     const ratingValue = Number.isFinite(Number(service.smartRating || service.rating))
@@ -63,10 +65,21 @@
       if (!Number.isFinite(numeric) || numeric <= 0) return 5;
       return Math.max(5, Math.round(numeric * 4.2));
     })();
-    const locationMeta = [service.type || service.category || "СТО", distanceLabel, service.city || "Худжанд"]
+    // Без дублей города: distanceLabel у CRM-центров уже «Город • Ориентир»,
+    // а address часто начинается с города — не повторяем «Худжанд» по 2-3 раза.
+    const cityName = String(service.city || "").trim();
+    const cityLower = cityName.toLowerCase();
+    const locationMeta = [
+      service.type || service.category || "СТО",
+      distanceLabel,
+      cityLower && !String(distanceLabel).toLowerCase().includes(cityLower) ? cityName : ""
+    ]
       .filter(Boolean)
       .join(" • ");
-    const shortAddress = [service.city, service.address || service.locationLabel].filter(Boolean).join(", ");
+    const rawAddress = String(service.address || service.locationLabel || "").trim();
+    const shortAddress = cityLower && rawAddress.toLowerCase().startsWith(cityLower)
+      ? rawAddress
+      : [cityName, rawAddress].filter(Boolean).join(", ");
     const workingHours = String(service.workingHours || "").trim();
     // Честная доступность — по графику работы, а не выдуманное «Свободно сейчас»
     const hoursRange = parseServiceWorkingHoursRange(workingHours);
