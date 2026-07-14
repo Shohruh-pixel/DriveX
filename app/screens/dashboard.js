@@ -151,16 +151,24 @@
                         <span className="home-save-icon"><${Icon} name="scan" size=${16} /></span>
                       </div>
                       <div className="home-meta-line">
-                        <span>${featuredService.distance || "1.2 км"}</span>
-                        <span className="home-rating"><${Icon} name="star" size=${11} /> ${featuredService.smartRating || featuredService.rating}</span>
-                        <span>${featuredService.reviews || 120} отзывов</span>
+                        <span>${featuredService.distance || featuredService.city || "Рядом"}</span>
+                        ${(() => {
+                          // Честные цифры: рейтинг и отзывы — только если отзывы
+                          // реально есть (как на странице сервиса). Раньше тут были
+                          // фейковые фолбэки «4.5» и «120 отзывов» для нового сервиса.
+                          const count = Math.max(0, Math.round(Number(featuredService.reviews) || 0));
+                          return count > 0
+                            ? html`<span className="home-rating"><${Icon} name="star" size=${11} /> ${featuredService.rating}</span>
+                                <span>${count} ${pluralize(count, "отзыв", "отзыва", "отзывов")}</span>`
+                            : html`<span>Новый сервис — отзывов пока нет</span>`;
+                        })()}
                       </div>
                       <div className="home-featured-chips">
                         <span><${Icon} name="car" size=${13} /> Подходит для ${activeCar?.name || "вашего авто"}</span>
                         <span><${Icon} name="coins" size=${13} /> ${featuredService.price || "Честные цены"}</span>
                       </div>
                       <div className="home-featured-footer">
-                        <span className="home-open-dot">Открыто сейчас · Ответ за 5 минут</span>
+                        <span className="home-open-dot">${featuredService.available !== false ? "Открыто сейчас" : "Сейчас закрыто"}</span>
                         <span className="home-book-button">Записаться</span>
                       </div>
                     </div>
@@ -172,7 +180,7 @@
                         <div>
                           <p>${secondaryService.category || secondaryService.type}</p>
                           <h3>${secondaryService.name}</h3>
-                          <span>${secondaryService.distance} · ${secondaryService.smartRating || secondaryService.rating}</span>
+                          <span>${[secondaryService.distance, Number(secondaryService.reviews) > 0 ? `★ ${secondaryService.rating}` : "Новый сервис"].filter(Boolean).join(" · ")}</span>
                         </div>
                         <span>Смотреть →</span>
                       </a>`
@@ -198,7 +206,9 @@
                         <p>${service.type} · ${service.distance} · <span>${service.available ? "Открыто" : "Закрыто"}</span></p>
                       </div>
                       <div className="home-nearby-side">
-                        <span><${Icon} name="star" size=${10} /> ${service.smartRating || service.rating}</span>
+                        ${Number(service.reviews) > 0
+                          ? html`<span><${Icon} name="star" size=${10} /> ${service.rating}</span>`
+                          : html`<span>Новый</span>`}
                         <b>Подробнее</b>
                       </div>
                     </a>
