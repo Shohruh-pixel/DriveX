@@ -1089,7 +1089,15 @@
             </h3>
 
             <div className="market-ui-product-meta">
-              <span>${product.rating} (${product.reviews})</span>
+              ${(() => {
+                // Честный рейтинг: только по реальным отзывам (как на странице
+                // товара). Раньше показывался дефолтный product.rating «4.7 (0)»
+                // даже у товаров без единого отзыва.
+                const info = typeof getMarketProductRating === "function"
+                  ? getMarketProductRating(product)
+                  : { has: false };
+                return html`<span>${info.has ? `★ ${info.rating} (${info.count})` : "Нет отзывов"}</span>`;
+              })()}
               <span>${product.category}</span>
             </div>
           </div>
