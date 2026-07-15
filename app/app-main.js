@@ -2442,11 +2442,32 @@
               data: { role: payload.role || "buyer", full_name: name, phone: rawPhone }
             }
           });
-          if (error) throw error;
-          const session = makeBuyerSessionFromSupabaseUser(data?.user);
+
+          // Номер уже зарегистрирован (или signUp вернул user без session —
+          // так Supabase отвечает при включённом email-confirm). Пробуем сразу
+          // войти с введённым паролем: повторная «регистрация» того же номера
+          // с верным паролем превращается в обычный вход, а не в ошибку.
+          // БЕЗ этого возможен тихий сценарий: applyBuyerSession локально
+          // «входит», но реальной сессии в клиенте нет — и через несколько
+          // секунд onAuthStateChange(null) выбрасывает на экран входа.
+          let authedUser = data?.user || null;
+          if (error || !data?.session) {
+            const isExisting = error && /already (registered|exists)/i.test(String(error.message || ""));
+            if (error && !isExisting) throw error;
+            const { data: signInData, error: signInError } = await client.auth.signInWithPassword({
+              email: authEmail,
+              password
+            });
+            if (signInError || !signInData?.session) {
+              throw new Error("Этот номер уже зарегистрирован. Войдите с паролем или восстановите его через «Забыли пароль?»");
+            }
+            authedUser = signInData.user;
+          }
+
+          const session = makeBuyerSessionFromSupabaseUser(authedUser);
           // Создаём запись в public.users
           await client.from("users").upsert({
-            id: data?.user?.id,
+            id: authedUser?.id,
             full_name: name,
             phone: rawPhone,
             email: authEmail,
@@ -2454,6 +2475,16 @@
           }, { onConflict: "id" }).catch(() => {});
           applyBuyerSession(session);
           buyerStateReadyRef.current = true;
+
+          // Встроенные браузеры (Telegram/Instagram на iOS) могут не сохранять
+          // вход между перезагрузками — честно предупреждаем сразу.
+          try {
+            if (!window.localStorage.getItem("drivex-auth")) {
+              toast.push("Вход может не сохраниться в этом браузере — откройте сайт в Safari или Chrome");
+            }
+          } catch {
+            toast.push("Вход может не сохраниться в этом браузере — откройте сайт в Safari или Chrome");
+          }
           const push = window.DrivexPush;
           if (push && session.id) push.registerTokenForUser(session.id).catch(() => {});
           navigateToHash("/profile");
@@ -2479,7 +2510,7 @@
         navigateToHash("/profile");
         return session;
       },
-      [applyBuyerSession, loginByPhone]
+      [applyBuyerSession, loginByPhone, toast]
     );
 
     const loginBuyer = useCallback(
