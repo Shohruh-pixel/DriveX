@@ -11,19 +11,41 @@
       : "/api/places";
 
   const categories = [
-    { id: "gas", label: "АЗС", icon: "F" },
-    { id: "service", label: "Сервис", icon: "S" },
-    { id: "wash", label: "Автомойка", icon: "W" },
-    { id: "parts", label: "Магазин", icon: "M" },
-    { id: "diagnostics", label: "Диагностика", icon: "D" },
-    { id: "tire", label: "Шиномонтаж", icon: "T" },
-    { id: "tow", label: "Эвакуатор", icon: "E" },
-    { id: "detailing", label: "Детейлинг", icon: "L" },
-    { id: "electric", label: "Автоэлектрик", icon: "V" },
-    { id: "charge", label: "Зарядка EV", icon: "EV" },
-    { id: "parking", label: "Парковка", icon: "P" },
-    { id: "other", label: "Другое", icon: "+" }
+    { id: "gas", label: "АЗС" },
+    { id: "service", label: "Сервис" },
+    { id: "wash", label: "Автомойка" },
+    { id: "parts", label: "Магазин" },
+    { id: "diagnostics", label: "Диагностика" },
+    { id: "tire", label: "Шиномонтаж" },
+    { id: "tow", label: "Эвакуатор" },
+    { id: "detailing", label: "Детейлинг" },
+    { id: "electric", label: "Автоэлектрик" },
+    { id: "charge", label: "Зарядка EV" },
+    { id: "parking", label: "Парковка" },
+    { id: "other", label: "Другое" }
   ];
+
+  // Чёткие stroke-SVG иконки категорий (раньше — буквы F/S/W/M, выглядело
+  // как черновик). Используются и в шаге выбора, и в маркерах на карте.
+  const CATEGORY_SVG = {
+    gas: '<path d="M5 21V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v16"></path><path d="M3 21h14"></path><path d="M15 9h2.5a1.5 1.5 0 0 1 1.5 1.5V17a1.5 1.5 0 0 0 3 0v-6.6L19.5 8"></path><path d="M8 7h4v4H8z"></path>',
+    service: '<path d="M14.7 6.3a4.5 4.5 0 0 0-6 5.6L3 17.6V21h3.4l5.7-5.7a4.5 4.5 0 0 0 5.6-6L14.5 12l-2.5-2.5 2.7-3.2Z"></path>',
+    wash: '<path d="M12 3c3.4 4.1 6 7.3 6 10.4a6 6 0 0 1-12 0C6 10.3 8.6 7.1 12 3Z"></path><path d="M9.5 14.5a2.5 2.5 0 0 0 2.5 2.5"></path>',
+    parts: '<path d="M6 7h12l1.2 13H4.8L6 7Z"></path><path d="M9 10V6a3 3 0 0 1 6 0v4"></path>',
+    diagnostics: '<path d="M4 7V4h3"></path><path d="M17 4h3v3"></path><path d="M20 17v3h-3"></path><path d="M7 20H4v-3"></path><path d="M7 12h3l1.5-3 3 6 1.5-3h1"></path>',
+    tire: '<circle cx="12" cy="12" r="9"></circle><circle cx="12" cy="12" r="3"></circle><path d="M12 3v3M12 18v3M3 12h3M18 12h3"></path>',
+    tow: '<path d="M3 7h9v9H3z"></path><path d="M12 10h3.5l3 3v3h-6.5"></path><circle cx="6.5" cy="17.5" r="1.8"></circle><circle cx="16" cy="17.5" r="1.8"></circle>',
+    detailing: '<path d="m12 3 1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8L12 3Z"></path><path d="m18.5 15 .9 2.3 2.3.9-2.3.9-.9 2.3-.9-2.3-2.3-.9 2.3-.9.9-2.3Z"></path>',
+    electric: '<path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z"></path>',
+    charge: '<path d="M5 21V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v16"></path><path d="M3 21h14"></path><path d="M11 7 8.5 11.5h3L9 16"></path><path d="M15 9h2.5a1.5 1.5 0 0 1 1.5 1.5V17a1.5 1.5 0 0 0 3 0v-6.6L19.5 8"></path>',
+    parking: '<rect x="4" y="4" width="16" height="16" rx="3"></rect><path d="M9.5 16.5v-9h3.4a2.8 2.8 0 0 1 0 5.6H9.5"></path>',
+    other: '<circle cx="12" cy="12" r="9"></circle><path d="M12 8v8M8 12h8"></path>'
+  };
+
+  function categoryIcon(categoryId, size = 20) {
+    const path = CATEGORY_SVG[categoryId] || CATEGORY_SVG.other;
+    return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${path}</svg>`;
+  }
 
   let state = null;
 
@@ -86,7 +108,7 @@
       className: "dx-add-marker-shell",
       html: `
         <button class="dx-add-marker${publishedClass}" type="button" aria-label="${escapeHtml(place.name)}">
-          <span>${escapeHtml(category.icon)}</span>
+          <span>${categoryIcon(category.id, 17)}</span>
         </button>
       `,
       iconSize: [44, 44],
@@ -196,7 +218,7 @@
         ${categories
           .map((category) => `
             <button class="dx-add-category-card" type="button" data-add-place-action="select-category" data-category="${category.id}">
-              <span>${escapeHtml(category.icon)}</span>
+              <span>${categoryIcon(category.id, 20)}</span>
               <strong>${escapeHtml(category.label)}</strong>
             </button>
           `)
@@ -287,12 +309,27 @@
         ${field("address", "Адрес", v.address, e.address, "Улица, микрорайон или ориентир")}
         ${field("contact", "Телефон / WhatsApp / Telegram", v.contact, e.contact, "+992 ... или @username")}
         ${field("workingHours", "Режим работы", v.workingHours, e.workingHours, "Например: 08:00-22:00")}
-        <label>
+        <div class="dx-add-photo-block">
           <span>Фото</span>
-          <input name="photos" type="file" accept="image/*" multiple />
-          ${state.photos.length ? `<small>${state.photos.length} фото готово</small>` : ""}
+          ${state.photos.length
+            ? `<div class="dx-add-photo-grid">
+                ${state.photos.map((src, index) => `
+                  <div class="dx-add-photo-thumb">
+                    <img src="${src}" alt="Фото ${index + 1}" />
+                    <button type="button" data-add-place-action="remove-photo" data-index="${index}" aria-label="Убрать фото">×</button>
+                  </div>
+                `).join("")}
+              </div>`
+            : ""}
+          ${state.photos.length < 3
+            ? `<label class="dx-add-photo-btn">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v12H4z"></path><circle cx="12" cy="13" r="3.4"></circle></svg>
+                ${state.photos.length ? "Добавить ещё" : "Добавить фото"}
+                <input name="photos" type="file" accept="image/*" multiple hidden />
+              </label>`
+            : ""}
           ${e.photos ? `<em>${escapeHtml(e.photos)}</em>` : ""}
-        </label>
+        </div>
         <label>
           <span>Описание</span>
           <textarea name="description" rows="3" placeholder="Коротко: что здесь есть">${escapeHtml(v.description || "")}</textarea>
@@ -620,6 +657,14 @@
       collectFormValues();
       renderAddPlaceForm();
     }
+    if (action === "remove-photo") {
+      const index = Number(button.getAttribute("data-index"));
+      if (Number.isFinite(index)) {
+        collectFormValues();
+        state.photos = state.photos.filter((_, i) => i !== index);
+        renderAddPlaceForm();
+      }
+    }
     if (action === "preview") previewNewPlace();
     if (action === "edit-form") renderAddPlaceForm();
     if (action === "submit") submitNewPlace();
@@ -644,17 +689,17 @@
   }
 
   function readPhotoFiles(fileList) {
-    const files = Array.from(fileList || []).filter((file) => /^image\//.test(file.type)).slice(0, 3);
-    if (!files.length) {
-      state.photos = [];
-      return;
-    }
+    const remaining = Math.max(0, 3 - state.photos.length);
+    const files = Array.from(fileList || []).filter((file) => /^image\//.test(file.type)).slice(0, remaining);
+    // Отмена диалога выбора больше НЕ сбрасывает уже добавленные фото —
+    // новые снимки ДОПОЛНЯЮТ список (кнопка «Добавить ещё»), максимум 3.
+    if (!files.length) return;
 
     state.showToast("Готовлю фото...");
     Promise.all(files.map(compressImageFile))
       .then((photos) => {
-        state.photos = photos.filter(Boolean);
         collectFormValues();
+        state.photos = [...state.photos, ...photos.filter(Boolean)].slice(0, 3);
         renderAddPlaceForm();
       })
       .catch(() => {

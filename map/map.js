@@ -298,7 +298,7 @@
       rating: "DriveX",
       distance: formatDistanceLabel(km),
       type: "gas",
-      tags: [item.network || "АЗС", item.hasCharging ? "Электро" : "DriveX verified"].slice(0, 2),
+      tags: [item.network || "АЗС", item.hasCharging ? "Электро" : "Проверено DRIVEX"].slice(0, 2),
       open: true,
       fast: false,
       eta: km < 2 ? "5 мин" : `${Math.max(6, Math.round(km * 3))} мин`,
@@ -333,7 +333,7 @@
         phone: curatedMatch.phone,
         fuelTypes: curatedMatch.fuelTypes,
         hasCharging: Boolean(curatedMatch.hasCharging),
-        tags: [curatedMatch.network || station.tags?.[0] || "АЗС", curatedMatch.hasCharging ? "Электро" : "DriveX verified"],
+        tags: [curatedMatch.network || station.tags?.[0] || "АЗС", curatedMatch.hasCharging ? "Электро" : "Проверено DRIVEX"],
         source: station.source === "osm" ? "osm+curated" : "curated",
         curated: true,
         coordinateAccuracy: curatedMatch.coordinateAccuracy || "OSM"
@@ -637,7 +637,6 @@
     const isUserPlace = service.userPlace === true || service.source === "user";
     const isCatalogService = service.type === "service" && service.source === "catalog";
     const isCatalogStore = service.type === "store" && service.source === "catalog";
-    const hasPoiVisual = isGasStation || isChargeStation;
     const fuelTypes = Array.isArray(service.fuelTypes) && service.fuelTypes.length
       ? service.fuelTypes
       : isGasStation
@@ -651,9 +650,9 @@
     const phone = service.phone || service.contact || "";
     const phoneHref = phone ? phone.replace(/[^\d+]/g, "") : "";
     const sourceLabel = service.source === "curated"
-      ? "DriveX verified"
+      ? "проверено DRIVEX"
       : service.source === "osm+curated"
-        ? "OSM + DriveX verified"
+        ? "OSM, проверено DRIVEX"
         : service.source === "osm"
           ? "OpenStreetMap"
           : "резервная база";
@@ -677,10 +676,11 @@
       : service.open
         ? `Открыто${service.workingHours ? ` · ${service.workingHours}` : " сейчас"}`
         : `Закрыто${service.workingHours ? ` · ${service.workingHours}` : ""}`;
-    // Честный рейтинг: у АЗС/ЭЗС — источник данных, у сервисов — только
-    // реальные отзывы (раньше выводилось «OSM OSM» и выдуманные ★4.8).
+    // Честный рейтинг: у АЗС/ЭЗС источник уже виден в бейдже и статусе —
+    // в мета-строке только расстояние и время; у сервисов — рейтинг только
+    // при реальных отзывах.
     const ratingLabel = isGasStation || isChargeStation
-      ? escapeHtml(String(service.rating || "OSM"))
+      ? ""
       : Number(service.reviews) > 0
         ? `★ ${escapeHtml(String(service.rating))} (${service.reviews})`
         : "Новый";
@@ -693,27 +693,16 @@
         <button class="dx-map-sheet-back" type="button" data-action="close-sheet" aria-label="Назад">‹</button>
         <button class="dx-map-sheet-close" type="button" data-action="close-sheet" aria-label="Закрыть">×</button>
       </div>
-      ${hasPoiVisual
-        ? `<div class="dx-map-sheet-photo">
-            <div class="dx-map-station-visual${isChargeStation ? " is-charge" : ""}" role="img" aria-label="${escapeHtml(service.name)}">
-              <span class="dx-map-station-canopy"></span>
-              <span class="dx-map-station-pump"></span>
-              <span class="dx-map-station-road"></span>
-            </div>
-            <span>${isChargeStation ? "ЭЗС" : escapeHtml(service.tags?.[0] || "АЗС")}</span>
-          </div>`
-        : ""}
       <div class="dx-map-sheet-main">
         <div>
           <p class="dx-map-sheet-badge">${badgeText}</p>
           <h3>${escapeHtml(service.name)}</h3>
           <div class="dx-map-sheet-meta">
-            <span>${ratingLabel}</span>
+            ${ratingLabel ? `<span>${ratingLabel}</span>` : ""}
             <span>${escapeHtml(service.distance || "рядом")}</span>
             <span>${escapeHtml(service.eta || "маршрут")}</span>
           </div>
         </div>
-        <button class="dx-map-save" type="button" aria-label="Сохранить">⌑</button>
       </div>
       <div class="dx-map-sheet-tags">
         ${tags.map((tag) => `<span>${escapeHtml(tag)}</span>`).join("")}
