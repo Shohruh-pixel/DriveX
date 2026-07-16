@@ -67,40 +67,44 @@
 
 .dx-map-top {
   position: absolute;
-  top: calc(0.45rem + env(safe-area-inset-top));
+  top: calc(0.55rem + env(safe-area-inset-top));
   left: 0;
   right: 0;
   z-index: 5;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 2.65rem;
-  gap: 0.55rem;
+  gap: 0.5rem;
   padding: 0 1rem;
   pointer-events: none;
 }
 
+/* Спокойная профессиональная поверхность: без неонового свечения,
+   мягкая тень, одинаковый фон у всех плавающих элементов */
 .dx-map-search,
-.dx-map-filter-button,
 .dx-map-chip,
-.dx-map-ai-card,
-.dx-map-best-button,
 .dx-map-side-controls button,
 .dx-map-bottom-sheet {
-  border: 1px solid rgba(148, 163, 184, 0.12);
-  background: rgba(7, 12, 22, 0.78);
-  backdrop-filter: blur(18px);
-  box-shadow: 0 18px 36px rgba(0, 0, 0, 0.24);
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  background: rgba(9, 13, 22, 0.92);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.28);
 }
 
 .dx-map-search {
   display: flex;
-  height: 2.55rem;
+  height: 2.75rem;
   align-items: center;
-  gap: 0.65rem;
+  gap: 0.6rem;
   min-width: 0;
-  padding: 0 0.82rem;
-  border-radius: 8px;
-  color: #94a3b8;
+  padding: 0 0.9rem;
+  border-radius: 14px;
+  color: #8ea0b8;
   pointer-events: auto;
+}
+
+.dx-map-search svg {
+  width: 17px;
+  height: 17px;
+  flex: 0 0 auto;
 }
 
 .dx-map-search input {
@@ -110,27 +114,18 @@
   outline: 0;
   background: transparent;
   color: #e2e8f0;
-  font-size: 0.78rem;
+  font-size: 0.82rem;
 }
 
 .dx-map-search input::placeholder {
   color: #75839a;
 }
 
-.dx-map-filter-button {
-  width: 2.65rem;
-  height: 2.55rem;
-  border-radius: 8px;
-  color: #22d3ee;
-  pointer-events: auto;
-}
-
 .dx-map-filters {
-  grid-column: 1 / -1;
   display: flex;
-  gap: 0.45rem;
+  gap: 0.4rem;
   overflow-x: auto;
-  padding: 0.12rem 0 0.18rem;
+  padding: 0.1rem 0 0.2rem;
   scrollbar-width: none;
   pointer-events: auto;
 }
@@ -142,79 +137,43 @@
 .dx-map-chip {
   display: inline-flex;
   align-items: center;
-  gap: 0.34rem;
+  gap: 0.38rem;
   flex: 0 0 auto;
-  height: 2rem;
-  padding: 0 0.72rem;
-  border-radius: 8px;
+  height: 2.15rem;
+  padding: 0 0.85rem;
+  border-radius: 999px;
   color: #cbd5e1;
+  font-size: 0.74rem;
+  font-weight: 700;
+  transition: background 160ms ease, color 160ms ease, border-color 160ms ease;
+}
+
+.dx-map-chip i {
+  font-style: normal;
   font-size: 0.68rem;
-  font-weight: 800;
-  transition: transform 180ms ease, background 180ms ease, color 180ms ease, border-color 180ms ease;
+  font-weight: 700;
+  opacity: 0.55;
 }
 
+/* Активный фильтр — светлая пилюля с тёмным текстом (как в зрелых карт-приложениях) */
 .dx-map-chip.is-active {
-  border-color: rgba(14, 165, 233, 0.55);
-  background: linear-gradient(135deg, #0ea5e9, #06b6d4);
-  color: #f8fafc;
-  box-shadow: 0 14px 26px rgba(14, 165, 233, 0.28);
+  border-color: rgba(248, 250, 252, 0.9);
+  background: #f8fafc;
+  color: #0b1120;
 }
 
-.dx-map-ai-card {
-  grid-column: 1 / -1;
-  display: grid;
-  grid-template-columns: 2.2rem minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 0.68rem;
-  margin-top: 0.18rem;
-  padding: 0.62rem;
-  border-radius: 8px;
-  pointer-events: auto;
-  animation: dx-map-card-in 520ms ease both;
+.dx-map-chip.is-active i {
+  opacity: 0.6;
 }
 
-.dx-map-ai-icon {
-  display: flex;
-  width: 2.2rem;
-  height: 2.2rem;
-  align-items: center;
-  justify-content: center;
-  border-radius: 8px;
-  background: rgba(14, 165, 233, 0.18);
-  color: #38bdf8;
-  box-shadow: 0 0 24px rgba(14, 165, 233, 0.26);
-}
-
-.dx-map-ai-card h2 {
-  margin: 0;
-  color: #f8fafc;
-  font-size: 0.76rem;
-  line-height: 1.2;
-  font-weight: 900;
-}
-
-.dx-map-ai-card p {
-  margin-top: 0.18rem;
-  color: #94a3b8;
-  font-size: 0.62rem;
-  line-height: 1.25;
-}
-
-.dx-map-ai-card button,
-.dx-map-best-button,
 .dx-map-drive-button {
   border: 0;
-  border-radius: 8px;
+  border-radius: 12px;
   background: linear-gradient(135deg, #0ea5e9, #06b6d4);
   color: #f8fafc;
-  font-size: 0.68rem;
-  font-weight: 900;
-  box-shadow: 0 14px 28px rgba(14, 165, 233, 0.26);
-}
-
-.dx-map-ai-card button {
-  padding: 0.5rem 0.62rem;
-  white-space: nowrap;
+  font-size: 0.74rem;
+  font-weight: 800;
+  box-shadow: 0 6px 18px rgba(14, 165, 233, 0.22);
 }
 
 .dx-map-user-pulse {
@@ -264,21 +223,24 @@
 }
 
 .dx-map-side-controls button {
-  width: 2.55rem;
-  height: 2.55rem;
-  border-radius: 8px;
-  color: #38bdf8;
-  font-size: 1rem;
+  display: flex;
+  width: 2.65rem;
+  height: 2.65rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 13px;
+  color: #dbe4f0;
 }
 
-.dx-map-best-button {
-  position: absolute;
-  left: 50%;
-  bottom: 8.35rem;
-  z-index: 5;
-  min-width: 11.5rem;
-  min-height: 2.35rem;
-  transform: translateX(-50%);
+.dx-map-side-controls button svg {
+  width: 19px;
+  height: 19px;
+}
+
+.dx-map-side-controls button.is-active {
+  border-color: rgba(248, 250, 252, 0.9);
+  background: #f8fafc;
+  color: #0b1120;
 }
 
 .dx-map-route-time {

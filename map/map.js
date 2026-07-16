@@ -193,12 +193,12 @@
   };
 
   const filters = [
-    { id: "all", label: "Все", icon: "▱" },
-    { id: "service", label: "СТО", icon: "⚙" },
-    { id: "store", label: "Магазины", icon: "🛒" },
-    { id: "gas", label: "АЗС", icon: "F" },
-    { id: "charge", label: "ЭЗС", icon: "⚡" },
-    { id: "user", label: "Добавленные", icon: "+" }
+    { id: "all", label: "Все" },
+    { id: "service", label: "СТО" },
+    { id: "store", label: "Магазины" },
+    { id: "gas", label: "АЗС" },
+    { id: "charge", label: "Зарядки" },
+    { id: "user", label: "Добавленные" }
   ];
 
   markerMeta.gas = { label: "F", className: "gas", text: "АЗС" };
@@ -507,12 +507,18 @@
     const type = service.fast && service.type !== "recommended" ? "fast" : service.type;
     const meta = markerMeta[type] || markerMeta.recommended;
     const activeClass = active ? " is-active" : "";
+    // Глифы маркеров — чёткие stroke-SVG вместо эмодзи (⚙/🛒 выглядели
+    // по-разному на разных устройствах и «по-детски»).
     const markerInner =
       service.type === "gas"
         ? `<span class="dx-map-fuel-glyph" aria-hidden="true"><i></i><b></b></span>`
         : service.type === "charge"
           ? `<span class="dx-map-charge-glyph" aria-hidden="true"></span>`
-        : `<span>${meta.label}</span>`;
+          : service.type === "service"
+            ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a4.5 4.5 0 0 0-6 5.6L3 17.6V21h3.4l5.7-5.7a4.5 4.5 0 0 0 5.6-6L14.5 12l-2.5-2.5 2.7-3.2Z"></path></svg>`
+            : service.type === "store"
+              ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 7h12l1.2 13H4.8L6 7Z"></path><path d="M9 10V6a3 3 0 0 1 6 0v4"></path></svg>`
+              : `<span>${meta.label}</span>`;
 
     return window.L.divIcon({
       className: "dx-map-marker-shell",
@@ -567,18 +573,10 @@
 
         <div class="dx-map-top">
           <label class="dx-map-search">
-            <span aria-hidden="true">⌕</span>
-            <input type="search" placeholder="Поиск по карте: сервис, АЗС, зарядка..." autocomplete="off" />
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg>
+            <input type="search" placeholder="Сервис, магазин, АЗС..." autocomplete="off" />
           </label>
           <div class="dx-map-filters" role="tablist" aria-label="Фильтры карты"></div>
-          <article class="dx-map-ai-card">
-            <div class="dx-map-ai-icon">✦</div>
-            <div>
-              <h2 data-map-summary-title>Ищем точки рядом...</h2>
-              <p data-map-summary-sub>АЗС и зарядки — из открытых данных OSM</p>
-            </div>
-            <button type="button" data-action="show-best">Ближайший сервис</button>
-          </article>
         </div>
 
         <div class="dx-map-user-pulse" aria-hidden="true">
@@ -586,12 +584,18 @@
         </div>
 
         <div class="dx-map-side-controls">
-          <button type="button" data-action="locate" aria-label="Мое местоположение">⌖</button>
-          <button type="button" data-action="layers" aria-label="Слои карты">▰</button>
+          <button type="button" data-action="locate" aria-label="Моё местоположение" title="Моё местоположение">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="7"></circle><circle cx="12" cy="12" r="2.4" fill="currentColor" stroke="none"></circle><path d="M12 3v2M12 19v2M3 12h2M19 12h2"></path></svg>
+          </button>
+          <button type="button" data-action="layers" aria-label="Спутниковый слой" title="Спутник">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 3 8l9 5 9-5-9-5Z"></path><path d="m3 13 9 5 9-5"></path></svg>
+          </button>
+          <button type="button" data-action="best-route" aria-label="Ближайший сервис" title="Ближайший сервис">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 2 4.5 20l7.5-4 7.5 4L12 2Z"></path></svg>
+          </button>
         </div>
 
         <div class="dx-map-route-time" aria-live="polite"></div>
-        <button class="dx-map-best-button" type="button" data-action="best-route">✣ Найти лучший сервис</button>
 
         <article class="dx-map-bottom-sheet" aria-live="polite" aria-hidden="true">
           <div class="dx-map-sheet-handle"></div>
@@ -601,24 +605,24 @@
     `;
   }
 
-  function renderFilters(root, activeFilter) {
+  function renderFilters(root, activeFilter, counts = {}) {
     const wrap = root.querySelector(".dx-map-filters");
     if (!wrap) return;
 
+    // Чистые текстовые чипы со счётчиками точек — без эмодзи-иконок.
     wrap.innerHTML = filters
-      .map(
-        (filter) => `
+      .map((filter) => {
+        const count = Number(counts[filter.id]) || 0;
+        return `
           <button
             class="dx-map-chip${filter.id === activeFilter ? " is-active" : ""}"
             type="button"
             role="tab"
             aria-selected="${filter.id === activeFilter ? "true" : "false"}"
             data-filter="${filter.id}"
-          >
-            <span>${filter.icon}</span>${escapeHtml(filter.label)}
-          </button>
-        `
-      )
+          >${escapeHtml(filter.label)}${count > 0 ? `<i>${count}</i>` : ""}</button>
+        `;
+      })
       .join("");
   }
 
@@ -814,7 +818,6 @@
     let chargingStations = [];
     const catalogServices = buildCatalogServices(options.serviceDirectory, DEFAULT_CENTER);
     const catalogStores = buildCatalogStores(options.stores, DEFAULT_CENTER);
-    const carName = String(options.carName || "").trim();
     let mapItems = [...catalogServices, ...catalogStores];
     let fuelLoadedForKey = "";
     let chargingLoadedForKey = "";
@@ -858,7 +861,8 @@
       root.classList.remove("has-tile-error");
     });
 
-    leaflet.control.zoom({ position: "bottomright" }).addTo(map);
+    // Кнопки зума убраны: на мобильном карта управляется жестами (pinch),
+    // лишние контролы загромождали экран.
 
     const userMarker = leaflet.circleMarker(userPosition, {
       radius: 8,
@@ -900,19 +904,20 @@
       return service.type === activeFilter;
     }
 
+    function getFilterCounts() {
+      const userPlaces = mapItems.filter((item) => item.userPlace === true).length;
+      return {
+        service: catalogServices.length,
+        store: catalogStores.length,
+        gas: fuelStations.length,
+        charge: chargingStations.length,
+        user: userPlaces
+      };
+    }
+
+    // Счётчики точек живут прямо в чипах фильтров — вместо отдельного баннера.
     function updateSummaryCard() {
-      const title = root.querySelector("[data-map-summary-title]");
-      const sub = root.querySelector("[data-map-summary-sub]");
-      if (!title || !sub) return;
-      const parts = [];
-      if (catalogServices.length) parts.push(`${catalogServices.length} СТО`);
-      if (catalogStores.length) parts.push(`${catalogStores.length} магазинов`);
-      if (fuelStations.length) parts.push(`${fuelStations.length} АЗС`);
-      if (chargingStations.length) parts.push(`${chargingStations.length} зарядок`);
-      title.textContent = parts.length ? `Рядом: ${parts.join(" · ")}` : "Ищем точки рядом...";
-      sub.textContent = carName
-        ? `Твоя машина: ${carName} · АЗС и зарядки — данные OSM`
-        : "АЗС и зарядки — из открытых данных OSM";
+      renderFilters(root, activeFilter, getFilterCounts());
     }
 
     function setMarkerStates() {
@@ -1239,7 +1244,7 @@
       }
     }
 
-    renderFilters(root, activeFilter);
+    renderFilters(root, activeFilter, getFilterCounts());
     renderMarkers();
     loadFuelStations(DEFAULT_CENTER);
     loadChargingStations(DEFAULT_CENTER);
@@ -1262,7 +1267,7 @@
         onPlaceSubmitted: (place) => {
           upsertUserPlaces([place], { select: true });
           activeFilter = "all";
-          renderFilters(root, activeFilter);
+          renderFilters(root, activeFilter, getFilterCounts());
           setMarkerStates();
         }
       });
@@ -1284,7 +1289,7 @@
       if (filterButton) {
         activeFilter = filterButton.getAttribute("data-filter") || "all";
         routeBuilt = false;
-        renderFilters(root, activeFilter);
+        renderFilters(root, activeFilter, getFilterCounts());
         setMarkerStates();
         return;
       }

@@ -118,9 +118,8 @@
     };
 
     state.root.insertAdjacentHTML("beforeend", `
-      <button class="dx-add-place-fab" type="button" data-add-place-action="open">
+      <button class="dx-add-place-fab" type="button" data-add-place-action="open" aria-label="Добавить место" title="Добавить место">
         <span>+</span>
-        Добавить место
       </button>
       <div class="dx-add-place-pin" aria-hidden="true">
         <span></span>

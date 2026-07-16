@@ -1,37 +1,34 @@
+/* Компактная круглая кнопка «+» в правой стойке (вместо широкой кнопки
+   по центру экрана — разгружаем карту). Текст скрыт, семантика в aria/title. */
 .dx-add-place-fab {
   position: absolute;
-  left: 50%;
-  bottom: calc(5.55rem + env(safe-area-inset-bottom));
+  right: 1rem;
+  bottom: 6.8rem;
   z-index: 5;
-  display: inline-flex;
-  min-height: 2.55rem;
+  display: flex;
+  width: 2.65rem;
+  height: 2.65rem;
   align-items: center;
-  gap: 0.48rem;
-  padding: 0 0.95rem;
-  transform: translateX(-50%);
-  border: 1px solid rgba(34, 211, 238, 0.32);
-  border-radius: 8px;
+  justify-content: center;
+  border: 1px solid rgba(34, 211, 238, 0.35);
+  border-radius: 13px;
   background: linear-gradient(135deg, rgba(14, 165, 233, 0.96), rgba(6, 182, 212, 0.96));
   color: #f8fafc;
-  font-size: 0.72rem;
-  font-weight: 900;
-  box-shadow: 0 18px 38px rgba(14, 165, 233, 0.34);
+  font-size: 0;
+  box-shadow: 0 6px 18px rgba(14, 165, 233, 0.28);
   pointer-events: auto;
 }
 
 .dx-add-place-fab span {
   display: grid;
-  width: 1.25rem;
-  height: 1.25rem;
   place-items: center;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.18);
-  font-size: 1rem;
+  font-size: 1.35rem;
+  font-weight: 600;
   line-height: 1;
 }
 
 .dx-map-screen.is-add-pin-mode .dx-map-top,
-.dx-map-screen.is-add-pin-mode .dx-map-best-button,
+.dx-map-screen.is-add-pin-mode .dx-map-side-controls,
 .dx-map-screen.is-add-pin-mode .dx-add-place-fab,
 .dx-map-screen.is-add-pin-mode .dx-map-bottom-sheet {
   opacity: 0;
