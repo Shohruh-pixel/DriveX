@@ -57,6 +57,40 @@
       .filter(Boolean);
   }
 
+  // Магазины автозапчастей из Маркета: геоточка выбирается продавцом на
+  // карте при регистрации в Seller CRM — здесь они появляются на общей карте.
+  function buildCatalogStores(stores, center) {
+    const list = Array.isArray(stores) ? stores : [];
+    return list
+      .map((item) => {
+        const coords = parseGeolocation(item.geolocation || "");
+        if (!coords) return null;
+        const km = distanceKm(center || DEFAULT_CENTER, coords);
+        const reviews = Math.max(0, Math.round(Number(item.reviews) || 0));
+        return {
+          id: `store-${item.id}`,
+          storeId: item.id,
+          name: item.name || "Магазин",
+          lat: coords[0],
+          lng: coords[1],
+          rating: reviews > 0 ? item.rating : null,
+          reviews,
+          distance: formatDistanceLabel(km),
+          type: "store",
+          tags: [item.storeCategory || "Автозапчасти", item.deliveryLabel || item.city || ""].filter(Boolean).slice(0, 2),
+          open: true,
+          fast: false,
+          eta: km < 2 ? "5 мин" : `${Math.max(6, Math.round(km * 3))} мин`,
+          source: "catalog",
+          address: item.address || item.pickup || item.locationLabel || "",
+          phone: item.phone || "",
+          workingHours: item.workingHours || "",
+          services: []
+        };
+      })
+      .filter(Boolean);
+  }
+
   const fallbackFuelStations = [
     {
       id: "fuel-fallback-1",
@@ -154,12 +188,14 @@
 
   const markerMeta = {
     service: { label: "⚙", className: "recommended", text: "СТО" },
+    store: { label: "🛒", className: "premium", text: "Магазин" },
     user: { label: "+", className: "user", text: "Добавлено" }
   };
 
   const filters = [
     { id: "all", label: "Все", icon: "▱" },
     { id: "service", label: "СТО", icon: "⚙" },
+    { id: "store", label: "Магазины", icon: "🛒" },
     { id: "gas", label: "АЗС", icon: "F" },
     { id: "charge", label: "ЭЗС", icon: "⚡" },
     { id: "user", label: "Добавленные", icon: "+" }
@@ -596,6 +632,7 @@
     const isChargeStation = service.type === "charge";
     const isUserPlace = service.userPlace === true || service.source === "user";
     const isCatalogService = service.type === "service" && service.source === "catalog";
+    const isCatalogStore = service.type === "store" && service.source === "catalog";
     const hasPoiVisual = isGasStation || isChargeStation;
     const fuelTypes = Array.isArray(service.fuelTypes) && service.fuelTypes.length
       ? service.fuelTypes
@@ -626,7 +663,9 @@
           ? service.status === "published" ? "Добавлено пользователем" : "На проверке"
           : isCatalogService
             ? "Сервис DRIVEX"
-            : "Точка на карте";
+            : isCatalogStore
+              ? "Магазин DRIVEX"
+              : "Точка на карте";
     const statusText = isUserPlace
       ? `Данные: DriveX · ${service.status === "published" ? "опубликовано" : "на проверке"}`
       : isGasStation || isChargeStation
@@ -675,7 +714,7 @@
       <div class="dx-map-sheet-tags">
         ${tags.map((tag) => `<span>${escapeHtml(tag)}</span>`).join("")}
       </div>
-      ${isUserPlace || isCatalogService
+      ${isUserPlace || isCatalogService || isCatalogStore
         ? `<div class="dx-map-info-grid">
             <div>
               <strong>Телефон</strong>
@@ -741,7 +780,12 @@
             <button class="dx-map-drive-button" type="button" data-action="drive" data-service-id="${escapeHtml(service.id)}">Поехать · ${escapeHtml(service.eta || "маршрут")}</button>
             <button class="dx-map-drive-button is-book" type="button" data-action="open-service" data-catalog-id="${escapeHtml(service.catalogId)}">Записаться</button>
           </div>`
-        : `<button class="dx-map-drive-button" type="button" data-action="drive" data-service-id="${escapeHtml(service.id)}">Поехать · ${escapeHtml(service.eta || "маршрут")}</button>`}
+        : isCatalogStore
+          ? `<div class="dx-map-sheet-cta-row">
+              <button class="dx-map-drive-button" type="button" data-action="drive" data-service-id="${escapeHtml(service.id)}">Поехать · ${escapeHtml(service.eta || "маршрут")}</button>
+              <button class="dx-map-drive-button is-book" type="button" data-action="open-store" data-store-id="${escapeHtml(service.storeId)}">В магазин</button>
+            </div>`
+          : `<button class="dx-map-drive-button" type="button" data-action="drive" data-service-id="${escapeHtml(service.id)}">Поехать · ${escapeHtml(service.eta || "маршрут")}</button>`}
     `;
   }
 
@@ -769,8 +813,9 @@
     let fuelStations = [];
     let chargingStations = [];
     const catalogServices = buildCatalogServices(options.serviceDirectory, DEFAULT_CENTER);
+    const catalogStores = buildCatalogStores(options.stores, DEFAULT_CENTER);
     const carName = String(options.carName || "").trim();
-    let mapItems = [...catalogServices];
+    let mapItems = [...catalogServices, ...catalogStores];
     let fuelLoadedForKey = "";
     let chargingLoadedForKey = "";
     let routeRequestId = 0;
@@ -848,6 +893,7 @@
       if (!matchesSearch(service)) return false;
       if (activeFilter === "all") return true;
       if (activeFilter === "service") return service.type === "service" || (service.userPlace && ["service", "wash", "diagnostics", "tire", "detailing", "electric", "towing"].includes(service.category));
+      if (activeFilter === "store") return service.type === "store" || (service.userPlace && service.category === "shop");
       if (activeFilter === "charge") return service.type === "charge" || service.hasCharging === true;
       if (activeFilter === "gas") return service.type === "gas";
       if (activeFilter === "user") return service.userPlace === true;
@@ -860,6 +906,7 @@
       if (!title || !sub) return;
       const parts = [];
       if (catalogServices.length) parts.push(`${catalogServices.length} СТО`);
+      if (catalogStores.length) parts.push(`${catalogStores.length} магазинов`);
       if (fuelStations.length) parts.push(`${fuelStations.length} АЗС`);
       if (chargingStations.length) parts.push(`${chargingStations.length} зарядок`);
       title.textContent = parts.length ? `Рядом: ${parts.join(" · ")}` : "Ищем точки рядом...";
@@ -935,7 +982,7 @@
 
     function applyFuelStations(nextFuelStations, centerForFuel = DEFAULT_CENTER) {
       fuelStations = mergeFuelDirectory(nextFuelStations, centerForFuel);
-      mapItems = [...catalogServices, ...fuelStations, ...chargingStations];
+      mapItems = [...catalogServices, ...catalogStores, ...fuelStations, ...chargingStations];
       renderMarkers();
       updateSummaryCard();
       if (activeFilter === "gas") {
@@ -945,7 +992,7 @@
 
     function applyChargingStations(nextChargingStations) {
       chargingStations = Array.isArray(nextChargingStations) && nextChargingStations.length ? nextChargingStations : fallbackChargingStations;
-      mapItems = [...catalogServices, ...fuelStations, ...chargingStations];
+      mapItems = [...catalogServices, ...catalogStores, ...fuelStations, ...chargingStations];
       renderMarkers();
       updateSummaryCard();
       if (activeFilter === "charge") {
@@ -1256,6 +1303,11 @@
         // Переход на страницу сервиса в приложении — запись, прайс, мастера.
         const catalogId = actionButton.getAttribute("data-catalog-id");
         if (catalogId) window.location.hash = `#/service/${catalogId}`;
+      }
+      if (action === "open-store") {
+        // Переход на витрину магазина в Маркете.
+        const storeId = actionButton.getAttribute("data-store-id");
+        if (storeId) window.location.hash = `#/marketplace/store/${storeId}`;
       }
       if (action === "layers") {
         // Переключение схема ↔ спутник (Esri World Imagery, бесплатный слой).

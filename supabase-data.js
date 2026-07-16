@@ -161,6 +161,39 @@
     }));
   }
 
+  // Магазины с геоточкой для общей Карты. Таблица stores — реальная схема
+  // seller-backend: latitude/longitude продавец выбирает на карте при
+  // регистрации. Тестовые магазины («...Тест...») на карту не попадают.
+  async function loadMapStores({ limit = 60 } = {}) {
+    const client = getClient();
+    if (!client) return null;
+    const { data, error } = await client
+      .from("stores")
+      .select("id,name,city,address,location_text,latitude,longitude,category,working_hours")
+      .not("latitude", "is", null)
+      .limit(limit);
+    if (error) {
+      console.warn("[supabase-data] loadMapStores:", error.message);
+      return null;
+    }
+    return (data || [])
+      .filter((row) =>
+        Number.isFinite(Number(row.latitude)) &&
+        Number.isFinite(Number(row.longitude)) &&
+        !/тест/i.test(String(row.name || "")))
+      .map((row) => ({
+        id: row.id,
+        name: row.name || "Магазин",
+        city: row.city || "",
+        address: row.address || "",
+        locationLabel: row.location_text || "",
+        geolocation: `${row.latitude}, ${row.longitude}`,
+        storeCategory: row.category || "Автозапчасти",
+        workingHours: row.working_hours || "",
+        phone: ""
+      }));
+  }
+
   // Сохраняет FCM токен пользователя
   async function saveFcmToken(userId, fcmToken) {
     const client = getClient();
@@ -259,6 +292,7 @@
   window.DrivexSupabaseData = {
     loadServiceCenters,
     loadProducts,
+    loadMapStores,
     loadStores,
     saveFcmToken,
     loadUserProfile,

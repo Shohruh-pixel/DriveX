@@ -259,7 +259,7 @@
     `;
   }
 
-  function MapScreen({ serviceDirectory, activeCarId }) {
+  function MapScreen({ serviceDirectory, activeCarId, mapStores }) {
     // ⛔ Анти-пересоздание: buildServiceDirectoryData в app-main создаёт НОВУЮ
     // ссылку на каждый рендер App (поллинг каждые 8с и любое обновление
     // состояния) — с deps [serviceDirectory] карта уничтожалась и монтировалась
@@ -270,17 +270,21 @@
         const list = serviceDirectory && Array.isArray(serviceDirectory.services)
           ? serviceDirectory.services
           : [];
-        return JSON.stringify(
-          list.map((s) => [s.id, s.geolocation, s.name, s.phone, s.workingHours, s.available, s.rating, s.reviews])
-        );
+        const stores = Array.isArray(mapStores) ? mapStores : [];
+        return JSON.stringify([
+          list.map((s) => [s.id, s.geolocation, s.name, s.phone, s.workingHours, s.available, s.rating, s.reviews]),
+          stores.map((s) => [s.id, s.geolocation, s.name, s.address])
+        ]);
       } catch {
         return "";
       }
-    }, [serviceDirectory]);
+    }, [serviceDirectory, mapStores]);
     const activeCar = typeof findGarageCar === "function" ? findGarageCar(activeCarId) : null;
     const carName = activeCar?.name || "";
     const directoryRef = useRef(serviceDirectory);
     directoryRef.current = serviceDirectory;
+    const storesRef = useRef(mapStores);
+    storesRef.current = mapStores;
 
     useEffect(() => {
       let instance = null;
@@ -298,6 +302,7 @@
           instance = mapModule.mount({
             containerId: "map-container",
             serviceDirectory: directoryRef.current,
+            stores: Array.isArray(storesRef.current) ? storesRef.current : [],
             carName
           });
         } catch (error) {

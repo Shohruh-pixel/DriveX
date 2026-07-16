@@ -765,4 +765,6 @@
   DX.screens.PartnerRegisterIntroScreen = PartnerRegisterIntroScreen;
   DX.screens.PartnerLoginScreen = PartnerLoginScreen;
   DX.screens.SellerRegistrationScreen = SellerRegistrationScreen;
+  // Переиспользуется в Service CRM для выбора геоточки сервиса на карте
+  DX.screens.SxLocationPicker = SxLocationPicker;
 })();

@@ -557,6 +557,10 @@
         return {};
       }
     });
+    // Магазины с геоточками из Supabase (для маркеров на общей Карте) —
+    // грузятся один раз при старте в эффекте «живых данных» ниже.
+    const [mapStores, setMapStores] = useState([]);
+
     const [marketplacePartnerCatalog, setMarketplacePartnerCatalog] = useState(() => {
       try {
         const raw =
@@ -1372,6 +1376,14 @@
           setMarketplaceRuntime({ products: [...prods, ...marketplaceData.products.filter((p) => !storeIds.has(p.storeId))], stores: liveStores.length ? liveStores : undefined });
         }
       }).catch(() => {});
+
+      // Магазины с геоточками (выбраны продавцами на карте при регистрации) —
+      // для маркеров на общей Карте.
+      if (typeof supa.loadMapStores === "function") {
+        supa.loadMapStores({ limit: 60 }).then((stores) => {
+          if (!cancelled && Array.isArray(stores) && stores.length) setMapStores(stores);
+        }).catch(() => {});
+      }
 
       // Реальные оценки товаров из отзывов покупателей
       const reviewsApi = window.DrivexMarketReviews;
@@ -4486,7 +4498,7 @@
       />`;
     } else if (normalized === "/map") {
       activePath = "/map";
-      content = html`<${getScreen('MapScreen')} serviceDirectory=${serviceDirectory} activeCarId=${activeCarId} />`;
+      content = html`<${getScreen('MapScreen')} serviceDirectory=${serviceDirectory} activeCarId=${activeCarId} mapStores=${mapStores} />`;
     } else if (normalized === "/services") {
       activePath = "/services";
       content = html`<${getScreen('ServicesScreen')}

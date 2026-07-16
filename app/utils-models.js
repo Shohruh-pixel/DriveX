@@ -1423,6 +1423,12 @@
       phone: safeStore.phone,
       storeCategory: safeStore.storeCategory,
       businessType: safeStore.businessType,
+      // Геоточка и адрес магазина (выбираются на карте при регистрации
+      // продавца) — нужны, чтобы магазин появился на общей Карте.
+      geolocation: safeStore.geolocation || "",
+      address: safeStore.address || "",
+      locationLabel: safeStore.locationLabel || "",
+      workingHours: safeStore.workingHours || "",
       catalogInitialized: Boolean(safeStore.catalogInitialized)
     };
   }

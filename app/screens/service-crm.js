@@ -13,6 +13,19 @@
   const SimplePage = function(p){ var F=DX.SimplePage; return F ? F(p) : (p.children||null); };
   const formatTjsPrice = function(n){ return DX.formatTjsPrice ? DX.formatTjsPrice(n) : (String(n)+' сом.'); };
   const genId = function(p){ return DX.genId ? DX.genId(p) : (p+'-'+Date.now()); };
+  // Пикер геоточки на Leaflet-карте (из seller-onboarding.js) — читается из
+  // DX.screens при рендере, т.к. onboarding-файл грузится позже этого.
+  const SxLocationPicker = function(p){ var F=(window.DX.screens||{}).SxLocationPicker; return F ? React.createElement(F, p) : null; };
+
+  // «lat, lng» строка ↔ {lat, lng} для пикера
+  function parseGeoInput(value) {
+    const match = String(value || "").match(/(-?\d+(?:\.\d+)?)[,;\s]+(-?\d+(?:\.\d+)?)/);
+    if (!match) return null;
+    const lat = Number(match[1]);
+    const lng = Number(match[2]);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+    return { lat, lng };
+  }
 
   function getServicePhoneHref(phone = "") {
     const safePhone = String(phone || "").trim().replace(/[^\d+]/g, "");
@@ -718,6 +731,16 @@
                     onInput=${(e) => updateCenterField("geolocation", e.target.value)}
                   />
                 </${SellerField}>
+              </div>
+
+              <div>
+                <p className="text-xs mb-2" style=${{ color: "var(--drivex-silver)" }}>
+                  Или нажмите на карту — сервис появится этой точкой на общей карте DRIVEX
+                </p>
+                <${SxLocationPicker}
+                  location=${parseGeoInput(centerForm.geolocation)}
+                  onPick=${(point) => updateCenterField("geolocation", `${point.lat}, ${point.lng}`)}
+                />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -2838,6 +2861,16 @@
                     onInput=${(e) => updateField("geolocation", e.target.value)}
                   />
                 </${SellerField}>
+              </div>
+
+              <div>
+                <p className="text-xs mb-2" style=${{ color: "var(--drivex-silver)" }}>
+                  Или нажмите на карту — сервис появится этой точкой на общей карте DRIVEX
+                </p>
+                <${SxLocationPicker}
+                  location=${parseGeoInput(form.geolocation)}
+                  onPick=${(point) => updateField("geolocation", `${point.lat}, ${point.lng}`)}
+                />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
