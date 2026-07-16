@@ -4486,7 +4486,7 @@
       />`;
     } else if (normalized === "/map") {
       activePath = "/map";
-      content = html`<${getScreen('MapScreen')} serviceDirectory=${serviceDirectory} />`;
+      content = html`<${getScreen('MapScreen')} serviceDirectory=${serviceDirectory} activeCarId=${activeCarId} />`;
     } else if (normalized === "/services") {
       activePath = "/services";
       content = html`<${getScreen('ServicesScreen')}

@@ -813,6 +813,21 @@
   margin-top: 0.72rem;
 }
 
+/* Две кнопки в ряд для сервисов каталога: «Поехать» + «Записаться» */
+.dx-map-sheet-cta-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.55rem;
+}
+
+.dx-map-sheet-cta-row .dx-map-drive-button {
+  width: auto;
+}
+
+.dx-map-drive-button.is-book {
+  background: linear-gradient(135deg, #10b981, #06b6d4);
+}
+
 .dx-map-fallback {
   display: grid;
   min-height: 100svh;

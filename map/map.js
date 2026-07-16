@@ -7,60 +7,55 @@
   const FUEL_SEARCH_RADIUS_METERS = 12000;
   const CHARGING_SEARCH_RADIUS_METERS = 12000;
 
-  const services = [
-    {
-      id: 1,
-      name: "АвтоМастер Premium",
-      lat: 40.283,
-      lng: 69.622,
-      rating: 4.8,
-      distance: "1.2 км",
-      type: "recommended",
-      tags: ["Подходит для BMW", "На 15% дешевле"],
-      open: true,
-      fast: true,
-      eta: "5 мин"
-    },
-    {
-      id: 2,
-      name: "Oil Service Center",
-      lat: 40.285,
-      lng: 69.63,
-      rating: 4.6,
-      distance: "1.5 км",
-      type: "cheap",
-      tags: ["Самый дешевый", "Масло в наличии"],
-      open: true,
-      fast: false,
-      eta: "8 мин"
-    },
-    {
-      id: 3,
-      name: "Detail Garage",
-      lat: 40.28,
-      lng: 69.615,
-      rating: 4.7,
-      distance: "2.1 км",
-      type: "premium",
-      tags: ["Премиум", "Детейлинг"],
-      open: true,
-      fast: false,
-      eta: "11 мин"
-    },
-    {
-      id: 4,
-      name: "Шиномонтаж 24/7",
-      lat: 40.2788,
-      lng: 69.625,
-      rating: 4.8,
-      distance: "0.8 км",
-      type: "fast",
-      tags: ["Быстрее всего", "15 минут до сервиса"],
-      open: true,
-      fast: true,
-      eta: "6 мин"
-    }
-  ];
+  // Сервисы на карте — ТОЛЬКО реальные из каталога DRIVEX (serviceDirectory
+  // передаётся при mount). Раньше здесь были 4 захардкоженных фейковых СТО
+  // с выдуманными рейтингами и тегами «Подходит для BMW».
+  function parseGeolocation(value) {
+    const match = String(value || "").match(/(-?\d+(?:\.\d+)?)[,;\s]+(-?\d+(?:\.\d+)?)/);
+    if (!match) return null;
+    const lat = Number(match[1]);
+    const lng = Number(match[2]);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+    if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+    return [lat, lng];
+  }
+
+  function buildCatalogServices(serviceDirectory, center) {
+    const list = serviceDirectory && Array.isArray(serviceDirectory.services)
+      ? serviceDirectory.services
+      : [];
+    return list
+      .map((item) => {
+        const coords = parseGeolocation(item.geolocation || item.coords || "");
+        if (!coords) return null;
+        const km = distanceKm(center || DEFAULT_CENTER, coords);
+        const reviews = Math.max(0, Math.round(Number(item.reviews) || 0));
+        const priceNames = (Array.isArray(item.priceList) ? item.priceList : [])
+          .map((row) => row && (row.name || row.title))
+          .filter(Boolean);
+        return {
+          id: `catalog-${item.id}`,
+          catalogId: item.id,
+          name: item.name || "Сервис",
+          lat: coords[0],
+          lng: coords[1],
+          rating: reviews > 0 ? item.rating : null,
+          reviews,
+          distance: formatDistanceLabel(km),
+          type: "service",
+          tags: [item.categoryLabel || item.type || "СТО", item.city || ""].filter(Boolean).slice(0, 2),
+          open: item.available !== false,
+          fast: false,
+          eta: km < 2 ? "5 мин" : `${Math.max(6, Math.round(km * 3))} мин`,
+          source: "catalog",
+          address: item.address || item.locationLabel || "",
+          phone: item.phone || "",
+          workingHours: item.workingHours || "",
+          services: priceNames
+        };
+      })
+      .filter(Boolean);
+  }
 
   const fallbackFuelStations = [
     {
@@ -158,25 +153,20 @@
   ];
 
   const markerMeta = {
-    recommended: { label: "⭐", className: "recommended", text: "Рекомендован" },
-    cheap: { label: "₽", className: "cheap", text: "Дешевле" },
-    fast: { label: "⚡", className: "fast", text: "Быстро" },
-    premium: { label: "👑", className: "premium", text: "Премиум" },
+    service: { label: "⚙", className: "recommended", text: "СТО" },
     user: { label: "+", className: "user", text: "Добавлено" }
   };
 
   const filters = [
     { id: "all", label: "Все", icon: "▱" },
-    { id: "fast", label: "Быстро", icon: "⚡" },
-    { id: "cheap", label: "Дешево", icon: "₽" },
-    { id: "car", label: "Для моей машины", icon: "▭" },
-    { id: "service", label: "СТО", icon: "⌁" }
+    { id: "service", label: "СТО", icon: "⚙" },
+    { id: "gas", label: "АЗС", icon: "F" },
+    { id: "charge", label: "ЭЗС", icon: "⚡" },
+    { id: "user", label: "Добавленные", icon: "+" }
   ];
 
   markerMeta.gas = { label: "F", className: "gas", text: "АЗС" };
   markerMeta.charge = { label: "⚡", className: "charge", text: "ЭЗС" };
-  filters.push({ id: "gas", label: "АЗС", icon: "F" });
-  filters.push({ id: "charge", label: "ЭЗС", icon: "⚡" });
 
   function escapeHtml(value) {
     return String(value ?? "")
@@ -187,8 +177,18 @@
       .replace(/'/g, "&#39;");
   }
 
-  function getBestService(list) {
-    return list.find((service) => service.type === "recommended") || list[0] || null;
+  // «Лучший» = ближайший РЕАЛЬНЫЙ сервис каталога к пользователю
+  // (раньше всегда возвращался захардкоженный фейковый «АвтоМастер Premium»).
+  function getBestService(list, fromPosition) {
+    const catalog = list.filter((service) => service.type === "service");
+    if (!catalog.length) return null;
+    const origin = fromPosition || DEFAULT_CENTER;
+    return catalog.reduce((best, current) => {
+      if (!best) return current;
+      const bestKm = distanceKm(origin, [best.lat, best.lng]);
+      const currentKm = distanceKm(origin, [current.lat, current.lng]);
+      return currentKm < bestKm ? current : best;
+    }, null);
   }
 
   function toRadians(value) {
@@ -532,17 +532,16 @@
         <div class="dx-map-top">
           <label class="dx-map-search">
             <span aria-hidden="true">⌕</span>
-            <input type="search" placeholder="Поиск сервисов на карте..." autocomplete="off" />
+            <input type="search" placeholder="Поиск по карте: сервис, АЗС, зарядка..." autocomplete="off" />
           </label>
-          <button class="dx-map-filter-button" type="button" aria-label="Фильтры">≡</button>
           <div class="dx-map-filters" role="tablist" aria-label="Фильтры карты"></div>
           <article class="dx-map-ai-card">
             <div class="dx-map-ai-icon">✦</div>
             <div>
-              <h2>AI нашел 3 лучших варианта рядом</h2>
-              <p>Для твоего BMW X5 • Сэкономишь до 15%</p>
+              <h2 data-map-summary-title>Ищем точки рядом...</h2>
+              <p data-map-summary-sub>АЗС и зарядки — из открытых данных OSM</p>
             </div>
-            <button type="button" data-action="show-best">Показать лучший</button>
+            <button type="button" data-action="show-best">Ближайший сервис</button>
           </article>
         </div>
 
@@ -596,6 +595,7 @@
     const isGasStation = service.type === "gas";
     const isChargeStation = service.type === "charge";
     const isUserPlace = service.userPlace === true || service.source === "user";
+    const isCatalogService = service.type === "service" && service.source === "catalog";
     const hasPoiVisual = isGasStation || isChargeStation;
     const fuelTypes = Array.isArray(service.fuelTypes) && service.fuelTypes.length
       ? service.fuelTypes
@@ -624,14 +624,23 @@
         ? "Электрозарядка из открытых данных"
         : isUserPlace
           ? service.status === "published" ? "Добавлено пользователем" : "На проверке"
-          : "Лучший вариант рядом";
+          : isCatalogService
+            ? "Сервис DRIVEX"
+            : "Точка на карте";
     const statusText = isUserPlace
       ? `Данные: DriveX · ${service.status === "published" ? "опубликовано" : "на проверке"}`
       : isGasStation || isChargeStation
       ? `Данные: ${sourceLabel} · проверь актуальность на месте`
       : service.open
-        ? "Открыто сейчас · Ответят за 5 минут"
-        : "Закрыто";
+        ? `Открыто${service.workingHours ? ` · ${service.workingHours}` : " сейчас"}`
+        : `Закрыто${service.workingHours ? ` · ${service.workingHours}` : ""}`;
+    // Честный рейтинг: у АЗС/ЭЗС — источник данных, у сервисов — только
+    // реальные отзывы (раньше выводилось «OSM OSM» и выдуманные ★4.8).
+    const ratingLabel = isGasStation || isChargeStation
+      ? escapeHtml(String(service.rating || "OSM"))
+      : Number(service.reviews) > 0
+        ? `★ ${escapeHtml(String(service.rating))} (${service.reviews})`
+        : "Новый";
 
     sheet.setAttribute("aria-hidden", "false");
     sheet.classList.add("is-visible");
@@ -656,9 +665,9 @@
           <p class="dx-map-sheet-badge">${badgeText}</p>
           <h3>${escapeHtml(service.name)}</h3>
           <div class="dx-map-sheet-meta">
-            <span>${isGasStation || isChargeStation ? "OSM" : "★"} ${escapeHtml(service.rating)}</span>
-            <span>${escapeHtml(service.distance || "1.2 км")}</span>
-            <span>${escapeHtml(service.eta || "5 мин")}</span>
+            <span>${ratingLabel}</span>
+            <span>${escapeHtml(service.distance || "рядом")}</span>
+            <span>${escapeHtml(service.eta || "маршрут")}</span>
           </div>
         </div>
         <button class="dx-map-save" type="button" aria-label="Сохранить">⌑</button>
@@ -666,7 +675,7 @@
       <div class="dx-map-sheet-tags">
         ${tags.map((tag) => `<span>${escapeHtml(tag)}</span>`).join("")}
       </div>
-      ${isUserPlace
+      ${isUserPlace || isCatalogService
         ? `<div class="dx-map-info-grid">
             <div>
               <strong>Телефон</strong>
@@ -727,7 +736,12 @@
           </div>`
         : ""}
       <p class="dx-map-sheet-status">${statusText}${coordinateText}</p>
-      <button class="dx-map-drive-button" type="button" data-action="drive" data-service-id="${escapeHtml(service.id)}">Поехать · ${escapeHtml(service.eta || "5 мин")}</button>
+      ${isCatalogService
+        ? `<div class="dx-map-sheet-cta-row">
+            <button class="dx-map-drive-button" type="button" data-action="drive" data-service-id="${escapeHtml(service.id)}">Поехать · ${escapeHtml(service.eta || "маршрут")}</button>
+            <button class="dx-map-drive-button is-book" type="button" data-action="open-service" data-catalog-id="${escapeHtml(service.catalogId)}">Записаться</button>
+          </div>`
+        : `<button class="dx-map-drive-button" type="button" data-action="drive" data-service-id="${escapeHtml(service.id)}">Поехать · ${escapeHtml(service.eta || "маршрут")}</button>`}
     `;
   }
 
@@ -754,11 +768,16 @@
     let destroyed = false;
     let fuelStations = [];
     let chargingStations = [];
-    let mapItems = [...services];
+    const catalogServices = buildCatalogServices(options.serviceDirectory, DEFAULT_CENTER);
+    const carName = String(options.carName || "").trim();
+    let mapItems = [...catalogServices];
     let fuelLoadedForKey = "";
     let chargingLoadedForKey = "";
     let routeRequestId = 0;
     let addPlaceController = null;
+    let searchQuery = "";
+    let satelliteLayer = null;
+    let satelliteOn = false;
 
     if (!leaflet || !mapNode) {
       root.innerHTML = `
@@ -817,14 +836,36 @@
     const markerLayer = leaflet.layerGroup().addTo(map);
     const markerMap = new Map();
 
+    function matchesSearch(service) {
+      if (!searchQuery) return true;
+      const haystack = normalizeText(
+        `${service.name} ${(service.tags || []).join(" ")} ${service.address || ""} ${service.category || ""} ${(service.services || []).join(" ")}`
+      );
+      return haystack.includes(searchQuery);
+    }
+
     function passesFilter(service) {
+      if (!matchesSearch(service)) return false;
       if (activeFilter === "all") return true;
-      if (activeFilter === "car") return service.type === "recommended" || service.tags?.some((tag) => /BMW|машин/i.test(tag));
-      if (activeFilter === "service") return service.userPlace ? ["service", "wash", "diagnostics", "tire", "detailing", "electric"].includes(service.category) : service.type !== "gas" && service.type !== "charge";
-      if (activeFilter === "fast") return service.fast || service.type === "fast";
+      if (activeFilter === "service") return service.type === "service" || (service.userPlace && ["service", "wash", "diagnostics", "tire", "detailing", "electric", "towing"].includes(service.category));
       if (activeFilter === "charge") return service.type === "charge" || service.hasCharging === true;
       if (activeFilter === "gas") return service.type === "gas";
+      if (activeFilter === "user") return service.userPlace === true;
       return service.type === activeFilter;
+    }
+
+    function updateSummaryCard() {
+      const title = root.querySelector("[data-map-summary-title]");
+      const sub = root.querySelector("[data-map-summary-sub]");
+      if (!title || !sub) return;
+      const parts = [];
+      if (catalogServices.length) parts.push(`${catalogServices.length} СТО`);
+      if (fuelStations.length) parts.push(`${fuelStations.length} АЗС`);
+      if (chargingStations.length) parts.push(`${chargingStations.length} зарядок`);
+      title.textContent = parts.length ? `Рядом: ${parts.join(" · ")}` : "Ищем точки рядом...";
+      sub.textContent = carName
+        ? `Твоя машина: ${carName} · АЗС и зарядки — данные OSM`
+        : "АЗС и зарядки — из открытых данных OSM";
     }
 
     function setMarkerStates() {
@@ -891,8 +932,9 @@
 
     function applyFuelStations(nextFuelStations, centerForFuel = DEFAULT_CENTER) {
       fuelStations = mergeFuelDirectory(nextFuelStations, centerForFuel);
-      mapItems = [...services, ...fuelStations, ...chargingStations];
+      mapItems = [...catalogServices, ...fuelStations, ...chargingStations];
       renderMarkers();
+      updateSummaryCard();
       if (activeFilter === "gas") {
         showMapToast(`Найдено АЗС: ${fuelStations.length}`);
       }
@@ -900,8 +942,9 @@
 
     function applyChargingStations(nextChargingStations) {
       chargingStations = Array.isArray(nextChargingStations) && nextChargingStations.length ? nextChargingStations : fallbackChargingStations;
-      mapItems = [...services, ...fuelStations, ...chargingStations];
+      mapItems = [...catalogServices, ...fuelStations, ...chargingStations];
       renderMarkers();
+      updateSummaryCard();
       if (activeFilter === "charge") {
         showMapToast(`Найдено ЭЗС: ${chargingStations.length}`);
       }
@@ -1115,8 +1158,13 @@
     }
 
     function chooseBest({ withRoute } = {}) {
-      const best = activeServiceId ? mapItems.find((item) => item.id === activeServiceId) : getBestService(services);
-      if (!best) return;
+      const best = activeServiceId
+        ? mapItems.find((item) => item.id === activeServiceId)
+        : getBestService(mapItems, userPosition);
+      if (!best) {
+        showMapToast("Подключённых сервисов рядом пока нет — посмотрите АЗС и зарядки");
+        return;
+      }
       routeBuilt = true;
       selectService(best, { dimOthers: true, zoom: 16, duration: 1.15 });
       if (withRoute) drawRoute(best);
@@ -1201,8 +1249,53 @@
         const selectedService = mapItems.find((item) => String(item.id) === String(serviceId)) || mapItems.find((item) => item.id === activeServiceId);
         routeToService(selectedService);
       }
+      if (action === "open-service") {
+        // Переход на страницу сервиса в приложении — запись, прайс, мастера.
+        const catalogId = actionButton.getAttribute("data-catalog-id");
+        if (catalogId) window.location.hash = `#/service/${catalogId}`;
+      }
+      if (action === "layers") {
+        // Переключение схема ↔ спутник (Esri World Imagery, бесплатный слой).
+        satelliteOn = !satelliteOn;
+        if (satelliteOn) {
+          if (!satelliteLayer) {
+            satelliteLayer = leaflet.tileLayer(
+              "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+              { maxZoom: 19 }
+            );
+          }
+          satelliteLayer.addTo(map);
+          showMapToast("Спутниковый слой включён");
+        } else if (satelliteLayer) {
+          map.removeLayer(satelliteLayer);
+          showMapToast("Обычная схема карты");
+        }
+        actionButton.classList.toggle("is-active", satelliteOn);
+      }
       if (action === "locate") locateUser({ zoom: 17, duration: 0.95, watch: true, flyFirst: true });
     });
+
+    // Живой поиск: фильтрует маркеры по названию/тегам/адресу/услугам,
+    // Enter — перелёт к первому совпадению (раньше поле было мёртвым).
+    const searchInput = root.querySelector(".dx-map-search input");
+    if (searchInput) {
+      searchInput.addEventListener("input", () => {
+        searchQuery = normalizeText(searchInput.value);
+        setMarkerStates();
+      });
+      searchInput.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        const firstMatch = mapItems.find((item) => passesFilter(item));
+        if (firstMatch) {
+          routeBuilt = false;
+          selectService(firstMatch, { zoom: 16, duration: 0.85 });
+          searchInput.blur();
+        } else {
+          showMapToast("Ничего не найдено — попробуйте другое название");
+        }
+      });
+    }
 
     const sheet = root.querySelector(".dx-map-bottom-sheet");
     sheet.addEventListener("touchstart", (event) => {
@@ -1226,6 +1319,7 @@
       destroy() {
         destroyed = true;
         if (routeLine) map.removeLayer(routeLine);
+        if (satelliteLayer && satelliteOn) map.removeLayer(satelliteLayer);
         if (addPlaceController && typeof addPlaceController.destroy === "function") addPlaceController.destroy();
         if (geoWatchId !== null && navigator.geolocation) navigator.geolocation.clearWatch(geoWatchId);
         map.removeLayer(userMarker);
@@ -1238,7 +1332,6 @@
   }
 
   window.DrivexMapScreen = {
-    mount,
-    services
+    mount
   };
 })();

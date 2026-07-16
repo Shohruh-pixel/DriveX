@@ -485,6 +485,7 @@
     const place = buildPlaceObject();
 
     let savedPlace = place;
+    let savedOnServer = false;
     try {
       const response = await fetch(API_ENDPOINT, {
         method: "POST",
@@ -494,6 +495,7 @@
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.error || "Сервер не сохранил место.");
       savedPlace = payload.place || place;
+      savedOnServer = true;
       removeLocalPlace(savedPlace.id);
     } catch {
       const pendingPlaces = readPendingPlaces();
@@ -507,19 +509,31 @@
 
     renderPendingMarker(savedPlace);
     state.onPlaceSubmitted(savedPlace);
+    // Честные статусы: published — опубликовано всем; pending на сервере —
+    // видно всем с пометкой «На проверке»; иначе — только локально.
+    const successTitle = savedPlace.status === "published"
+      ? "Опубликовано"
+      : savedOnServer
+        ? "Отправлено на проверку"
+        : "Сохранено локально";
+    const successBody = savedPlace.status === "published"
+      ? "Точка уже появилась на карте и доступна другим пользователям через общий сервер."
+      : savedOnServer
+        ? "Точка уже на карте с пометкой «На проверке» — после проверки модератором пометка исчезнет."
+        : "Точка появилась у тебя на карте. Когда сервер будет доступен, можно отправить ее повторно.";
     if (savedPlace.status === "published") state.showToast("Место опубликовано и будет видно другим пользователям.");
     setSheet(`
       <header class="dx-add-place-head">
         <div>
           <p>Шаг 4 из 4</p>
-          <h2>${savedPlace.status === "published" ? "Опубликовано" : "Сохранено локально"}</h2>
+          <h2>${successTitle}</h2>
         </div>
         <button type="button" data-add-place-action="close" aria-label="Закрыть">×</button>
       </header>
       <div class="dx-add-success">
         <span>✓</span>
         <h3>${escapeHtml(savedPlace.name)}</h3>
-        <p>${savedPlace.status === "published" ? "Точка уже появилась на карте и доступна другим пользователям через общий сервер." : "Точка появилась у тебя на карте. Когда сервер будет доступен, можно отправить ее повторно."}</p>
+        <p>${successBody}</p>
         <button type="button" data-add-place-action="close">Готово</button>
       </div>
     `, false);

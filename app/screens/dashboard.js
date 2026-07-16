@@ -259,7 +259,7 @@
     `;
   }
 
-  function MapScreen({ serviceDirectory }) {
+  function MapScreen({ serviceDirectory, activeCarId }) {
     useEffect(() => {
       let instance = null;
       let cancelled = false;
@@ -273,9 +273,11 @@
           return;
         }
         try {
+          const activeCar = typeof findGarageCar === "function" ? findGarageCar(activeCarId) : null;
           instance = mapModule.mount({
             containerId: "map-container",
-            serviceDirectory
+            serviceDirectory,
+            carName: activeCar?.name || ""
           });
         } catch (error) {
           const container = document.getElementById("map-container");
@@ -297,7 +299,7 @@
         window.clearTimeout(retryId);
         if (instance && typeof instance.destroy === "function") instance.destroy();
       };
-    }, [serviceDirectory]);
+    }, [serviceDirectory, activeCarId]);
 
     return html`
       <div id="map-container" className="dx-map-container" aria-label="Карта сервисов DriveX"></div>

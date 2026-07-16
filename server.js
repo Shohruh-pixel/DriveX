@@ -421,8 +421,12 @@ function normalizePlace(input) {
       cardPayment: Boolean(input.features?.cardPayment),
       mobileService: Boolean(input.features?.mobileService)
     },
-    status: "published",
-    verified: true,
+    // Честная модерация: анонимные добавления попадают на карту с пометкой
+    // «На проверке» (раньше ЛЮБОЕ место сразу становилось published+verified —
+    // спам-риск и враньё в бейдже «проверено»). Публикация — вручную,
+    // правкой status в data/places.json после проверки.
+    status: "pending",
+    verified: false,
     createdAt,
     updatedAt: new Date().toISOString(),
     source: "user"
