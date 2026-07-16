@@ -921,10 +921,13 @@
 
         marker.addTo(markerLayer);
         markerMap.set(service.id, marker);
+        // Каскад появления ограничен первыми ~12 маркерами: при 70+ точках
+        // (реальные АЗС из OSM) полный каскад 90+index*80 растягивался на
+        // 6 секунд и выглядел как «карта постоянно мигает».
         window.setTimeout(() => {
           const element = marker.getElement();
           if (element) element.classList.add("is-mounted");
-        }, 90 + index * 80);
+        }, 60 + Math.min(index, 12) * 45);
       });
 
       setMarkerStates();

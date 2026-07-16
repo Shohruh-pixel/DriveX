@@ -260,6 +260,28 @@
   }
 
   function MapScreen({ serviceDirectory, activeCarId }) {
+    // ⛔ Анти-пересоздание: buildServiceDirectoryData в app-main создаёт НОВУЮ
+    // ссылку на каждый рендер App (поллинг каждые 8с и любое обновление
+    // состояния) — с deps [serviceDirectory] карта уничтожалась и монтировалась
+    // заново постоянно, маркеры бесконечно переигрывали анимацию появления.
+    // Пересоздаём карту только когда реально меняется СОДЕРЖИМОЕ точек.
+    const catalogKey = useMemo(() => {
+      try {
+        const list = serviceDirectory && Array.isArray(serviceDirectory.services)
+          ? serviceDirectory.services
+          : [];
+        return JSON.stringify(
+          list.map((s) => [s.id, s.geolocation, s.name, s.phone, s.workingHours, s.available, s.rating, s.reviews])
+        );
+      } catch {
+        return "";
+      }
+    }, [serviceDirectory]);
+    const activeCar = typeof findGarageCar === "function" ? findGarageCar(activeCarId) : null;
+    const carName = activeCar?.name || "";
+    const directoryRef = useRef(serviceDirectory);
+    directoryRef.current = serviceDirectory;
+
     useEffect(() => {
       let instance = null;
       let cancelled = false;
@@ -273,11 +295,10 @@
           return;
         }
         try {
-          const activeCar = typeof findGarageCar === "function" ? findGarageCar(activeCarId) : null;
           instance = mapModule.mount({
             containerId: "map-container",
-            serviceDirectory,
-            carName: activeCar?.name || ""
+            serviceDirectory: directoryRef.current,
+            carName
           });
         } catch (error) {
           const container = document.getElementById("map-container");
@@ -299,7 +320,7 @@
         window.clearTimeout(retryId);
         if (instance && typeof instance.destroy === "function") instance.destroy();
       };
-    }, [serviceDirectory, activeCarId]);
+    }, [catalogKey, carName]);
 
     return html`
       <div id="map-container" className="dx-map-container" aria-label="Карта сервисов DriveX"></div>
